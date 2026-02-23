@@ -12,7 +12,8 @@
     "create": "tsx src/cli/index.ts create",
     "connect": "tsx src/cli/index.ts connect",
     "start": "tsx src/cli/index.ts start",
-    "test": "vitest run"
+    "test": "vitest run",
+    "template:build": "tsx templates/build.ts"
   },
   "dependencies": {
     "dotenv": "^16.4.7",
