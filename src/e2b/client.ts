@@ -9,6 +9,7 @@ export interface SandboxCommandRunResult {
 export interface SandboxCommandRunOptions {
   cwd?: string;
   envs?: Record<string, string>;
+  timeoutMs?: number;
 }
 
 export interface E2BSandbox {

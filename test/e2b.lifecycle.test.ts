@@ -80,13 +80,14 @@ describe("e2b lifecycle adapter", () => {
     const handle = await connectSandbox("sbx-connect", baseConfig, { client });
     const result = await handle.run("pwd", {
       cwd: "/workspace",
-      envs: { A: "1" }
+      envs: { A: "1" },
+      timeoutMs: 8_000
     });
 
     expect(client.connect).toHaveBeenCalledWith("sbx-connect", {
       requestTimeoutMs: undefined
     });
-    expect(run).toHaveBeenCalledWith("pwd", { cwd: "/workspace", envs: { A: "1" } });
+    expect(run).toHaveBeenCalledWith("pwd", { cwd: "/workspace", envs: { A: "1" }, timeoutMs: 8_000 });
     expect(result).toEqual({ stdout: "ok", stderr: "", exitCode: 0 });
   });
 

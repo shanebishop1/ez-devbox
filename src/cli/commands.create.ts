@@ -2,6 +2,7 @@ import type { CommandResult } from "../types/index.js";
 import type { StartupMode } from "../types/index.js";
 import { loadConfig, type LoadConfigOptions } from "../config/load.js";
 import { createSandbox, type CreateSandboxOptions, type SandboxHandle } from "../e2b/lifecycle.js";
+import { resolveSandboxCreateEnv, type SandboxCreateEnvResolution } from "../e2b/env.js";
 import { launchMode, type ModeLaunchResult } from "../modes/index.js";
 import { saveLastRunState, type LastRunState } from "../state/lastRun.js";
 
@@ -11,6 +12,10 @@ export interface CreateCommandDeps {
     config: Awaited<ReturnType<typeof loadConfig>>,
     options?: CreateSandboxOptions
   ) => Promise<SandboxHandle>;
+  resolveSandboxCreateEnv: (
+    config: Awaited<ReturnType<typeof loadConfig>>,
+    envSource?: Record<string, string | undefined>
+  ) => SandboxCreateEnvResolution;
   launchMode: (handle: SandboxHandle, mode: StartupMode) => Promise<ModeLaunchResult>;
   saveLastRunState: (state: LastRunState) => Promise<void>;
   now: () => string;
@@ -19,6 +24,7 @@ export interface CreateCommandDeps {
 const defaultDeps: CreateCommandDeps = {
   loadConfig,
   createSandbox,
+  resolveSandboxCreateEnv,
   launchMode,
   saveLastRunState,
   now: () => new Date().toISOString()
@@ -28,8 +34,11 @@ export async function runCreateCommand(args: string[], deps: CreateCommandDeps =
   const parsed = parseCreateArgs(args);
   const config = await deps.loadConfig();
   const mode = parsed.mode ?? config.startup.mode;
+  const envResolution = deps.resolveSandboxCreateEnv(config, process.env);
 
-  const handle = await deps.createSandbox(config);
+  const handle = await deps.createSandbox(config, {
+    envs: envResolution.envs
+  });
   const launched = await deps.launchMode(handle, mode);
 
   await deps.saveLastRunState({
@@ -38,8 +47,11 @@ export async function runCreateCommand(args: string[], deps: CreateCommandDeps =
     updatedAt: deps.now()
   });
 
+  const warningSuffix =
+    envResolution.warnings.length === 0 ? "" : `\nMCP warnings:\n- ${envResolution.warnings.join("\n- ")}`;
+
   return {
-    message: `Created sandbox ${handle.sandboxId}. ${launched.message}`,
+    message: `Created sandbox ${handle.sandboxId}. ${launched.message}${warningSuffix}`,
     exitCode: 0
   };
 }

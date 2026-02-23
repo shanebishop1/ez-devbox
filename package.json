@@ -13,6 +13,7 @@
     "connect": "tsx src/cli/index.ts connect",
     "start": "tsx src/cli/index.ts start",
     "test": "vitest run",
+    "e2e:live": "tsx scripts/e2e.live.ts",
     "template:build": "tsx templates/build.ts"
   },
   "dependencies": {

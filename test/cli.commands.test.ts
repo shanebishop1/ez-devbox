@@ -43,18 +43,53 @@ describe("CLI command integration", () => {
     await runCreateCommand([], {
       loadConfig: vi.fn().mockResolvedValue(config),
       createSandbox,
+      resolveSandboxCreateEnv: vi.fn().mockReturnValue({ envs: {}, warnings: [] }),
       launchMode,
       saveLastRunState,
       now: () => "2026-02-01T00:00:00.000Z"
     });
 
     expect(createSandbox).toHaveBeenCalledTimes(1);
+    expect(createSandbox).toHaveBeenCalledWith(config, {
+      envs: {}
+    });
     expect(launchMode).toHaveBeenCalledWith({ sandboxId: "sbx-created" }, "prompt");
     expect(saveLastRunState).toHaveBeenCalledWith({
       sandboxId: "sbx-created",
       mode: "ssh-opencode",
       updatedAt: "2026-02-01T00:00:00.000Z"
     });
+  });
+
+  it("create includes MCP warnings in output message", async () => {
+    const createSandbox = vi.fn().mockResolvedValue({ sandboxId: "sbx-created" });
+    const launchMode = vi.fn().mockResolvedValue({ mode: "ssh-opencode", command: "opencode", message: "launched" });
+
+    const result = await runCreateCommand([], {
+      loadConfig: vi.fn().mockResolvedValue({
+        ...config,
+        mcp: {
+          mode: "in_sandbox",
+          firecrawl_api_url: "",
+          allow_localhost_override: false
+        }
+      }),
+      createSandbox,
+      resolveSandboxCreateEnv: vi
+        .fn()
+        .mockReturnValue({
+          envs: {},
+          warnings: [
+            "mcp.mode='in_sandbox' is advanced and not fully implemented yet. Provide mcp.firecrawl_api_url or FIRECRAWL_API_URL to use a known remote endpoint."
+          ]
+        }),
+      launchMode,
+      saveLastRunState: vi.fn().mockResolvedValue(undefined),
+      now: () => "2026-02-01T00:00:00.000Z"
+    });
+
+    expect(result.message).toContain("MCP warnings:");
+    expect(result.message).toContain("mcp.mode='in_sandbox' is advanced and not fully implemented yet");
   });
 
   it("connect uses --sandbox-id when provided", async () => {

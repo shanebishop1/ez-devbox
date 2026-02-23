@@ -14,6 +14,7 @@ export interface ModeLaunchResult {
   message: string;
   command?: string;
   url?: string;
+  details?: Record<string, string | number | boolean>;
 }
 
 export interface LaunchModeOptions {
