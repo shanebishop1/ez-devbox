@@ -1,5 +1,5 @@
 [sandbox]
-template = "base"
+template = "opencode"
 reuse = true
 name = "agent-box"
 timeout_ms = 3600000

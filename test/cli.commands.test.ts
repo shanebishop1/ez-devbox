@@ -35,7 +35,7 @@ describe("CLI command integration", () => {
     }
   };
 
-  it("create calls createSandbox + launchMode + saveLastRunState", async () => {
+  it("create auto-selects opencode template for prompt/opencode mode", async () => {
     const createSandbox = vi.fn().mockResolvedValue({ sandboxId: "sbx-created" });
     const launchMode = vi.fn().mockResolvedValue({ mode: "ssh-opencode", command: "opencode", message: "launched" });
     const saveLastRunState = vi.fn().mockResolvedValue(undefined);
@@ -50,15 +50,50 @@ describe("CLI command integration", () => {
     });
 
     expect(createSandbox).toHaveBeenCalledTimes(1);
-    expect(createSandbox).toHaveBeenCalledWith(config, {
+    expect(createSandbox).toHaveBeenCalledWith(
+      {
+        ...config,
+        sandbox: {
+          ...config.sandbox,
+          template: "opencode"
+        }
+      },
+      {
       envs: {}
-    });
+      }
+    );
     expect(launchMode).toHaveBeenCalledWith({ sandboxId: "sbx-created" }, "prompt");
     expect(saveLastRunState).toHaveBeenCalledWith({
       sandboxId: "sbx-created",
       mode: "ssh-opencode",
       updatedAt: "2026-02-01T00:00:00.000Z"
     });
+  });
+
+  it("create auto-selects codex template for ssh-codex mode", async () => {
+    const createSandbox = vi.fn().mockResolvedValue({ sandboxId: "sbx-created" });
+
+    await runCreateCommand(["--mode", "ssh-codex"], {
+      loadConfig: vi.fn().mockResolvedValue(config),
+      createSandbox,
+      resolveSandboxCreateEnv: vi.fn().mockReturnValue({ envs: {}, warnings: [] }),
+      launchMode: vi.fn().mockResolvedValue({ mode: "ssh-codex", command: "codex", message: "launched" }),
+      saveLastRunState: vi.fn().mockResolvedValue(undefined),
+      now: () => "2026-02-01T00:00:00.000Z"
+    });
+
+    expect(createSandbox).toHaveBeenCalledWith(
+      {
+        ...config,
+        sandbox: {
+          ...config.sandbox,
+          template: "codex"
+        }
+      },
+      {
+        envs: {}
+      }
+    );
   });
 
   it("create includes MCP warnings in output message", async () => {

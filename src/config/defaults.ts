@@ -2,7 +2,7 @@ import type { ResolvedLauncherConfig } from "./schema.js";
 
 export const defaultConfig: ResolvedLauncherConfig = {
   sandbox: {
-    template: "base",
+    template: "opencode",
     reuse: true,
     name: "agent-box",
     timeout_ms: 60 * 60 * 1000,

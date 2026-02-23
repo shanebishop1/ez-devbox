@@ -61,7 +61,7 @@ describe("loadConfig", () => {
 
     const resolved = await loadConfig({ configPath, envPath });
 
-    expect(resolved.sandbox.template).toBe("base");
+    expect(resolved.sandbox.template).toBe(defaultConfig.sandbox.template);
     expect(resolved.sandbox.reuse).toBe(true);
     expect(resolved.sandbox.name).toBe("team-box");
     expect(resolved.sandbox.timeout_ms).toBe(defaultConfig.sandbox.timeout_ms);

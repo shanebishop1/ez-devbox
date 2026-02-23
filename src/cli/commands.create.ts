@@ -3,7 +3,7 @@ import type { StartupMode } from "../types/index.js";
 import { loadConfig, type LoadConfigOptions } from "../config/load.js";
 import { createSandbox, type CreateSandboxOptions, type SandboxHandle } from "../e2b/lifecycle.js";
 import { resolveSandboxCreateEnv, type SandboxCreateEnvResolution } from "../e2b/env.js";
-import { launchMode, type ModeLaunchResult } from "../modes/index.js";
+import { launchMode, resolveStartupMode, type ModeLaunchResult } from "../modes/index.js";
 import { saveLastRunState, type LastRunState } from "../state/lastRun.js";
 
 export interface CreateCommandDeps {
@@ -34,9 +34,21 @@ export async function runCreateCommand(args: string[], deps: CreateCommandDeps =
   const parsed = parseCreateArgs(args);
   const config = await deps.loadConfig();
   const mode = parsed.mode ?? config.startup.mode;
+  const resolvedMode = resolveStartupMode(mode);
+  const templateResolution = resolveTemplateForMode(config.sandbox.template, resolvedMode);
+  const createConfig =
+    templateResolution.template === config.sandbox.template
+      ? config
+      : {
+          ...config,
+          sandbox: {
+            ...config.sandbox,
+            template: templateResolution.template
+          }
+        };
   const envResolution = deps.resolveSandboxCreateEnv(config, process.env);
 
-  const handle = await deps.createSandbox(config, {
+  const handle = await deps.createSandbox(createConfig, {
     envs: envResolution.envs
   });
   const launched = await deps.launchMode(handle, mode);
@@ -49,10 +61,39 @@ export async function runCreateCommand(args: string[], deps: CreateCommandDeps =
 
   const warningSuffix =
     envResolution.warnings.length === 0 ? "" : `\nMCP warnings:\n- ${envResolution.warnings.join("\n- ")}`;
+  const templateSuffix =
+    templateResolution.autoSelected
+      ? `\nTemplate auto-selected for ${resolvedMode}: ${templateResolution.template}`
+      : "";
 
   return {
-    message: `Created sandbox ${handle.sandboxId}. ${launched.message}${warningSuffix}`,
+    message: `Created sandbox ${handle.sandboxId}. ${launched.message}${templateSuffix}${warningSuffix}`,
     exitCode: 0
+  };
+}
+
+function resolveTemplateForMode(
+  configuredTemplate: string,
+  mode: "ssh-opencode" | "ssh-codex" | "web" | "ssh-shell"
+): { template: string; autoSelected: boolean } {
+  const normalized = configuredTemplate.trim();
+  if (normalized !== "" && normalized !== "base") {
+    return {
+      template: configuredTemplate,
+      autoSelected: false
+    };
+  }
+
+  if (mode === "ssh-codex") {
+    return {
+      template: "codex",
+      autoSelected: true
+    };
+  }
+
+  return {
+    template: "opencode",
+    autoSelected: true
   };
 }
 
