@@ -2,6 +2,8 @@ import { describe, expect, it, vi } from "vitest";
 import { launchMode, type ModeLaunchResult } from "../src/modes/index.js";
 import type { SandboxHandle } from "../src/e2b/lifecycle.js";
 import { startOpenCodeMode } from "../src/modes/opencode.js";
+import { startCodexMode } from "../src/modes/codex.js";
+import { startShellMode } from "../src/modes/shell.js";
 
 describe("startup modes orchestrator", () => {
   it("web mode starts serve in background, checks auth status, and returns external https URL", async () => {
@@ -45,7 +47,7 @@ describe("startup modes orchestrator", () => {
     expect(result.message).not.toContain("WARNING");
   });
 
-  it("web mode warns when auth is not required", async () => {
+  it("web mode fails when auth is not required", async () => {
     const run = vi
       .fn()
       .mockResolvedValueOnce({ stdout: "", stderr: "", exitCode: 0 })
@@ -53,11 +55,18 @@ describe("startup modes orchestrator", () => {
       .mockResolvedValueOnce({ stdout: "200", stderr: "", exitCode: 0 });
     const handle = createHandle({ run, getHost: vi.fn().mockResolvedValue("sandbox-456.e2b.dev") });
 
-    const result = await launchMode(handle, "web");
+    await expect(launchMode(handle, "web")).rejects.toThrow("Set OPENCODE_SERVER_PASSWORD");
+  });
 
-    expect(result.details?.authRequired).toBe(false);
-    expect(result.details?.authStatus).toBe(200);
-    expect(result.message).toContain("WARNING");
+  it("web mode fails closed when auth probe is not 401", async () => {
+    const run = vi
+      .fn()
+      .mockResolvedValueOnce({ stdout: "", stderr: "", exitCode: 0 })
+      .mockResolvedValueOnce({ stdout: "", stderr: "", exitCode: 0 })
+      .mockResolvedValueOnce({ stdout: "not-a-status", stderr: "", exitCode: 0 });
+    const handle = createHandle({ run, getHost: vi.fn().mockResolvedValue("sandbox-789.e2b.dev") });
+
+    await expect(launchMode(handle, "web")).rejects.toThrow("Set OPENCODE_SERVER_PASSWORD");
   });
 
   it("prompt mode resolves deterministically to ssh-opencode smoke check", async () => {
@@ -94,11 +103,14 @@ describe("startup modes orchestrator", () => {
     });
 
     expect(prepareSession).toHaveBeenCalledWith(handle);
-    expect(runInteractiveSession).toHaveBeenCalledWith({
+    expect(runInteractiveSession).toHaveBeenCalledWith(
+      {
       tempDir: "/tmp/session",
       privateKeyPath: "/tmp/session/id_ed25519",
       wsUrl: "wss://8081-sbx.e2b.app"
-    });
+      },
+      "bash -lc 'opencode'"
+    );
     expect(cleanupSession).toHaveBeenCalledTimes(1);
     expect(result.mode).toBe("ssh-opencode");
     expect(result.details).toEqual({
@@ -122,6 +134,42 @@ describe("startup modes orchestrator", () => {
     });
   });
 
+  it("ssh-codex mode uses interactive attach in tty environments", async () => {
+    const handle = createHandle({ run: vi.fn().mockResolvedValue({ stdout: "", stderr: "", exitCode: 0 }) });
+    const prepareSession = vi.fn().mockResolvedValue({
+      tempDir: "/tmp/session",
+      privateKeyPath: "/tmp/session/id_ed25519",
+      knownHostsPath: "/tmp/session/known_hosts",
+      wsUrl: "wss://8081-sbx.e2b.app"
+    });
+    const runInteractiveSession = vi.fn().mockResolvedValue(undefined);
+    const cleanupSession = vi.fn().mockResolvedValue(undefined);
+
+    const result = await startCodexMode(handle, {
+      isInteractiveTerminal: () => true,
+      prepareSession,
+      runInteractiveSession,
+      cleanupSession
+    });
+
+    expect(prepareSession).toHaveBeenCalledWith(handle);
+    expect(runInteractiveSession).toHaveBeenCalledWith(
+      {
+        tempDir: "/tmp/session",
+        privateKeyPath: "/tmp/session/id_ed25519",
+        knownHostsPath: "/tmp/session/known_hosts",
+        wsUrl: "wss://8081-sbx.e2b.app"
+      },
+      "bash -lc 'codex'"
+    );
+    expect(cleanupSession).toHaveBeenCalledTimes(1);
+    expect(result.mode).toBe("ssh-codex");
+    expect(result.details).toEqual({
+      session: "interactive",
+      status: "completed"
+    });
+  });
+
   it("ssh-shell mode runs deterministic shell smoke command", async () => {
     const run = vi.fn().mockResolvedValue({ stdout: "shell-ready\n", stderr: "", exitCode: 0 });
     const handle = createHandle({ run });
@@ -136,12 +184,49 @@ describe("startup modes orchestrator", () => {
       output: "shell-ready"
     });
   });
+
+  it("ssh-shell mode uses interactive attach in tty environments", async () => {
+    const handle = createHandle({ run: vi.fn().mockResolvedValue({ stdout: "", stderr: "", exitCode: 0 }) });
+    const prepareSession = vi.fn().mockResolvedValue({
+      tempDir: "/tmp/session",
+      privateKeyPath: "/tmp/session/id_ed25519",
+      knownHostsPath: "/tmp/session/known_hosts",
+      wsUrl: "wss://8081-sbx.e2b.app"
+    });
+    const runInteractiveSession = vi.fn().mockResolvedValue(undefined);
+    const cleanupSession = vi.fn().mockResolvedValue(undefined);
+
+    const result = await startShellMode(handle, {
+      isInteractiveTerminal: () => true,
+      prepareSession,
+      runInteractiveSession,
+      cleanupSession
+    });
+
+    expect(prepareSession).toHaveBeenCalledWith(handle);
+    expect(runInteractiveSession).toHaveBeenCalledWith(
+      {
+        tempDir: "/tmp/session",
+        privateKeyPath: "/tmp/session/id_ed25519",
+        knownHostsPath: "/tmp/session/known_hosts",
+        wsUrl: "wss://8081-sbx.e2b.app"
+      },
+      "bash"
+    );
+    expect(cleanupSession).toHaveBeenCalledTimes(1);
+    expect(result.mode).toBe("ssh-shell");
+    expect(result.details).toEqual({
+      session: "interactive",
+      status: "completed"
+    });
+  });
 });
 
 function createHandle(overrides: Partial<SandboxHandle>): SandboxHandle {
   return {
     sandboxId: "sbx-1",
     run: overrides.run ?? vi.fn().mockResolvedValue({ stdout: "", stderr: "", exitCode: 0 }),
+    writeFile: overrides.writeFile ?? vi.fn().mockResolvedValue(undefined),
     getHost: overrides.getHost ?? vi.fn().mockResolvedValue("https://sbx-1.e2b.dev"),
     setTimeout: overrides.setTimeout ?? vi.fn().mockResolvedValue(undefined),
     kill: overrides.kill ?? vi.fn().mockResolvedValue(undefined)

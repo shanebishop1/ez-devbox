@@ -68,7 +68,7 @@ describe("loadConfig", () => {
     expect(resolved.sandbox.delete_on_exit).toBe(false);
 
     expect(resolved.startup.mode).toBe("web");
-    expect(resolved.project.dir).toBe("/home/daytona/projects/workspace");
+    expect(resolved.project.dir).toBe("/home/user/projects/workspace");
     expect(resolved.project.setup_on_connect).toBe(false);
     expect(resolved.project.setup_retries).toBe(2);
     expect(resolved.project.setup_continue_on_error).toBe(false);
@@ -78,8 +78,46 @@ describe("loadConfig", () => {
     expect(resolved.project.repos[0].startup_env).toEqual({});
 
     expect(resolved.env.pass_through).toEqual([]);
+    expect(resolved.opencode).toEqual({
+      config_dir: "~/.config/opencode",
+      auth_path: "~/.local/share/opencode/auth.json"
+    });
+    expect(resolved.codex).toEqual({
+      config_dir: "~/.codex",
+      auth_path: "~/.codex/auth.json"
+    });
     expect(resolved.mcp.mode).toBe("disabled");
     expect(resolved.mcp.allow_localhost_override).toBe(false);
+  });
+
+  it("supports opencode/codex path overrides", async () => {
+    const configPath = join(tempDir, "launcher.config.toml");
+    const envPath = join(tempDir, ".env");
+
+    await writeFile(
+      configPath,
+      [
+        "[opencode]",
+        'config_dir = "/tmp/opencode-config"',
+        'auth_path = "/tmp/opencode-auth.json"',
+        "",
+        "[codex]",
+        'config_dir = "/tmp/codex-config"',
+        'auth_path = "/tmp/codex-auth.json"'
+      ].join("\n")
+    );
+    await writeFile(envPath, "E2B_API_KEY=test-e2b-key\n");
+
+    const resolved = await loadConfig({ configPath, envPath });
+
+    expect(resolved.opencode).toEqual({
+      config_dir: "/tmp/opencode-config",
+      auth_path: "/tmp/opencode-auth.json"
+    });
+    expect(resolved.codex).toEqual({
+      config_dir: "/tmp/codex-config",
+      auth_path: "/tmp/codex-auth.json"
+    });
   });
 
   it("rejects invalid startup mode", async () => {

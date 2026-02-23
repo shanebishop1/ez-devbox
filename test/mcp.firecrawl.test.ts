@@ -85,6 +85,14 @@ function createConfig(mcp: Partial<ResolvedLauncherConfig["mcp"]>): ResolvedLaun
     env: {
       pass_through: []
     },
+    opencode: {
+      config_dir: "~/.config/opencode",
+      auth_path: "~/.local/share/opencode/auth.json"
+    },
+    codex: {
+      config_dir: "~/.codex",
+      auth_path: "~/.codex/auth.json"
+    },
     mcp: {
       mode: mcp.mode ?? "disabled",
       firecrawl_api_url: mcp.firecrawl_api_url ?? "",

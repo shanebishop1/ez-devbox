@@ -26,6 +26,14 @@ describe("sandbox env resolution", () => {
     env: {
       pass_through: ["CUSTOM_TOKEN", "GITHUB_TOKEN"]
     },
+    opencode: {
+      config_dir: "~/.config/opencode",
+      auth_path: "~/.local/share/opencode/auth.json"
+    },
+    codex: {
+      config_dir: "~/.codex",
+      auth_path: "~/.codex/auth.json"
+    },
     mcp: {
       mode: "remote_url",
       firecrawl_api_url: "https://firecrawl.example.com",

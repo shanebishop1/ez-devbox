@@ -6,8 +6,16 @@ import type { StartupMode } from "../types/index.js";
 import { loadConfig, type LoadConfigOptions } from "../config/load.js";
 import { createSandbox, type CreateSandboxOptions, type SandboxHandle } from "../e2b/lifecycle.js";
 import { resolveSandboxCreateEnv, type SandboxCreateEnvResolution } from "../e2b/env.js";
-import { launchMode, resolveStartupMode, type ModeLaunchResult } from "../modes/index.js";
+import { launchMode, resolveStartupMode, type ConcreteStartupMode, type ModeLaunchResult } from "../modes/index.js";
 import { saveLastRunState, type LastRunState } from "../state/lastRun.js";
+import {
+  syncCodexAuthFile,
+  syncCodexConfigDir,
+  syncOpenCodeAuthFile,
+  syncOpenCodeConfigDir,
+  type PathSyncSummary,
+  type ToolingSyncSummary
+} from "../tooling/host-sandbox-sync.js";
 
 export interface CreateCommandDeps {
   loadConfig: (options?: LoadConfigOptions) => ReturnType<typeof loadConfig>;
@@ -21,6 +29,11 @@ export interface CreateCommandDeps {
     envSource?: Record<string, string | undefined>
   ) => SandboxCreateEnvResolution;
   launchMode: (handle: SandboxHandle, mode: StartupMode) => Promise<ModeLaunchResult>;
+  syncToolingToSandbox: (
+    config: Awaited<ReturnType<typeof loadConfig>>,
+    sandbox: Pick<SandboxHandle, "writeFile">,
+    mode: ConcreteStartupMode
+  ) => Promise<ToolingSyncSummary>;
   saveLastRunState: (state: LastRunState) => Promise<void>;
   now: () => string;
 }
@@ -31,6 +44,7 @@ const defaultDeps: CreateCommandDeps = {
   resolveEnvSource: loadEnvSource,
   resolveSandboxCreateEnv,
   launchMode,
+  syncToolingToSandbox: syncToolingForMode,
   saveLastRunState,
   now: () => new Date().toISOString()
 };
@@ -57,6 +71,7 @@ export async function runCreateCommand(args: string[], deps: CreateCommandDeps =
   const handle = await deps.createSandbox(createConfig, {
     envs: envResolution.envs
   });
+  const syncSummary = await deps.syncToolingToSandbox(config, handle, resolvedMode);
   const launched = await deps.launchMode(handle, mode);
 
   await deps.saveLastRunState({
@@ -71,11 +86,61 @@ export async function runCreateCommand(args: string[], deps: CreateCommandDeps =
     templateResolution.autoSelected
       ? `\nTemplate auto-selected for ${resolvedMode}: ${templateResolution.template}`
       : "";
+  const syncSuffix = `\nTooling sync: ${formatToolingSyncSummary(syncSummary)}`;
 
   return {
-    message: `Created sandbox ${handle.sandboxId}. ${launched.message}${templateSuffix}${warningSuffix}`,
+    message: `Created sandbox ${handle.sandboxId}. ${launched.message}${templateSuffix}${syncSuffix}${warningSuffix}`,
     exitCode: 0
   };
+}
+
+async function syncToolingForMode(
+  config: Awaited<ReturnType<typeof loadConfig>>,
+  sandbox: Pick<SandboxHandle, "writeFile">,
+  mode: ConcreteStartupMode
+): Promise<ToolingSyncSummary> {
+  if (mode === "ssh-opencode" || mode === "web") {
+    const opencodeConfig = await syncOpenCodeConfigDir(config, sandbox);
+    const opencodeAuth = await syncOpenCodeAuthFile(config, sandbox);
+    return summarizeToolingSync(opencodeConfig, opencodeAuth, null, null);
+  }
+
+  if (mode === "ssh-codex") {
+    const codexConfig = await syncCodexConfigDir(config, sandbox);
+    const codexAuth = await syncCodexAuthFile(config, sandbox);
+    return summarizeToolingSync(null, null, codexConfig, codexAuth);
+  }
+
+  const opencodeConfig = await syncOpenCodeConfigDir(config, sandbox);
+  const opencodeAuth = await syncOpenCodeAuthFile(config, sandbox);
+  const codexConfig = await syncCodexConfigDir(config, sandbox);
+  const codexAuth = await syncCodexAuthFile(config, sandbox);
+  return summarizeToolingSync(opencodeConfig, opencodeAuth, codexConfig, codexAuth);
+}
+
+function summarizeToolingSync(
+  opencodeConfig: PathSyncSummary | null,
+  opencodeAuth: PathSyncSummary | null,
+  codexConfig: PathSyncSummary | null,
+  codexAuth: PathSyncSummary | null
+): ToolingSyncSummary {
+  const summaries = [opencodeConfig, opencodeAuth, codexConfig, codexAuth].filter((item): item is PathSyncSummary => item !== null);
+
+  return {
+    totalDiscovered: summaries.reduce((total, item) => total + item.filesDiscovered, 0),
+    totalWritten: summaries.reduce((total, item) => total + item.filesWritten, 0),
+    skippedMissingPaths: summaries.reduce((total, item) => total + Number(item.skippedMissing), 0),
+    opencodeConfigSynced: opencodeConfig !== null && !opencodeConfig.skippedMissing,
+    opencodeAuthSynced: opencodeAuth !== null && !opencodeAuth.skippedMissing,
+    codexConfigSynced: codexConfig !== null && !codexConfig.skippedMissing,
+    codexAuthSynced: codexAuth !== null && !codexAuth.skippedMissing
+  };
+}
+
+function formatToolingSyncSummary(summary: ToolingSyncSummary): string {
+  const opencodeSynced = summary.opencodeConfigSynced || summary.opencodeAuthSynced;
+  const codexSynced = summary.codexConfigSynced || summary.codexAuthSynced;
+  return `discovered=${summary.totalDiscovered}, written=${summary.totalWritten}, missingPaths=${summary.skippedMissingPaths}, opencodeSynced=${opencodeSynced}, codexSynced=${codexSynced}`;
 }
 
 function resolveTemplateForMode(

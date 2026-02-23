@@ -17,6 +17,9 @@ export interface E2BSandbox {
   commands: {
     run(command: string, opts?: SandboxCommandRunOptions): Promise<SandboxCommandRunResult>;
   };
+  files: {
+    write(path: string, data: string | ArrayBuffer): Promise<unknown>;
+  };
   getHost(port: number): string;
   setTimeout(timeoutMs: number): Promise<void>;
   kill(): Promise<void>;

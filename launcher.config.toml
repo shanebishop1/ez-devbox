@@ -6,19 +6,39 @@ timeout_ms = 3600000
 delete_on_exit = false
 
 [startup]
-mode = "prompt"
+mode = "prompt" # allowed: prompt|ssh-opencode|ssh-codex|web|ssh-shell
 
 [project]
-mode = "single"
-active = "prompt"
-dir = "/home/daytona/projects/workspace"
+mode = "single" # allowed: single|all
+active = "prompt" # allowed: prompt|name|index
+dir = "/home/user/projects/workspace"
 setup_on_connect = false
 setup_retries = 2
 setup_continue_on_error = false
 
 [[project.repos]]
-name = "agent-box"
-url = "https://github.com/example/agent-box.git"
+name = "opencode"
+url = "https://github.com/sst/opencode.git"
+branch = "main"
+setup_pre_command = ""
+setup_command = ""
+setup_wrapper_command = ""
+setup_env = {}
+startup_env = {}
+
+[[project.repos]]
+name = "next.js"
+url = "https://github.com/vercel/next.js.git"
+branch = "canary"
+setup_pre_command = ""
+setup_command = ""
+setup_wrapper_command = ""
+setup_env = {}
+startup_env = {}
+
+[[project.repos]]
+name = "react"
+url = "https://github.com/facebook/react.git"
 branch = "main"
 setup_pre_command = ""
 setup_command = ""
@@ -29,7 +49,15 @@ startup_env = {}
 [env]
 pass_through = []
 
+[opencode]
+config_dir = "~/.config/opencode"
+auth_path = "~/.local/share/opencode/auth.json"
+
+[codex]
+config_dir = "~/.codex"
+auth_path = "~/.codex/auth.json"
+
 [mcp]
-mode = "disabled"
+mode = "disabled" # allowed: disabled|remote_url|in_sandbox
 firecrawl_api_url = ""
 allow_localhost_override = false

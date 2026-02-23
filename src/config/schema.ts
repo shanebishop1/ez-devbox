@@ -38,6 +38,14 @@ export interface ResolvedLauncherConfig {
   env: {
     pass_through: string[];
   };
+  opencode: {
+    config_dir: string;
+    auth_path: string;
+  };
+  codex: {
+    config_dir: string;
+    auth_path: string;
+  };
   mcp: {
     mode: McpMode;
     firecrawl_api_url: string;

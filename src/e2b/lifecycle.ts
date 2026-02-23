@@ -13,6 +13,7 @@ import { normalizeTimeoutMs } from "./timeout.js";
 export interface SandboxHandle {
   sandboxId: string;
   run(command: string, opts?: SandboxCommandRunOptions): Promise<{ stdout: string; stderr: string; exitCode: number }>;
+  writeFile(path: string, data: string | ArrayBuffer): Promise<void>;
   getHost(port: number): Promise<string>;
   setTimeout(timeoutMs: number): Promise<void>;
   kill(): Promise<void>;
@@ -152,6 +153,11 @@ function createSandboxHandle(sandbox: E2BSandbox): SandboxHandle {
       );
 
       return mapCommandResult(result);
+    },
+    async writeFile(path, data) {
+      await withLifecycleError(`Failed to write file in sandbox '${sandbox.sandboxId}' at '${path}'`, () =>
+        sandbox.files.write(path, data)
+      );
     },
     async getHost(port) {
       return withLifecycleError(

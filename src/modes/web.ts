@@ -24,9 +24,12 @@ export async function startWebMode(handle: SandboxHandle): Promise<ModeLaunchRes
   const url = ensureHttps(host);
   const authStatus = parseStatusCode(authProbe.stdout);
   const authRequired = authStatus === 401;
-  const warning = authRequired
-    ? ""
-    : " WARNING: Web mode appears unauthenticated (set OPENCODE_SERVER_PASSWORD to require auth).";
+
+  if (!authRequired) {
+    throw new Error(
+      `Web mode startup requires authentication. Set OPENCODE_SERVER_PASSWORD in the sandbox environment before enabling web mode.`
+    );
+  }
 
   return {
     mode: "web",
@@ -37,9 +40,9 @@ export async function startWebMode(handle: SandboxHandle): Promise<ModeLaunchRes
       status: "ready",
       port: 3000,
       authRequired,
-      authStatus: authStatus ?? "unknown"
+      authStatus
     },
-    message: `Started web mode in sandbox ${handle.sandboxId} at ${url}.${warning}`
+    message: `Started web mode in sandbox ${handle.sandboxId} at ${url}`
   };
 }
 

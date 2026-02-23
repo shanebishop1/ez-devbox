@@ -33,6 +33,14 @@ describe("e2b lifecycle adapter", () => {
     env: {
       pass_through: []
     },
+    opencode: {
+      config_dir: "~/.config/opencode",
+      auth_path: "~/.local/share/opencode/auth.json"
+    },
+    codex: {
+      config_dir: "~/.codex",
+      auth_path: "~/.codex/auth.json"
+    },
     mcp: {
       mode: "disabled",
       firecrawl_api_url: "",
@@ -132,6 +140,7 @@ describe("e2b lifecycle adapter", () => {
     const handle: SandboxHandle = {
       sandboxId: "sbx-timeout",
       run: vi.fn(),
+      writeFile: vi.fn(),
       getHost: vi.fn(),
       setTimeout,
       kill: vi.fn()
@@ -163,6 +172,9 @@ function createMockSandbox(
   return {
     sandboxId,
     commands: { run },
+    files: {
+      write: vi.fn().mockResolvedValue({})
+    },
     getHost: vi.fn().mockReturnValue(`${sandboxId}.host`),
     setTimeout: vi.fn().mockResolvedValue(undefined),
     kill: vi.fn().mockResolvedValue(undefined)

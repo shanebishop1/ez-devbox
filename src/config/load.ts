@@ -40,6 +40,8 @@ export async function loadConfig(options: LoadConfigOptions = {}): Promise<Resol
   const startupRaw = getOptionalTable(rawConfig, "startup", "startup");
   const projectRaw = getOptionalTable(rawConfig, "project", "project");
   const envRaw = getOptionalTable(rawConfig, "env", "env");
+  const opencodeRaw = getOptionalTable(rawConfig, "opencode", "opencode");
+  const codexRaw = getOptionalTable(rawConfig, "codex", "codex");
   const mcpRaw = getOptionalTable(rawConfig, "mcp", "mcp");
 
   const projectReposRaw =
@@ -80,6 +82,16 @@ export async function loadConfig(options: LoadConfigOptions = {}): Promise<Resol
     env: {
       pass_through:
         getOptionalStringArray(envRaw, "pass_through", "env.pass_through") ?? defaultConfig.env.pass_through
+    },
+    opencode: {
+      config_dir:
+        getOptionalString(opencodeRaw, "config_dir", "opencode.config_dir") ?? defaultConfig.opencode.config_dir,
+      auth_path:
+        getOptionalString(opencodeRaw, "auth_path", "opencode.auth_path") ?? defaultConfig.opencode.auth_path
+    },
+    codex: {
+      config_dir: getOptionalString(codexRaw, "config_dir", "codex.config_dir") ?? defaultConfig.codex.config_dir,
+      auth_path: getOptionalString(codexRaw, "auth_path", "codex.auth_path") ?? defaultConfig.codex.auth_path
     },
     mcp: {
       mode: getOptionalEnum(mcpRaw, "mode", "mcp.mode", MCP_MODES) ?? defaultConfig.mcp.mode,

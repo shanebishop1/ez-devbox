@@ -14,7 +14,7 @@ export const defaultConfig: ResolvedLauncherConfig = {
   project: {
     mode: "single",
     active: "prompt",
-    dir: "/home/daytona/projects/workspace",
+    dir: "/home/user/projects/workspace",
     setup_on_connect: false,
     setup_retries: 2,
     setup_continue_on_error: false,
@@ -22,6 +22,14 @@ export const defaultConfig: ResolvedLauncherConfig = {
   },
   env: {
     pass_through: []
+  },
+  opencode: {
+    config_dir: "~/.config/opencode",
+    auth_path: "~/.local/share/opencode/auth.json"
+  },
+  codex: {
+    config_dir: "~/.codex",
+    auth_path: "~/.codex/auth.json"
   },
   mcp: {
     mode: "disabled",
