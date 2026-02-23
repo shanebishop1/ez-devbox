@@ -30,11 +30,14 @@ export function renderHelp(): string {
     "  npm run dev -- <command> [options]",
     "",
     "Commands:",
-    "  create   Create a new sandbox (placeholder)",
-    "  connect  Connect to an existing sandbox (placeholder)",
-    "  start    Smart start flow (placeholder)",
+    "  create   Create a new sandbox and launch startup mode",
+    "  connect  Connect to an existing sandbox and launch mode",
+    "  start    Alias of connect; supports --no-reuse",
     "",
     "Options:",
-    "  -h, --help  Show help"
+    "  --mode <mode>         Startup mode (prompt|ssh-opencode|ssh-codex|web|ssh-shell)",
+    "  --sandbox-id <id>     Sandbox id to connect/start",
+    "  --no-reuse            Start/connect without last-run fallback",
+    "  -h, --help            Show help"
   ].join("\n");
 }
