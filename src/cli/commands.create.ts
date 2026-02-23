@@ -1,3 +1,6 @@
+import { readFile } from "node:fs/promises";
+import { resolve } from "node:path";
+import { parse as parseDotEnv } from "dotenv";
 import type { CommandResult } from "../types/index.js";
 import type { StartupMode } from "../types/index.js";
 import { loadConfig, type LoadConfigOptions } from "../config/load.js";
@@ -12,6 +15,7 @@ export interface CreateCommandDeps {
     config: Awaited<ReturnType<typeof loadConfig>>,
     options?: CreateSandboxOptions
   ) => Promise<SandboxHandle>;
+  resolveEnvSource: () => Promise<Record<string, string | undefined>>;
   resolveSandboxCreateEnv: (
     config: Awaited<ReturnType<typeof loadConfig>>,
     envSource?: Record<string, string | undefined>
@@ -24,6 +28,7 @@ export interface CreateCommandDeps {
 const defaultDeps: CreateCommandDeps = {
   loadConfig,
   createSandbox,
+  resolveEnvSource: loadEnvSource,
   resolveSandboxCreateEnv,
   launchMode,
   saveLastRunState,
@@ -46,7 +51,8 @@ export async function runCreateCommand(args: string[], deps: CreateCommandDeps =
             template: templateResolution.template
           }
         };
-  const envResolution = deps.resolveSandboxCreateEnv(config, process.env);
+  const envSource = await deps.resolveEnvSource();
+  const envResolution = deps.resolveSandboxCreateEnv(config, envSource);
 
   const handle = await deps.createSandbox(createConfig, {
     envs: envResolution.envs
@@ -95,6 +101,29 @@ function resolveTemplateForMode(
     template: "opencode",
     autoSelected: true
   };
+}
+
+async function loadEnvSource(): Promise<Record<string, string | undefined>> {
+  const envPath = resolve(process.cwd(), ".env");
+
+  let parsedFileEnv: Record<string, string | undefined> = {};
+
+  try {
+    parsedFileEnv = parseDotEnv(await readFile(envPath, "utf8"));
+  } catch (error) {
+    if (!isErrnoException(error) || error.code !== "ENOENT") {
+      throw error;
+    }
+  }
+
+  return {
+    ...parsedFileEnv,
+    ...process.env
+  };
+}
+
+function isErrnoException(error: unknown): error is NodeJS.ErrnoException {
+  return typeof error === "object" && error !== null && "code" in error;
 }
 
 function parseCreateArgs(args: string[]): { mode?: StartupMode } {
