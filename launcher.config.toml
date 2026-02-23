@@ -1,0 +1,7 @@
+[sandbox]
+template = "base"
+reuse = true
+timeout_ms = 1800000
+
+[startup]
+mode = "prompt"
