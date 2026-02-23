@@ -24,9 +24,12 @@ export function resolveCliCommand(argv: string[]): ResolvedCliCommand {
 
 export function renderHelp(): string {
   return [
-    "E2B Launcher CLI",
+    "ez-box CLI",
     "",
     "Usage:",
+    "  ez-box <command> [options]",
+    "",
+    "Local development usage:",
     "  npm run dev -- <command> [options]",
     "",
     "Commands:",

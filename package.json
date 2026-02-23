@@ -1,13 +1,24 @@
 {
-  "name": "agent-box",
+  "name": "ez-box",
   "version": "0.1.0",
-  "private": true,
+  "description": "CLI for creating, reconnecting, and launching E2B sandboxes",
+  "main": "dist/src/cli/index.js",
+  "types": "dist/src/cli/index.d.ts",
+  "bin": {
+    "ez-box": "dist/src/cli/index.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "private": false,
   "type": "module",
   "engines": {
     "node": ">=20"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "npm run clean && tsc -p tsconfig.build.json",
+    "clean": "node -e \"const fs = require('node:fs'); fs.rmSync('dist', { recursive: true, force: true });\"",
+    "prepublishOnly": "npm run build",
     "dev": "tsx src/cli/index.ts",
     "create": "tsx src/cli/index.ts create",
     "connect": "tsx src/cli/index.ts connect",
@@ -15,6 +26,26 @@
     "test": "vitest run",
     "e2e:live": "tsx scripts/e2e.live.ts",
     "template:build": "tsx templates/build.ts"
+  },
+  "keywords": [
+    "e2b",
+    "sandbox",
+    "cli",
+    "reconnect",
+    "opencode"
+  ],
+  "author": "Shane Bishop",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/shanebishop1/agent-box.git"
+  },
+  "bugs": {
+    "url": "https://github.com/shanebishop1/agent-box/issues"
+  },
+  "homepage": "https://github.com/shanebishop1/agent-box#readme",
+  "publishConfig": {
+    "access": "public"
   },
   "dependencies": {
     "dotenv": "^16.4.7",

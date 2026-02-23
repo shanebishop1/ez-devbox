@@ -1,6 +1,6 @@
-# Agent Box (E2B Launcher)
+# ez-box
 
-Lightweight TypeScript CLI for creating and reconnecting E2B sandboxes for coding workflows.
+Lightweight TypeScript CLI for creating, reconnecting, and launching E2B coding sandboxes.
 
 ## What it does
 
@@ -20,9 +20,21 @@ Lightweight TypeScript CLI for creating and reconnecting E2B sandboxes for codin
 - npm
 - `E2B_API_KEY` set in `.env` or shell env
 
+## Install
+
+```bash
+npm install -g ez-box
+```
+
+Then run:
+
+```bash
+ez-box --help
+```
+
 ## Quick start
 
-1. Install deps:
+1. Install local deps:
 
 ```bash
 npm install
@@ -34,7 +46,7 @@ npm install
 E2B_API_KEY=your_key_here
 ```
 
-3. Review `launcher.config.toml` (startup mode, repo mode, MCP settings).
+3. Review `launcher.config.toml` (sandbox, startup mode, repo mode, MCP settings).
 
 4. Run commands:
 
@@ -42,22 +54,30 @@ E2B_API_KEY=your_key_here
 npm run create
 npm run connect
 npm run start
+# or, once installed from npm:
+ez-box create
+ez-box connect
+ez-box start
 ```
 
 ## Common commands
 
 - Show CLI help:
+  - `ez-box --help`
   - `npm run dev -- --help`
 - Create with explicit mode:
+  - `ez-box create -- --mode web`
   - `npm run create -- --mode web`
 - Connect to specific sandbox:
+  - `ez-box connect -- --sandbox-id <sandbox-id>`
   - `npm run connect -- --sandbox-id <sandbox-id>`
 - Start without last-run reuse:
+  - `ez-box start -- --no-reuse`
   - `npm run start -- --no-reuse`
 
 ## Config files
 
-- `launcher.config.toml`: launcher behavior (sandbox, startup, project, env pass-through, mcp)
+- `launcher.config.toml`: ez-box behavior (sandbox, startup, project, env pass-through, mcp)
 - `.env`: secrets and local env values
 - `.agent-box-last-run.json`: auto-generated local state for reconnects
 
