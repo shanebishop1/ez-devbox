@@ -1,10 +1,15 @@
 import { describe, expect, it, vi } from "vitest";
 import { launchMode, type ModeLaunchResult } from "../src/modes/index.js";
 import type { SandboxHandle } from "../src/e2b/lifecycle.js";
+import { startOpenCodeMode } from "../src/modes/opencode.js";
 
 describe("startup modes orchestrator", () => {
-  it("web mode starts serve in background, waits for readiness, and returns external https URL", async () => {
-    const run = vi.fn().mockResolvedValue({ stdout: "", stderr: "", exitCode: 0 });
+  it("web mode starts serve in background, checks auth status, and returns external https URL", async () => {
+    const run = vi
+      .fn()
+      .mockResolvedValueOnce({ stdout: "", stderr: "", exitCode: 0 })
+      .mockResolvedValueOnce({ stdout: "", stderr: "", exitCode: 0 })
+      .mockResolvedValueOnce({ stdout: "401", stderr: "", exitCode: 0 });
     const getHost = vi.fn().mockResolvedValue("sandbox-123.e2b.dev");
     const handle = createHandle({ run, getHost });
 
@@ -20,11 +25,39 @@ describe("startup modes orchestrator", () => {
       "bash -lc 'for attempt in $(seq 1 30); do status=$(curl -s -o /dev/null -w \"%{http_code}\" http://127.0.0.1:3000/ || true); if [ \"$status\" = \"200\" ] || [ \"$status\" = \"401\" ]; then exit 0; fi; sleep 1; done; exit 1'",
       { timeoutMs: 35_000 }
     );
+    expect(run).toHaveBeenNthCalledWith(
+      3,
+      "bash -lc 'curl -s -o /dev/null -w \"%{http_code}\" http://127.0.0.1:3000/ || true'",
+      { timeoutMs: 10_000 }
+    );
     expect(getHost).toHaveBeenCalledWith(3000);
     expect(result).toMatchObject<Partial<ModeLaunchResult>>({
       mode: "web",
       url: "https://sandbox-123.e2b.dev"
     });
+    expect(result.details).toEqual({
+      smoke: "opencode-web",
+      status: "ready",
+      port: 3000,
+      authRequired: true,
+      authStatus: 401
+    });
+    expect(result.message).not.toContain("WARNING");
+  });
+
+  it("web mode warns when auth is not required", async () => {
+    const run = vi
+      .fn()
+      .mockResolvedValueOnce({ stdout: "", stderr: "", exitCode: 0 })
+      .mockResolvedValueOnce({ stdout: "", stderr: "", exitCode: 0 })
+      .mockResolvedValueOnce({ stdout: "200", stderr: "", exitCode: 0 });
+    const handle = createHandle({ run, getHost: vi.fn().mockResolvedValue("sandbox-456.e2b.dev") });
+
+    const result = await launchMode(handle, "web");
+
+    expect(result.details?.authRequired).toBe(false);
+    expect(result.details?.authStatus).toBe(200);
+    expect(result.message).toContain("WARNING");
   });
 
   it("prompt mode resolves deterministically to ssh-opencode smoke check", async () => {
@@ -40,6 +73,37 @@ describe("startup modes orchestrator", () => {
       smoke: "opencode-cli",
       status: "ready",
       output: "OpenCode 1.2.3"
+    });
+  });
+
+  it("ssh-opencode mode uses interactive attach in tty environments", async () => {
+    const handle = createHandle({ run: vi.fn().mockResolvedValue({ stdout: "", stderr: "", exitCode: 0 }) });
+    const prepareSession = vi.fn().mockResolvedValue({
+      tempDir: "/tmp/session",
+      privateKeyPath: "/tmp/session/id_ed25519",
+      wsUrl: "wss://8081-sbx.e2b.app"
+    });
+    const runInteractiveSession = vi.fn().mockResolvedValue(undefined);
+    const cleanupSession = vi.fn().mockResolvedValue(undefined);
+
+    const result = await startOpenCodeMode(handle, {
+      isInteractiveTerminal: () => true,
+      prepareSession,
+      runInteractiveSession,
+      cleanupSession
+    });
+
+    expect(prepareSession).toHaveBeenCalledWith(handle);
+    expect(runInteractiveSession).toHaveBeenCalledWith({
+      tempDir: "/tmp/session",
+      privateKeyPath: "/tmp/session/id_ed25519",
+      wsUrl: "wss://8081-sbx.e2b.app"
+    });
+    expect(cleanupSession).toHaveBeenCalledTimes(1);
+    expect(result.mode).toBe("ssh-opencode");
+    expect(result.details).toEqual({
+      session: "interactive",
+      status: "completed"
     });
   });
 

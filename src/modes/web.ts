@@ -4,8 +4,10 @@ import type { ModeLaunchResult } from "./index.js";
 const WEB_COMMAND = "nohup opencode serve --hostname 0.0.0.0 --port 3000 >/tmp/opencode-serve.log 2>&1 &";
 const WEB_READINESS_COMMAND =
   "bash -lc 'for attempt in $(seq 1 30); do status=$(curl -s -o /dev/null -w \"%{http_code}\" http://127.0.0.1:3000/ || true); if [ \"$status\" = \"200\" ] || [ \"$status\" = \"401\" ]; then exit 0; fi; sleep 1; done; exit 1'";
+const WEB_AUTH_PROBE_COMMAND = "bash -lc 'curl -s -o /dev/null -w \"%{http_code}\" http://127.0.0.1:3000/ || true'";
 const WEB_START_TIMEOUT_MS = 10_000;
 const WEB_READY_TIMEOUT_MS = 35_000;
+const WEB_AUTH_TIMEOUT_MS = 10_000;
 
 export async function startWebMode(handle: SandboxHandle): Promise<ModeLaunchResult> {
   await handle.run(WEB_COMMAND, {
@@ -14,9 +16,17 @@ export async function startWebMode(handle: SandboxHandle): Promise<ModeLaunchRes
   await handle.run(WEB_READINESS_COMMAND, {
     timeoutMs: WEB_READY_TIMEOUT_MS
   });
+  const authProbe = await handle.run(WEB_AUTH_PROBE_COMMAND, {
+    timeoutMs: WEB_AUTH_TIMEOUT_MS
+  });
 
   const host = await handle.getHost(3000);
   const url = ensureHttps(host);
+  const authStatus = parseStatusCode(authProbe.stdout);
+  const authRequired = authStatus === 401;
+  const warning = authRequired
+    ? ""
+    : " WARNING: Web mode appears unauthenticated (set OPENCODE_SERVER_PASSWORD to require auth).";
 
   return {
     mode: "web",
@@ -25,9 +35,11 @@ export async function startWebMode(handle: SandboxHandle): Promise<ModeLaunchRes
     details: {
       smoke: "opencode-web",
       status: "ready",
-      port: 3000
+      port: 3000,
+      authRequired,
+      authStatus: authStatus ?? "unknown"
     },
-    message: `Started web mode in sandbox ${handle.sandboxId} at ${url}`
+    message: `Started web mode in sandbox ${handle.sandboxId} at ${url}.${warning}`
   };
 }
 
@@ -37,4 +49,18 @@ function ensureHttps(host: string): string {
   }
 
   return `https://${host}`;
+}
+
+function parseStatusCode(value: string): number | undefined {
+  const trimmed = value.trim();
+  if (trimmed === "") {
+    return undefined;
+  }
+
+  const numeric = Number(trimmed);
+  if (!Number.isInteger(numeric) || numeric < 100 || numeric > 599) {
+    return undefined;
+  }
+
+  return numeric;
 }
