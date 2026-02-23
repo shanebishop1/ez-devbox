@@ -5,7 +5,7 @@ export const defaultConfig: ResolvedLauncherConfig = {
     template: "base",
     reuse: true,
     name: "agent-box",
-    timeout_ms: 30 * 60 * 1000,
+    timeout_ms: 60 * 60 * 1000,
     delete_on_exit: false
   },
   startup: {

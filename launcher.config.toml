@@ -2,7 +2,7 @@
 template = "base"
 reuse = true
 name = "agent-box"
-timeout_ms = 1800000
+timeout_ms = 3600000
 delete_on_exit = false
 
 [startup]
