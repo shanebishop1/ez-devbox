@@ -1,5 +1,8 @@
 import { randomUUID } from "node:crypto";
-import { Socket } from "node:net";
+import { execFile } from "node:child_process";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
 import { loadConfig } from "../src/config/load.js";
 import { connectSandbox, createSandbox, killSandbox } from "../src/e2b/lifecycle.js";
 import { resolveSandboxCreateEnv } from "../src/e2b/env.js";
@@ -182,78 +185,125 @@ function pushIfMissing(checks: CheckResult[], check: CheckResult): void {
   checks.push(check);
 }
 
-async function checkSshStatus(handle: { getHost(port: number): Promise<string> }): Promise<CheckResult> {
-  try {
-    const rawHost = await handle.getHost(22);
-    const { hostname, port } = parseHost(rawHost, 22);
-    const connected = await canConnectTcp(hostname, port, 4_000);
+async function checkSshStatus(handle: {
+  run(command: string, opts?: { timeoutMs?: number }): Promise<{ stdout: string; stderr: string; exitCode: number }>;
+  getHost(port: number): Promise<string>;
+}): Promise<CheckResult> {
+  const sshTempDir = await mkdtemp(join(tmpdir(), "agent-box-ssh-"));
+  const privateKeyPath = join(sshTempDir, "id_ed25519");
 
-    if (connected) {
+  try {
+    await runLocalCommand("ssh-keygen", ["-t", "ed25519", "-N", "", "-f", privateKeyPath, "-q"], 15_000);
+    const publicKey = (await readFile(`${privateKeyPath}.pub`, "utf8")).trim();
+    if (publicKey === "") {
+      throw new Error("generated SSH public key is empty");
+    }
+
+    const publicKeyBase64 = Buffer.from(publicKey, "utf8").toString("base64");
+
+    await handle.run("sudo apt-get update && sudo apt-get install -y openssh-server websockify", {
+      timeoutMs: 8 * 60 * 1000
+    });
+    await handle.run("mkdir -p ~/.ssh && chmod 700 ~/.ssh", { timeoutMs: 15_000 });
+    await handle.run(`bash -lc 'printf %s ${publicKeyBase64} | base64 -d > ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys'`, {
+      timeoutMs: 15_000
+    });
+
+    await handle.run(
+      "bash -lc 'cat > /tmp/sshd_config <<\"EOF\"\nPort 2222\nListenAddress 0.0.0.0\nPasswordAuthentication no\nPermitRootLogin no\nPubkeyAuthentication yes\nAuthorizedKeysFile .ssh/authorized_keys\nPidFile /tmp/sshd.pid\nUsePAM no\nSubsystem sftp internal-sftp\nEOF'",
+      { timeoutMs: 15_000 }
+    );
+
+    await handle.run("sudo mkdir -p /run/sshd", { timeoutMs: 15_000 });
+    await handle.run("sudo /usr/sbin/sshd -f /tmp/sshd_config", { timeoutMs: 15_000 });
+    await handle.run("nohup websockify 0.0.0.0:8081 127.0.0.1:2222 >/tmp/websockify.log 2>&1 &", { timeoutMs: 15_000 });
+
+    const wsUrl = toWsUrl(await handle.getHost(8081));
+    const proxyScriptPath = resolve(process.cwd(), "scripts/ws-ssh-proxy.mjs");
+    const proxyCommand = `node ${quoteShellArg(proxyScriptPath)} ${quoteShellArg(wsUrl)}`;
+
+    const sshResult = await runLocalCommand(
+      "ssh",
+      [
+        "-o",
+        "StrictHostKeyChecking=no",
+        "-o",
+        "UserKnownHostsFile=/dev/null",
+        "-o",
+        "LogLevel=ERROR",
+        "-o",
+        `ProxyCommand=${proxyCommand}`,
+        "-i",
+        privateKeyPath,
+        "user@e2b-sandbox",
+        "echo ssh-ok"
+      ],
+      60_000
+    );
+
+    if (!sshResult.stdout.includes("ssh-ok")) {
       return {
         name: "ssh connectivity",
-        status: "PASS",
-        detail: `tcp connectivity available at ${hostname}:${port}`
+        status: "FAIL",
+        detail: "ssh command completed but did not return expected marker"
       };
     }
 
     return {
       name: "ssh connectivity",
-      status: "SKIP",
-      detail:
-        "no reachable SSH listener detected; current template does not expose turnkey SSH. This requires a custom template or tunnel tooling (for example websocat + sshd)."
+      status: "PASS",
+      detail: `ssh command succeeded via websocket proxy (${wsUrl})`
     };
   } catch (error) {
     return {
       name: "ssh connectivity",
-      status: "SKIP",
-      detail: `ssh readiness gap: ${error instanceof Error ? error.message : "unknown error"}`
+      status: "FAIL",
+      detail: `ssh check failed: ${error instanceof Error ? error.message : "unknown error"}`
     };
+  } finally {
+    await rm(sshTempDir, { recursive: true, force: true });
   }
 }
 
-function parseHost(value: string, defaultPort: number): { hostname: string; port: number } {
-  if (value.startsWith("http://") || value.startsWith("https://")) {
-    const parsed = new URL(value);
-    return {
-      hostname: parsed.hostname,
-      port: parsed.port ? Number(parsed.port) : defaultPort
-    };
+function toWsUrl(host: string): string {
+  if (host.startsWith("https://")) {
+    return host.replace("https://", "wss://");
   }
 
-  const hasPort = value.includes(":");
-  if (!hasPort) {
-    return { hostname: value, port: defaultPort };
+  if (host.startsWith("http://")) {
+    return host.replace("http://", "ws://");
   }
 
-  const [hostname, portRaw] = value.split(":", 2);
-  const parsedPort = Number(portRaw);
-
-  return {
-    hostname,
-    port: Number.isInteger(parsedPort) && parsedPort > 0 ? parsedPort : defaultPort
-  };
+  return `wss://${host}`;
 }
 
-function canConnectTcp(hostname: string, port: number, timeoutMs: number): Promise<boolean> {
-  return new Promise((resolve) => {
-    const socket = new Socket();
-    let settled = false;
+function quoteShellArg(value: string): string {
+  return `'${value.replace(/'/g, `"'"'"`)}'`;
+}
 
-    const finish = (result: boolean): void => {
-      if (settled) {
-        return;
+function runLocalCommand(command: string, args: string[], timeoutMs: number): Promise<{ stdout: string; stderr: string }> {
+  return new Promise((resolvePromise, rejectPromise) => {
+    execFile(
+      command,
+      args,
+      {
+        timeout: timeoutMs,
+        encoding: "utf8",
+        maxBuffer: 1024 * 1024
+      },
+      (error, stdout, stderr) => {
+        if (error) {
+          const detail = stderr?.trim() || error.message;
+          rejectPromise(new Error(`${command} failed: ${detail}`));
+          return;
+        }
+
+        resolvePromise({
+          stdout: stdout ?? "",
+          stderr: stderr ?? ""
+        });
       }
-
-      settled = true;
-      socket.destroy();
-      resolve(result);
-    };
-
-    socket.setTimeout(timeoutMs);
-    socket.once("connect", () => finish(true));
-    socket.once("timeout", () => finish(false));
-    socket.once("error", () => finish(false));
-    socket.connect(port, hostname);
+    );
   });
 }
 
