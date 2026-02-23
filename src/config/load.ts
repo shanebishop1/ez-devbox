@@ -4,6 +4,7 @@ import { parse as parseDotEnv } from "dotenv";
 import { parse as parseToml } from "smol-toml";
 import type { ResolvedLauncherConfig } from "./schema.js";
 import { defaultConfig } from "./defaults.js";
+import { validateFirecrawlPreflight } from "../mcp/firecrawl.js";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -99,11 +100,7 @@ export async function loadConfig(options: LoadConfigOptions = {}): Promise<Resol
     throw new Error("Invalid project.setup_retries: expected an integer greater than or equal to 0.");
   }
 
-  if (resolved.mcp.mode === "remote_url" && resolved.mcp.firecrawl_api_url.trim() === "") {
-    throw new Error(
-      "Invalid mcp.firecrawl_api_url: required when mcp.mode is 'remote_url'. Set mcp.firecrawl_api_url in launcher.config.toml or FIRECRAWL_API_URL in .env."
-    );
-  }
+  validateFirecrawlPreflight(resolved, mergedEnv);
 
   return resolved;
 }
