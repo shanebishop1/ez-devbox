@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { loadConfig } from "../src/config/load.js";
+import { defaultConfig } from "../src/config/defaults.js";
 
 describe("loadConfig", () => {
   let tempDir = "";
@@ -63,7 +64,7 @@ describe("loadConfig", () => {
     expect(resolved.sandbox.template).toBe("base");
     expect(resolved.sandbox.reuse).toBe(true);
     expect(resolved.sandbox.name).toBe("team-box");
-    expect(resolved.sandbox.timeout_ms).toBe(1800000);
+    expect(resolved.sandbox.timeout_ms).toBe(defaultConfig.sandbox.timeout_ms);
     expect(resolved.sandbox.delete_on_exit).toBe(false);
 
     expect(resolved.startup.mode).toBe("web");
