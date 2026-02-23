@@ -43,6 +43,7 @@ describe("CLI command integration", () => {
     await runCreateCommand([], {
       loadConfig: vi.fn().mockResolvedValue(config),
       createSandbox,
+      resolveEnvSource: vi.fn().mockResolvedValue({}),
       resolveSandboxCreateEnv: vi.fn().mockReturnValue({ envs: {}, warnings: [] }),
       launchMode,
       saveLastRunState,
@@ -76,6 +77,7 @@ describe("CLI command integration", () => {
     await runCreateCommand(["--mode", "ssh-codex"], {
       loadConfig: vi.fn().mockResolvedValue(config),
       createSandbox,
+      resolveEnvSource: vi.fn().mockResolvedValue({}),
       resolveSandboxCreateEnv: vi.fn().mockReturnValue({ envs: {}, warnings: [] }),
       launchMode: vi.fn().mockResolvedValue({ mode: "ssh-codex", command: "codex", message: "launched" }),
       saveLastRunState: vi.fn().mockResolvedValue(undefined),
@@ -99,6 +101,15 @@ describe("CLI command integration", () => {
   it("create includes MCP warnings in output message", async () => {
     const createSandbox = vi.fn().mockResolvedValue({ sandboxId: "sbx-created" });
     const launchMode = vi.fn().mockResolvedValue({ mode: "ssh-opencode", command: "opencode", message: "launched" });
+    const resolveEnvSource = vi.fn().mockResolvedValue({ OPENCODE_SERVER_PASSWORD: "from-dotenv" });
+    const resolveSandboxCreateEnv = vi
+      .fn()
+      .mockReturnValue({
+        envs: {
+          OPENCODE_SERVER_PASSWORD: "from-dotenv"
+        },
+        warnings: []
+      });
 
     const result = await runCreateCommand([], {
       loadConfig: vi.fn().mockResolvedValue({
@@ -110,18 +121,25 @@ describe("CLI command integration", () => {
         }
       }),
       createSandbox,
-      resolveSandboxCreateEnv: vi
-        .fn()
-        .mockReturnValue({
-          envs: {},
-          warnings: [
-            "mcp.mode='in_sandbox' is advanced and not fully implemented yet. Provide mcp.firecrawl_api_url or FIRECRAWL_API_URL to use a known remote endpoint."
-          ]
-        }),
+      resolveEnvSource,
+      resolveSandboxCreateEnv: resolveSandboxCreateEnv.mockReturnValue({
+        envs: {
+          OPENCODE_SERVER_PASSWORD: "from-dotenv"
+        },
+        warnings: [
+          "mcp.mode='in_sandbox' is advanced and not fully implemented yet. Provide mcp.firecrawl_api_url or FIRECRAWL_API_URL to use a known remote endpoint."
+        ]
+      }),
       launchMode,
       saveLastRunState: vi.fn().mockResolvedValue(undefined),
       now: () => "2026-02-01T00:00:00.000Z"
     });
+
+    expect(resolveEnvSource).toHaveBeenCalledTimes(1);
+    expect(resolveSandboxCreateEnv).toHaveBeenCalledWith(
+      expect.any(Object),
+      expect.objectContaining({ OPENCODE_SERVER_PASSWORD: "from-dotenv" })
+    );
 
     expect(result.message).toContain("MCP warnings:");
     expect(result.message).toContain("mcp.mode='in_sandbox' is advanced and not fully implemented yet");
