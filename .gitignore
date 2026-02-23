@@ -1,0 +1,21 @@
+# node modules
+node_modules/
+
+# env
+.env
+
+# build
+dist/
+
+.vscode/
+logs
+*.log
+.DS_Store
+
+# Local planning and publishing notes
+docs/plans/
+docs/portfolio.md
+BOX_REQUIREMENTS.md
+E2B_MODULAR_PLAN.md
+E2B_RESEARCH_REPORT.md
+E2B_TS_BOOTSTRAP_CHECKLIST.md
