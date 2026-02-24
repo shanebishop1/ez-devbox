@@ -316,6 +316,38 @@ describe("CLI command integration", () => {
     });
   });
 
+  it("create verbose logging lists only env var names", async () => {
+    setVerboseLoggingEnabled(true);
+    const loggerVerbose = vi.spyOn(logger, "verbose").mockImplementation(() => undefined);
+
+    await runCreateCommand(["--mode", "ssh-opencode"], {
+      loadConfig: vi.fn().mockResolvedValue(config),
+      createSandbox: vi.fn().mockResolvedValue({ sandboxId: "sbx-created" }),
+      resolveEnvSource: vi.fn().mockResolvedValue({}),
+      resolveSandboxCreateEnv: vi.fn().mockReturnValue({
+        envs: {
+          OPENROUTER_API_KEY: "or-secret",
+          OPENAI_API_KEY: "oa-secret"
+        }
+      }),
+      resolvePromptStartupMode: vi.fn().mockResolvedValue("ssh-opencode"),
+      launchMode: vi.fn().mockResolvedValue({ mode: "ssh-opencode", command: "opencode", message: "launched" }),
+      bootstrapProjectWorkspace: vi.fn().mockResolvedValue(bootstrapResult),
+      syncToolingToSandbox: vi.fn().mockResolvedValue(syncSummary),
+      saveLastRunState: vi.fn().mockResolvedValue(undefined),
+      now: () => "2026-02-01T00:00:00.000Z"
+    });
+
+    const envLog = loggerVerbose.mock.calls
+      .map(([message]) => message)
+      .find((message) => message.startsWith("Creating sandbox with envs:"));
+
+    expect(envLog).toBe("Creating sandbox with envs: OPENROUTER_API_KEY, OPENAI_API_KEY");
+    expect(envLog).not.toContain("or-secret");
+    expect(envLog).not.toContain("oa-secret");
+    loggerVerbose.mockRestore();
+  });
+
   it("create continues when gh is enabled but token is missing", async () => {
     const ghEnabledConfig: ResolvedLauncherConfig = {
       ...config,
