@@ -15,13 +15,14 @@ Lightweight TypeScript CLI for creating, reconnecting, and launching E2B coding 
 - Bootstraps configured repos on create/connect (clone, branch checkout, setup command)
 - Starts tools in the expected directory (`project.working_dir = "auto"` picks repo or workspace)
 - Optionally syncs local tool auth/config (OpenCode, Codex, GitHub CLI) into sandbox
-- Validates config and MCP/Firecrawl settings before launch
+- Supports optional auto-managed local port tunneling for sandbox access
 
 ## Requirements
 
 - Node.js 20+
 - npm
 - `E2B_API_KEY` set in `.env` or shell env
+- `cloudflared` installed (or Docker available for fallback) if `[tunnel].ports` is enabled
 
 ## Install
 
@@ -56,11 +57,9 @@ E2B_API_KEY=your_key_here
 ```bash
 npm run create
 npm run connect
-npm run start
 # or, once installed from npm:
 ez-box create
 ez-box connect
-ez-box start
 ```
 
 ## Common commands
@@ -74,9 +73,10 @@ ez-box start
 - Connect to specific sandbox:
   - `ez-box connect -- --sandbox-id <sandbox-id>`
   - `npm run connect -- --sandbox-id <sandbox-id>`
-- Start without last-run reuse:
-  - `ez-box start -- --no-reuse`
-  - `npm run start -- --no-reuse`
+- Enable verbose startup/provisioning logs:
+  - `ez-box create -- --verbose`
+  - `ez-box connect -- --verbose`
+  - `npm run connect -- --verbose`
 - List available sandboxes:
   - `ez-box list`
   - `npm run list`
@@ -87,9 +87,15 @@ ez-box start
   - `ez-box wipe-all -- --yes`
   - `npm run wipe-all -- --yes`
 
+## Verbose mode
+
+- Use `--verbose` to show detailed operational logs during `create/connect` (startup mode resolution, sandbox lifecycle steps, tooling sync progress, bootstrap progress, SSH/tunnel setup details).
+- Interactive pickers/prompts still show as normal.
+- Without `--verbose`, ez-box keeps output focused on prompts and final command results.
+
 ## Config files
 
-- `launcher.config.toml`: ez-box behavior (sandbox, startup, project, env pass-through, tooling auth sync, mcp)
+- `launcher.config.toml`: ez-box behavior (sandbox, startup, project, env pass-through, tooling auth sync, tunnel)
 - `.env`: secrets and local env values
 - `.ez-box-last-run.json`: auto-generated local state for reconnects (legacy `.agent-box-last-run.json` is still read as a fallback)
 
@@ -118,7 +124,7 @@ ez-box start
 - `working_dir` (string): launch cwd policy.
   - `auto` (default): one selected/provisioned repo -> repo path, multiple repos -> `project.dir`, no repo -> unchanged.
   - any non-empty path string: used as launch cwd; relative paths resolve under `project.dir`.
-- `setup_on_connect` (boolean): when `true`, setup runs on `connect/start` even for already-cloned repos.
+- `setup_on_connect` (boolean): when `true`, setup runs on `connect` even for already-cloned repos.
 - `setup_retries` (number): retry count for `setup_command` after the first attempt (total attempts = `setup_retries + 1`).
 - `setup_continue_on_error` (boolean): when `true`, continue setup for other repos after a failure.
 - `[[project.repos]]`: list of repos to clone/checkout/bootstrap.
@@ -158,14 +164,13 @@ When `project.working_dir = "auto"`, working directory behavior after repo selec
 - `enabled` (boolean): enables GitHub CLI config sync into the sandbox and GitHub auth token injection for bootstrap/launch runtime (`GH_TOKEN` -> `GITHUB_TOKEN` -> `gh auth token`). Default: `false` (off).
 - `config_dir` (string): host GitHub CLI config directory to sync into `/home/user/.config/gh` in sandbox when enabled.
 
-### `[mcp]`
+### `[tunnel]`
 
-- `mode` (enum): Firecrawl wiring mode. Allowed values: `disabled|remote_url|in_sandbox`.
-  - `disabled`: no Firecrawl env vars injected.
-  - `remote_url`: requires a valid reachable HTTP(S) Firecrawl URL.
-  - `in_sandbox`: accepted, but currently advanced/not fully implemented; use with explicit URL if needed.
-- `firecrawl_api_url` (string): Firecrawl base URL. If set, it overrides `FIRECRAWL_API_URL` from environment.
-- `allow_localhost_override` (boolean): allow localhost Firecrawl URL in `remote_url` mode (usually unreachable from remote sandboxes unless tunneled).
+- `ports` (number array): local TCP ports to expose with temporary cloudflared tunnels.
+  - `[]` disables tunnel management.
+  - Each value `1-65535` starts one tunnel to `http://127.0.0.1:<port>` for `create/connect/start/command`.
+  - Runtime exports generic env vars: `EZ_BOX_TUNNEL_<PORT>_URL`, `EZ_BOX_TUNNELS_JSON`, and `EZ_BOX_TUNNEL_PORTS`; `EZ_BOX_TUNNEL_URL` is set only when exactly one tunnel is active.
+  - Runtime prefers local `cloudflared`; if missing, it falls back to `docker run cloudflare/cloudflared:latest`.
 
 ## Dev checks
 
