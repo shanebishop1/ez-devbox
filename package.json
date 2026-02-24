@@ -1,6 +1,6 @@
 {
   "name": "ez-devbox",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "CLI for creating, reconnecting, and launching E2B sandboxes",
   "main": "dist/src/cli/index.js",
   "types": "dist/src/cli/index.d.ts",
