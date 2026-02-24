@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { ResolvedProjectRepoConfig } from "../src/config/schema.js";
 import {
   buildSandboxDisplayName,
   formatSandboxDisplayLabel,
@@ -6,9 +7,27 @@ import {
 } from "../src/cli/sandbox-display-name.js";
 
 describe("sandbox display naming", () => {
-  it("builds deterministic readable names from base/mode/timestamp", () => {
-    expect(buildSandboxDisplayName("agent-box", "ssh-codex", "2026-02-01T12:34:56.789Z")).toBe(
-      "agent-box ssh codex 2026-02-01 12:34:56 UTC"
+  const repo = (name: string, branch: string): ResolvedProjectRepoConfig => ({
+    name,
+    branch,
+    url: `https://example.com/${name}.git`,
+    setup_pre_command: "",
+    setup_command: "",
+    setup_wrapper_command: "",
+    setup_env: {},
+    startup_env: {}
+  });
+
+  it("builds <repo> <branch> <timestamp> when exactly one repo is configured", () => {
+    expect(buildSandboxDisplayName([repo("next.js", "canary")], "2026-02-01T12:34:56.789Z")).toBe(
+      "next.js canary 2026-02-01 12:34:56 UTC"
+    );
+  });
+
+  it("uses timestamp only when repo count is not one", () => {
+    expect(buildSandboxDisplayName([], "2026-02-01T12:34:56.789Z")).toBe("2026-02-01 12:34:56 UTC");
+    expect(buildSandboxDisplayName([repo("next.js", "canary"), repo("react", "main")], "2026-02-01T12:34:56.789Z")).toBe(
+      "2026-02-01 12:34:56 UTC"
     );
   });
 

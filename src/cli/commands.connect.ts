@@ -1,3 +1,4 @@
+import { createInterface } from "node:readline/promises";
 import type { CommandResult } from "../types/index.js";
 import type { StartupMode } from "../types/index.js";
 import { loadConfig, type LoadConfigOptions } from "../config/load.js";
@@ -43,6 +44,8 @@ export interface ConnectCommandDeps {
     mode: ConcreteStartupMode
   ) => Promise<ToolingSyncSummary>;
   saveLastRunState: (state: LastRunState) => Promise<void>;
+  isInteractiveTerminal?: () => boolean;
+  promptInput?: (question: string) => Promise<string>;
   now: () => string;
 }
 
@@ -55,6 +58,8 @@ const defaultDeps: ConnectCommandDeps = {
   launchMode,
   syncToolingToSandbox: syncToolingForMode,
   saveLastRunState,
+  isInteractiveTerminal: () => Boolean(process.stdin.isTTY && process.stdout.isTTY),
+  promptInput,
   now: () => new Date().toISOString()
 };
 
@@ -192,28 +197,95 @@ async function resolveSandboxTarget(
     return { sandboxId: sandboxIdArg };
   }
 
-  if (!options.skipLastRun) {
-    const lastRun = await deps.loadLastRunState();
-    if (lastRun?.sandboxId) {
-      return { sandboxId: lastRun.sandboxId };
-    }
-  }
-
   const sandboxes = await deps.listSandboxes();
   const firstSandbox = sandboxes[0];
   if (!firstSandbox) {
     throw new Error("No sandboxes are available to connect.");
   }
 
-  const fallbackLabel = formatSandboxDisplayLabel(firstSandbox.sandboxId, firstSandbox.metadata);
-  if (fallbackLabel !== firstSandbox.sandboxId) {
-    logger.info(`Selected fallback sandbox: ${fallbackLabel}.`);
+  if (sandboxes.length === 1) {
+    const fallbackLabel = formatSandboxDisplayLabel(firstSandbox.sandboxId, firstSandbox.metadata);
+    if (fallbackLabel !== firstSandbox.sandboxId) {
+      logger.info(`Selected fallback sandbox: ${fallbackLabel}.`);
+    }
+
+    return {
+      sandboxId: firstSandbox.sandboxId,
+      label: fallbackLabel === firstSandbox.sandboxId ? undefined : fallbackLabel
+    };
+  }
+
+  const isInteractiveTerminal = deps.isInteractiveTerminal ?? (() => Boolean(process.stdin.isTTY && process.stdout.isTTY));
+  if (isInteractiveTerminal()) {
+    return promptForSandboxTargetSelection(sandboxes, deps);
+  }
+
+  if (!options.skipLastRun) {
+    const lastRun = await deps.loadLastRunState();
+    const matchedSandbox =
+      lastRun?.sandboxId === undefined ? undefined : sandboxes.find((sandbox) => sandbox.sandboxId === lastRun.sandboxId);
+    if (matchedSandbox) {
+      const fallbackLabel = formatSandboxDisplayLabel(matchedSandbox.sandboxId, matchedSandbox.metadata);
+      if (fallbackLabel !== matchedSandbox.sandboxId) {
+        logger.info(`Selected fallback sandbox: ${fallbackLabel}.`);
+      }
+
+      return {
+        sandboxId: matchedSandbox.sandboxId,
+        label: fallbackLabel === matchedSandbox.sandboxId ? undefined : fallbackLabel
+      };
+    }
+  }
+
+  throw new Error(
+    "Multiple sandboxes are available but no interactive terminal was detected. Re-run with --sandbox-id <sandbox-id>."
+  );
+}
+
+async function promptForSandboxTargetSelection(
+  sandboxes: SandboxListItem[],
+  deps: ConnectCommandDeps
+): Promise<{ sandboxId: string; label?: string }> {
+  const prompt = deps.promptInput ?? promptInput;
+  const options = sandboxes.map((sandbox, index) => {
+    const label = formatSandboxDisplayLabel(sandbox.sandboxId, sandbox.metadata);
+    return {
+      index: index + 1,
+      sandboxId: sandbox.sandboxId,
+      label
+    };
+  });
+
+  const question = [
+    "Multiple sandboxes available. Select one:",
+    ...options.map((option) => `${option.index}) ${option.label}`),
+    `Enter choice [1-${options.length}]: `
+  ].join("\n");
+  const selectedIndex = Number.parseInt((await prompt(question)).trim(), 10);
+  const selected = Number.isNaN(selectedIndex) ? undefined : options[selectedIndex - 1];
+  if (!selected) {
+    throw new Error(
+      `Invalid sandbox selection. Enter a number between 1 and ${options.length}, or use --sandbox-id <sandbox-id>.`
+    );
   }
 
   return {
-    sandboxId: firstSandbox.sandboxId,
-    label: fallbackLabel === firstSandbox.sandboxId ? undefined : fallbackLabel
+    sandboxId: selected.sandboxId,
+    label: selected.label === selected.sandboxId ? undefined : selected.label
   };
+}
+
+async function promptInput(question: string): Promise<string> {
+  const readline = createInterface({
+    input: process.stdin,
+    output: process.stdout
+  });
+
+  try {
+    return await readline.question(question);
+  } finally {
+    readline.close();
+  }
 }
 
 function parseConnectArgs(args: string[]): { sandboxId?: string; mode?: StartupMode } {

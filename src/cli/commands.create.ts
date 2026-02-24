@@ -67,7 +67,7 @@ export async function runCreateCommand(args: string[], deps: CreateCommandDeps =
     logger.info(`Startup mode selected via prompt: ${mode}.`);
   }
   const resolvedMode = resolveStartupMode(mode);
-  const displayName = buildSandboxDisplayName(config.sandbox.name, mode, deps.now());
+  const displayName = buildSandboxDisplayName(config.project.repos, deps.now());
   const templateResolution = resolveTemplateForMode(config.sandbox.template, resolvedMode);
   const createConfig =
     templateResolution.template === config.sandbox.template

@@ -4,7 +4,7 @@ export const defaultConfig: ResolvedLauncherConfig = {
   sandbox: {
     template: "opencode",
     reuse: true,
-    name: "agent-box",
+    name: "ez-box",
     timeout_ms: 60 * 60 * 1000,
     delete_on_exit: false
   },

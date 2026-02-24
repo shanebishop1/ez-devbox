@@ -79,7 +79,7 @@ ez-box start
 
 - `launcher.config.toml`: ez-box behavior (sandbox, startup, project, env pass-through, mcp)
 - `.env`: secrets and local env values
-- `.agent-box-last-run.json`: auto-generated local state for reconnects
+- `.ez-box-last-run.json`: auto-generated local state for reconnects (legacy `.agent-box-last-run.json` is still read as a fallback)
 
 ## Dev checks
 

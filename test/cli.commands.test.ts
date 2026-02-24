@@ -21,7 +21,7 @@ describe("CLI command integration", () => {
     sandbox: {
       template: "base",
       reuse: true,
-      name: "agent-box",
+      name: "ez-box",
       timeout_ms: 1_800_000,
       delete_on_exit: false
     },
@@ -62,7 +62,7 @@ describe("CLI command integration", () => {
     const syncToolingToSandbox = vi.fn().mockResolvedValue(syncSummary);
     const saveLastRunState = vi.fn().mockResolvedValue(undefined);
     const resolvePromptStartupMode = vi.fn().mockResolvedValue("ssh-codex");
-    const displayName = buildSandboxDisplayName("agent-box", "ssh-codex", "2026-02-01T00:00:00.000Z");
+    const displayName = buildSandboxDisplayName(config.project.repos, "2026-02-01T00:00:00.000Z");
 
     const result = await runCreateCommand([], {
       loadConfig: vi.fn().mockResolvedValue(config),
@@ -116,7 +116,7 @@ describe("CLI command integration", () => {
       codexAuthSynced: true
     });
     const resolvePromptStartupMode = vi.fn().mockImplementation(async (mode: string) => mode);
-    const displayName = buildSandboxDisplayName("agent-box", "ssh-codex", "2026-02-01T00:00:00.000Z");
+    const displayName = buildSandboxDisplayName(config.project.repos, "2026-02-01T00:00:00.000Z");
 
     await runCreateCommand(["--mode", "ssh-codex"], {
       loadConfig: vi.fn().mockResolvedValue(config),
@@ -147,6 +147,49 @@ describe("CLI command integration", () => {
       }
     );
     expect(syncToolingToSandbox).toHaveBeenCalledWith(config, { sandboxId: "sbx-created" }, "ssh-codex");
+  });
+
+  it("create uses single configured repo and branch in launcher.name metadata", async () => {
+    const singleRepoConfig: ResolvedLauncherConfig = {
+      ...config,
+      project: {
+        ...config.project,
+        repos: [
+          {
+            name: "next.js",
+            url: "https://github.com/vercel/next.js.git",
+            branch: "canary",
+            setup_pre_command: "",
+            setup_command: "",
+            setup_wrapper_command: "",
+            setup_env: {},
+            startup_env: {}
+          }
+        ]
+      }
+    };
+    const createSandbox = vi.fn().mockResolvedValue({ sandboxId: "sbx-created" });
+
+    await runCreateCommand(["--mode", "web"], {
+      loadConfig: vi.fn().mockResolvedValue(singleRepoConfig),
+      createSandbox,
+      resolveEnvSource: vi.fn().mockResolvedValue({}),
+      resolveSandboxCreateEnv: vi.fn().mockReturnValue({ envs: {}, warnings: [] }),
+      resolvePromptStartupMode: vi.fn().mockResolvedValue("web"),
+      launchMode: vi.fn().mockResolvedValue({ mode: "web", url: "https://sbx-created.e2b.dev", message: "launched" }),
+      syncToolingToSandbox: vi.fn().mockResolvedValue(syncSummary),
+      saveLastRunState: vi.fn().mockResolvedValue(undefined),
+      now: () => "2026-02-01T00:00:00.000Z"
+    });
+
+    expect(createSandbox).toHaveBeenCalledWith(
+      expect.any(Object),
+      expect.objectContaining({
+        metadata: {
+          "launcher.name": "next.js canary 2026-02-01 00:00:00 UTC"
+        }
+      })
+    );
   });
 
   it("create includes MCP warnings in output message", async () => {
@@ -228,14 +271,15 @@ describe("CLI command integration", () => {
     loggerInfo.mockRestore();
   });
 
-  it("connect falls back to last-run sandbox id when no --sandbox-id provided", async () => {
-    const connectSandbox = vi.fn().mockResolvedValue({ sandboxId: "sbx-last" });
+  it("connect uses the only listed sandbox when exactly one exists", async () => {
+    const connectSandbox = vi.fn().mockResolvedValue({ sandboxId: "sbx-list" });
+    const loadLastRunState = vi.fn().mockResolvedValue({ sandboxId: "sbx-last", mode: "web", updatedAt: "2026-01-01T00:00:00.000Z" });
     const syncToolingToSandbox = vi.fn().mockResolvedValue(syncSummary);
 
     await runConnectCommand([], {
       loadConfig: vi.fn().mockResolvedValue(config),
       connectSandbox,
-      loadLastRunState: vi.fn().mockResolvedValue({ sandboxId: "sbx-last", mode: "web", updatedAt: "2026-01-01T00:00:00.000Z" }),
+      loadLastRunState,
       listSandboxes: vi.fn().mockResolvedValue([{ sandboxId: "sbx-list", state: "running" }]),
       resolvePromptStartupMode: vi.fn().mockResolvedValue("ssh-opencode"),
       launchMode: vi.fn().mockResolvedValue({ mode: "web", url: "https://sbx-last.e2b.dev", message: "launched" }),
@@ -244,8 +288,84 @@ describe("CLI command integration", () => {
       now: () => "2026-02-01T00:00:00.000Z"
     });
 
-    expect(connectSandbox).toHaveBeenCalledWith("sbx-last", config);
-    expect(syncToolingToSandbox).toHaveBeenCalledWith(config, { sandboxId: "sbx-last" }, "ssh-opencode");
+    expect(connectSandbox).toHaveBeenCalledWith("sbx-list", config);
+    expect(syncToolingToSandbox).toHaveBeenCalledWith(config, { sandboxId: "sbx-list" }, "ssh-opencode");
+    expect(loadLastRunState).not.toHaveBeenCalled();
+  });
+
+  it("connect prompts for selection when multiple sandboxes exist in interactive terminals", async () => {
+    const connectSandbox = vi.fn().mockResolvedValue({ sandboxId: "sbx-2" });
+    const promptInput = vi.fn().mockResolvedValue("2");
+
+    const result = await runConnectCommand([], {
+      loadConfig: vi.fn().mockResolvedValue(config),
+      connectSandbox,
+      loadLastRunState: vi.fn().mockResolvedValue({ sandboxId: "sbx-1", mode: "web", updatedAt: "2026-01-01T00:00:00.000Z" }),
+      listSandboxes: vi.fn().mockResolvedValue([
+        { sandboxId: "sbx-1", state: "running", metadata: { "launcher.name": "Repo One main 2026-02-01 00:00 UTC" } },
+        { sandboxId: "sbx-2", state: "running", metadata: { "launcher.name": "Repo Two canary 2026-02-01 00:01 UTC" } }
+      ]),
+      resolvePromptStartupMode: vi.fn().mockResolvedValue("ssh-opencode"),
+      launchMode: vi.fn().mockResolvedValue({ mode: "ssh-opencode", command: "opencode", message: "launched" }),
+      syncToolingToSandbox: vi.fn().mockResolvedValue(syncSummary),
+      saveLastRunState: vi.fn().mockResolvedValue(undefined),
+      isInteractiveTerminal: () => true,
+      promptInput,
+      now: () => "2026-02-01T00:00:00.000Z"
+    });
+
+    expect(promptInput).toHaveBeenCalledWith(
+      [
+        "Multiple sandboxes available. Select one:",
+        "1) Repo One main 2026-02-01 00:00 UTC (sbx-1)",
+        "2) Repo Two canary 2026-02-01 00:01 UTC (sbx-2)",
+        "Enter choice [1-2]: "
+      ].join("\n")
+    );
+    expect(connectSandbox).toHaveBeenCalledWith("sbx-2", config);
+    expect(result.message).toContain("Connected to sandbox Repo Two canary 2026-02-01 00:01 UTC (sbx-2).");
+  });
+
+  it("connect uses last-run sandbox in non-interactive terminals when sandbox still exists", async () => {
+    const connectSandbox = vi.fn().mockResolvedValue({ sandboxId: "sbx-2" });
+
+    await runConnectCommand([], {
+      loadConfig: vi.fn().mockResolvedValue(config),
+      connectSandbox,
+      loadLastRunState: vi.fn().mockResolvedValue({ sandboxId: "sbx-2", mode: "web", updatedAt: "2026-01-01T00:00:00.000Z" }),
+      listSandboxes: vi.fn().mockResolvedValue([
+        { sandboxId: "sbx-1", state: "running" },
+        { sandboxId: "sbx-2", state: "running" }
+      ]),
+      resolvePromptStartupMode: vi.fn().mockResolvedValue("ssh-opencode"),
+      launchMode: vi.fn().mockResolvedValue({ mode: "ssh-opencode", command: "opencode", message: "launched" }),
+      syncToolingToSandbox: vi.fn().mockResolvedValue(syncSummary),
+      saveLastRunState: vi.fn().mockResolvedValue(undefined),
+      isInteractiveTerminal: () => false,
+      now: () => "2026-02-01T00:00:00.000Z"
+    });
+
+    expect(connectSandbox).toHaveBeenCalledWith("sbx-2", config);
+  });
+
+  it("connect errors in non-interactive terminals when multiple sandboxes exist and no matching last-run", async () => {
+    await expect(
+      runConnectCommand([], {
+        loadConfig: vi.fn().mockResolvedValue(config),
+        connectSandbox: vi.fn(),
+        loadLastRunState: vi.fn().mockResolvedValue({ sandboxId: "sbx-missing", mode: "web", updatedAt: "2026-01-01T00:00:00.000Z" }),
+        listSandboxes: vi.fn().mockResolvedValue([
+          { sandboxId: "sbx-1", state: "running" },
+          { sandboxId: "sbx-2", state: "running" }
+        ]),
+        resolvePromptStartupMode: vi.fn().mockResolvedValue("ssh-opencode"),
+        launchMode: vi.fn(),
+        syncToolingToSandbox: vi.fn().mockResolvedValue(syncSummary),
+        saveLastRunState: vi.fn().mockResolvedValue(undefined),
+        isInteractiveTerminal: () => false,
+        now: () => "2026-02-01T00:00:00.000Z"
+      })
+    ).rejects.toThrow("Re-run with --sandbox-id <sandbox-id>");
   });
 
   it("connect logs named fallback sandbox label when selected from list", async () => {

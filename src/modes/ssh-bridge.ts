@@ -46,7 +46,7 @@ export async function prepareSshBridgeSession(handle: SandboxHandle): Promise<Ss
     { timeoutMs: SSH_SETUP_TIMEOUT_MS }
   );
 
-  const tempDir = await mkdtemp(join(tmpdir(), "agent-box-ssh-"));
+  const tempDir = await mkdtemp(join(tmpdir(), "ez-box-ssh-"));
   const privateKeyPath = join(tempDir, "id_ed25519");
 
   logger.info("SSH bridge: generating local key pair.");
@@ -65,7 +65,7 @@ export async function prepareSshBridgeSession(handle: SandboxHandle): Promise<Ss
   if (remoteHome === "") {
     throw new Error("Failed to resolve remote home directory for SSH bridge session.");
   }
-  const sessionDir = `${remoteHome}/.agent-box-ssh/${sessionId}`;
+  const sessionDir = `${remoteHome}/.ez-box-ssh/${sessionId}`;
   const artifacts = {
     sessionDir,
     authorizedKeysPath: `${sessionDir}/authorized_keys`,
@@ -79,8 +79,8 @@ export async function prepareSshBridgeSession(handle: SandboxHandle): Promise<Ss
 
   logger.info("SSH bridge: configuring remote sshd/websockify.");
   await handle.run(
-    `bash -lc 'mkdir -p ${quoteShellArg(`${remoteHome}/.agent-box-ssh`)} && chmod 700 ${quoteShellArg(
-      `${remoteHome}/.agent-box-ssh`
+    `bash -lc 'mkdir -p ${quoteShellArg(`${remoteHome}/.ez-box-ssh`)} && chmod 700 ${quoteShellArg(
+      `${remoteHome}/.ez-box-ssh`
     )} && rm -rf ${quoteShellArg(sessionDir)} && mkdir -p ${quoteShellArg(sessionDir)} && chmod 700 ${quoteShellArg(sessionDir)}'`,
     { timeoutMs: SSH_SHORT_TIMEOUT_MS }
   );

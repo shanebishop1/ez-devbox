@@ -1,5 +1,5 @@
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
-import { dirname, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import type { StartupMode } from "../types/index.js";
 
 export interface LastRunState {
@@ -11,10 +11,26 @@ export interface LastRunState {
 
 type LastRunStateJson = Partial<LastRunState>;
 
-const DEFAULT_LAST_RUN_PATH = resolve(process.cwd(), ".agent-box-last-run.json");
+const DEFAULT_LAST_RUN_FILENAME = ".ez-box-last-run.json";
+const LEGACY_LAST_RUN_FILENAME = ".agent-box-last-run.json";
 const STARTUP_MODES: ReadonlySet<StartupMode> = new Set(["prompt", "ssh-opencode", "ssh-codex", "web", "ssh-shell"]);
 
-export async function loadLastRunState(path = DEFAULT_LAST_RUN_PATH): Promise<LastRunState | null> {
+export async function loadLastRunState(path?: string): Promise<LastRunState | null> {
+  const resolvedPath = path ?? resolve(process.cwd(), DEFAULT_LAST_RUN_FILENAME);
+  const currentState = await loadLastRunStateFromPath(resolvedPath);
+  if (currentState !== null) {
+    return currentState;
+  }
+
+  const legacyFallbackPath = resolveLegacyFallbackPath(resolvedPath, path === undefined);
+  if (!legacyFallbackPath) {
+    return null;
+  }
+
+  return loadLastRunStateFromPath(legacyFallbackPath);
+}
+
+async function loadLastRunStateFromPath(path: string): Promise<LastRunState | null> {
   let raw: string;
   try {
     raw = await readFile(path, "utf8");
@@ -36,13 +52,15 @@ export async function loadLastRunState(path = DEFAULT_LAST_RUN_PATH): Promise<La
   return normalizeLastRunState(parsed);
 }
 
-export async function saveLastRunState(state: LastRunState, path = DEFAULT_LAST_RUN_PATH): Promise<void> {
-  await mkdir(dirname(path), { recursive: true });
-  await writeFile(path, JSON.stringify(state, null, 2), "utf8");
+export async function saveLastRunState(state: LastRunState, path?: string): Promise<void> {
+  const resolvedPath = path ?? resolve(process.cwd(), DEFAULT_LAST_RUN_FILENAME);
+  await mkdir(dirname(resolvedPath), { recursive: true });
+  await writeFile(resolvedPath, JSON.stringify(state, null, 2), "utf8");
 }
 
-export async function clearLastRunState(path = DEFAULT_LAST_RUN_PATH): Promise<void> {
-  await rm(path, { force: true });
+export async function clearLastRunState(path?: string): Promise<void> {
+  const resolvedPath = path ?? resolve(process.cwd(), DEFAULT_LAST_RUN_FILENAME);
+  await rm(resolvedPath, { force: true });
 }
 
 function normalizeLastRunState(value: unknown): LastRunState | null {
@@ -81,4 +99,16 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function isErrnoException(error: unknown): error is NodeJS.ErrnoException {
   return typeof error === "object" && error !== null && "code" in error;
+}
+
+function resolveLegacyFallbackPath(path: string, fromDefaultPath: boolean): string | null {
+  if (fromDefaultPath) {
+    return resolve(process.cwd(), LEGACY_LAST_RUN_FILENAME);
+  }
+
+  if (basename(path) !== DEFAULT_LAST_RUN_FILENAME) {
+    return null;
+  }
+
+  return join(dirname(path), LEGACY_LAST_RUN_FILENAME);
 }

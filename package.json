@@ -40,12 +40,12 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/shanebishop1/agent-box.git"
+    "url": "git+https://github.com/shanebishop1/ez-box.git"
   },
   "bugs": {
-    "url": "https://github.com/shanebishop1/agent-box/issues"
+    "url": "https://github.com/shanebishop1/ez-box/issues"
   },
-  "homepage": "https://github.com/shanebishop1/agent-box#readme",
+  "homepage": "https://github.com/shanebishop1/ez-box#readme",
   "publishConfig": {
     "access": "public"
   },
