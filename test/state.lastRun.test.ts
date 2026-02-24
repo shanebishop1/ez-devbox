@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { mkdtemp, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -30,6 +31,29 @@ describe("last-run state persistence", () => {
     await clearLastRunState(statePath);
     await expect(stat(statePath)).rejects.toMatchObject({ code: "ENOENT" });
     await expect(loadLastRunState(statePath)).resolves.toBeNull();
+  });
+
+  it("defaults to an isolated path in the OS temp directory", async () => {
+    const cwdHash = createHash("sha1").update(process.cwd()).digest("hex");
+    const expectedStatePath = join(tmpdir(), "ez-box", "last-run", "cwd-state", cwdHash, ".ez-box-last-run.json");
+
+    await clearLastRunState();
+    await saveLastRunState({
+      sandboxId: "sbx-temp",
+      mode: "web",
+      updatedAt: "2026-02-01T00:00:00.000Z"
+    });
+
+    const loaded = await loadLastRunState();
+    expect(loaded).toEqual({
+      sandboxId: "sbx-temp",
+      mode: "web",
+      updatedAt: "2026-02-01T00:00:00.000Z"
+    });
+
+    await expect(stat(expectedStatePath)).resolves.toBeTruthy();
+    await clearLastRunState();
+    await expect(stat(expectedStatePath)).rejects.toMatchObject({ code: "ENOENT" });
   });
 
   it("falls back to legacy .agent-box-last-run.json when new default file is missing", async () => {
