@@ -13,6 +13,7 @@ import {
   type SetupRunnerEvent
 } from "../setup/runner.js";
 import { formatPromptChoice } from "../cli/prompt-style.js";
+import { redactSensitiveText } from "../security/redaction.js";
 
 export interface BootstrapProjectWorkspaceResult {
   selectedRepoNames: string[];
@@ -419,7 +420,7 @@ async function runBoolCheck(
     commandLabel: options.commandLabel
   });
   if (result.exitCode !== 0) {
-    throw new Error(`Command failed: ${command}: ${result.stderr || result.stdout || "unknown error"}`);
+    throw new Error(redactSensitiveText(`Command failed: ${command}: ${result.stderr || result.stdout || "unknown error"}`));
   }
 
   const marker = result.stdout.trim();
@@ -444,7 +445,7 @@ async function runRequiredCommand(
     commandLabel: options.commandLabel
   });
   if (result.exitCode !== 0) {
-    throw new Error(`Command failed: ${command}: ${result.stderr || result.stdout || "unknown error"}`);
+    throw new Error(redactSensitiveText(`Command failed: ${command}: ${result.stderr || result.stdout || "unknown error"}`));
   }
   return result;
 }
@@ -461,7 +462,7 @@ async function runCommand(
       envs: options.envs
     });
   } catch (error) {
-    throw new Error(`Bootstrap command failed (${options.commandLabel}): ${toErrorMessage(error)}`);
+    throw new Error(redactSensitiveText(`Bootstrap command failed (${options.commandLabel}): ${toErrorMessage(error)}`));
   }
 }
 

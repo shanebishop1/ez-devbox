@@ -9,6 +9,7 @@ import {
   type SandboxCommandRunResult
 } from "./client.js";
 import { normalizeTimeoutMs } from "./timeout.js";
+import { redactSensitiveText } from "../security/redaction.js";
 
 export interface SandboxHandle {
   sandboxId: string;
@@ -217,14 +218,14 @@ function formatLifecycleError(message: string, cause: unknown): string {
       parts.push(`stdout=${commandLike.stdout}`);
     }
 
-    return parts.join(": ");
+    return redactSensitiveText(parts.join(": "));
   }
 
   if (cause instanceof Error && cause.message.trim() !== "") {
-    return `${message}: ${cause.message}`;
+    return redactSensitiveText(`${message}: ${cause.message}`);
   }
 
-  return message;
+  return redactSensitiveText(message);
 }
 
 function getCommandLikeError(

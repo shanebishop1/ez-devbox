@@ -385,7 +385,9 @@ describe("startup modes orchestrator", () => {
       expect.stringContaining("cd")
     );
     expect(opencodeRunInteractiveSession.mock.calls[0]?.[1]).toContain("/workspace/repo-a");
-    expect(opencodeRunInteractiveSession.mock.calls[0]?.[1]).toContain("export PROJECT_NAME");
+    expect(opencodeRunInteractiveSession.mock.calls[0]?.[1]).toContain("source");
+    expect(opencodeRunInteractiveSession.mock.calls[0]?.[1]).toContain("/tmp/ez-devbox-startup-env-");
+    expect(opencodeRunInteractiveSession.mock.calls[0]?.[1]).not.toContain("PROJECT_NAME");
     expect(opencodeRunInteractiveSession.mock.calls[0]?.[1]).toContain("exec opencode");
 
     expect(codexRunInteractiveSession).toHaveBeenCalledWith(
@@ -393,7 +395,9 @@ describe("startup modes orchestrator", () => {
       expect.stringContaining("cd")
     );
     expect(codexRunInteractiveSession.mock.calls[0]?.[1]).toContain("/workspace/repo-b");
-    expect(codexRunInteractiveSession.mock.calls[0]?.[1]).toContain("export PROJECT_NAME");
+    expect(codexRunInteractiveSession.mock.calls[0]?.[1]).toContain("source");
+    expect(codexRunInteractiveSession.mock.calls[0]?.[1]).toContain("/tmp/ez-devbox-startup-env-");
+    expect(codexRunInteractiveSession.mock.calls[0]?.[1]).not.toContain("PROJECT_NAME");
     expect(codexRunInteractiveSession.mock.calls[0]?.[1]).toContain("exec codex");
 
     expect(shellRunInteractiveSession).toHaveBeenCalledWith(
@@ -401,11 +405,13 @@ describe("startup modes orchestrator", () => {
       expect.stringContaining("cd")
     );
     expect(shellRunInteractiveSession.mock.calls[0]?.[1]).toContain("/workspace/repo-c");
-    expect(shellRunInteractiveSession.mock.calls[0]?.[1]).toContain("export PROJECT_NAME");
+    expect(shellRunInteractiveSession.mock.calls[0]?.[1]).toContain("source");
+    expect(shellRunInteractiveSession.mock.calls[0]?.[1]).toContain("/tmp/ez-devbox-startup-env-");
+    expect(shellRunInteractiveSession.mock.calls[0]?.[1]).not.toContain("PROJECT_NAME");
     expect(shellRunInteractiveSession.mock.calls[0]?.[1]).toContain("exec bash -i");
   });
 
-  it("interactive modes safely escape single quotes in cwd/env", async () => {
+  it("interactive modes stage env values without exposing them in remote ssh command", async () => {
     const session = {
       tempDir: "/tmp/session",
       privateKeyPath: "/tmp/session/id_ed25519",
@@ -414,9 +420,10 @@ describe("startup modes orchestrator", () => {
     };
 
     const runInteractiveSession = vi.fn().mockResolvedValue(undefined);
+    const handle = createHandle({ run: vi.fn().mockResolvedValue({ stdout: "", stderr: "", exitCode: 0 }) });
 
     await startShellMode(
-      createHandle({ run: vi.fn().mockResolvedValue({ stdout: "", stderr: "", exitCode: 0 }) }),
+      handle,
       {
         workingDirectory: "/workspace/team's-repo",
         startupEnv: { PROJECT_NAME: "o'neil" }
@@ -430,10 +437,48 @@ describe("startup modes orchestrator", () => {
     );
 
     const remoteCommand = runInteractiveSession.mock.calls[0]?.[1] as string;
+    const runMock = handle.run as ReturnType<typeof vi.fn>;
+    const stageCall = runMock.mock.calls.find((call) => typeof call[0] === "string" && call[0].includes("startup-env"));
+
     expect(remoteCommand).toContain("cd");
-    expect(remoteCommand).toContain("export PROJECT_NAME");
+    expect(remoteCommand).toContain("source");
+    expect(remoteCommand).toContain("/tmp/ez-devbox-startup-env-");
+    expect(remoteCommand).not.toContain("PROJECT_NAME");
+    expect(remoteCommand).not.toContain("o'neil");
     expect(remoteCommand).toContain("exec bash -i");
-    expect(remoteCommand).toContain("'\"'\"'");
+    expect(stageCall).toBeDefined();
+    expect(stageCall?.[1]).toMatchObject({ envs: { PROJECT_NAME: "o'neil" }, timeoutMs: 15_000 });
+  });
+
+  it("interactive env staging skips invalid keys", async () => {
+    const handle = createHandle({ run: vi.fn().mockResolvedValue({ stdout: "", stderr: "", exitCode: 0 }) });
+    const session = {
+      tempDir: "/tmp/session",
+      privateKeyPath: "/tmp/session/id_ed25519",
+      knownHostsPath: "/tmp/session/known_hosts",
+      wsUrl: "wss://8081-sbx.e2b.app"
+    };
+    const runInteractiveSession = vi.fn().mockResolvedValue(undefined);
+
+    await startShellMode(
+      handle,
+      {
+        startupEnv: { GOOD_KEY: "ok", "NOT-VALID": "bad" }
+      },
+      {
+        isInteractiveTerminal: () => true,
+        prepareSession: vi.fn().mockResolvedValue(session),
+        runInteractiveSession,
+        cleanupSession: vi.fn().mockResolvedValue(undefined)
+      }
+    );
+
+    const runMock = handle.run as ReturnType<typeof vi.fn>;
+    const stageCall = runMock.mock.calls.find((call) => typeof call[0] === "string" && call[0].includes("startup-env"));
+
+    expect(stageCall).toBeDefined();
+    expect(stageCall?.[1]).toMatchObject({ envs: { GOOD_KEY: "ok" } });
+    expect(runInteractiveSession.mock.calls[0]?.[1]).not.toContain("GOOD_KEY");
   });
 });
 

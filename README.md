@@ -116,6 +116,9 @@ ez-devbox connect
 - Create with explicit mode:
   - `ez-devbox create -- --mode web`
   - `npm run create -- --mode web`
+- Create and skip interactive tooling-sync confirmation:
+  - `ez-devbox create -- --yes-sync`
+  - `npm run create -- --yes-sync`
 - Connect to specific sandbox:
   - `ez-devbox connect -- --sandbox-id <sandbox-id>`
   - `npm run connect -- --sandbox-id <sandbox-id>`

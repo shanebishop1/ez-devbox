@@ -98,4 +98,4 @@ When `project.working_dir = "auto"`, working directory behavior after repo selec
 - `[]` disables tunnel management.
 - Each value `1-65535` starts one tunnel to `http://127.0.0.1:<port>` for `create/connect/start/command`.
 - Runtime exports generic env vars: `EZ_DEVBOX_TUNNEL_<PORT>_URL`, `EZ_DEVBOX_TUNNELS_JSON`, and `EZ_DEVBOX_TUNNEL_PORTS`; `EZ_DEVBOX_TUNNEL_URL` is set only when exactly one tunnel is active.
-- Runtime prefers local `cloudflared`; if missing, it falls back to `docker run cloudflare/cloudflared:latest`.
+- Runtime prefers local `cloudflared`; if missing, it falls back to `docker run cloudflare/cloudflared:2024.11.0`.

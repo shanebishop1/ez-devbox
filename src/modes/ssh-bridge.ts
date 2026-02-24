@@ -1,7 +1,9 @@
 import { execFile, spawn } from "node:child_process";
+import { existsSync } from "node:fs";
 import { chmod, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { basename, join, resolve } from "node:path";
+import { basename, join, posix } from "node:path";
+import { fileURLToPath } from "node:url";
 import type { SandboxHandle } from "../e2b/lifecycle.js";
 import { logger } from "../logging/logger.js";
 
@@ -30,6 +32,7 @@ export interface SshBridgeSession {
   wsUrl: string;
   remoteUser?: string;
   artifacts?: SshBridgeSessionArtifacts;
+  startupEnvScriptPath?: string;
 }
 
 export interface SshModeDeps {
@@ -38,6 +41,8 @@ export interface SshModeDeps {
   runInteractiveSession: (session: SshBridgeSession, remoteCommand: string) => Promise<void>;
   cleanupSession: (handle: SandboxHandle, session: SshBridgeSession) => Promise<void>;
 }
+
+const ENV_VAR_NAME_REGEX = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
 export async function prepareSshBridgeSession(handle: SandboxHandle): Promise<SshBridgeSession> {
   logger.verbose("SSH bridge: checking/installing dependencies.");
@@ -142,7 +147,7 @@ export async function prepareSshBridgeSession(handle: SandboxHandle): Promise<Ss
 }
 
 export function buildSshClientArgs(session: SshBridgeSession, remoteCommand: string): string[] {
-  const proxyScriptPath = resolve(process.cwd(), "scripts/ws-ssh-proxy.mjs");
+  const proxyScriptPath = resolveWsSshProxyScriptPath();
   const proxyCommand = `node ${quoteShellArg(proxyScriptPath)} ${quoteShellArg(session.wsUrl)}`;
 
   const sshUser = session.remoteUser?.trim() || SSH_USER_FALLBACK;
@@ -174,6 +179,23 @@ export function buildSshClientArgs(session: SshBridgeSession, remoteCommand: str
     `${sshUser}@${SSH_HOST}`,
     remoteCommand
   ];
+}
+
+function resolveWsSshProxyScriptPath(): string {
+  const candidates = [
+    fileURLToPath(new URL("../../scripts/ws-ssh-proxy.mjs", import.meta.url)),
+    fileURLToPath(new URL("../../../scripts/ws-ssh-proxy.mjs", import.meta.url))
+  ];
+
+  for (const candidate of candidates) {
+    if (existsSync(candidate)) {
+      return candidate;
+    }
+  }
+
+  throw new Error(
+    "Unable to locate ws-ssh-proxy.mjs. Ensure scripts/ws-ssh-proxy.mjs is included with the ez-devbox package."
+  );
 }
 
 export async function runInteractiveSshSession(session: SshBridgeSession, remoteCommand: string): Promise<void> {
@@ -218,6 +240,10 @@ export async function cleanupSshBridgeSession(handle: SandboxHandle, session: Ss
       artifacts.sshdPidPath
     ];
 
+    if (session.startupEnvScriptPath) {
+      removePaths.push(session.startupEnvScriptPath);
+    }
+
     await runBestEffortRemoteCleanup(
       handle,
       `if [ -f ${quoteShellArg(artifacts.websockifyPidPath)} ]; then pid=$(cat ${quoteShellArg(artifacts.websockifyPidPath)}); if [ -n "$pid" ]; then kill "$pid" >/dev/null 2>&1 || true; fi; fi`
@@ -233,6 +259,59 @@ export async function cleanupSshBridgeSession(handle: SandboxHandle, session: Ss
   }
 
   await runBestEffortLocalCleanup(session.tempDir);
+}
+
+export async function stageInteractiveStartupEnv(
+  handle: SandboxHandle,
+  session: SshBridgeSession,
+  envs: Record<string, string>
+): Promise<string | undefined> {
+  const validEntries: Array<[string, string]> = [];
+
+  for (const [key, value] of Object.entries(envs)) {
+    if (!ENV_VAR_NAME_REGEX.test(key)) {
+      logger.warn(`Skipping invalid startup env key for interactive session: ${key}`);
+      continue;
+    }
+    validEntries.push([key, value]);
+  }
+
+  if (validEntries.length === 0) {
+    return undefined;
+  }
+
+  const envScriptPath = resolveStartupEnvScriptPath(handle, session);
+  const parentDir = posix.dirname(envScriptPath);
+  const keys = validEntries.map(([key]) => quoteShellArg(key)).join(" ");
+  const indirectExpansion = "${!key-}";
+
+  await handle.run(
+    `bash -lc 'set -euo pipefail; mkdir -p ${quoteShellArg(parentDir)}; umask 077; env_file=${quoteShellArg(
+      envScriptPath
+    )}; printf "%s\\n" "#!/usr/bin/env bash" > "$env_file"; for key in ${keys}; do value="${indirectExpansion}"; printf "export %s=%q\\n" "$key" "$value" >> "$env_file"; done; chmod 600 "$env_file"'`,
+    {
+      envs: Object.fromEntries(validEntries),
+      timeoutMs: SSH_SHORT_TIMEOUT_MS
+    }
+  );
+
+  session.startupEnvScriptPath = envScriptPath;
+  return envScriptPath;
+}
+
+export function buildInteractiveRemoteCommand(options: { cwd?: string; envScriptPath?: string; command: string }): string {
+  const steps: string[] = [];
+
+  if (options.cwd) {
+    steps.push(`cd ${quoteShellArg(options.cwd)}`);
+  }
+
+  if (options.envScriptPath) {
+    steps.push(`source ${quoteShellArg(options.envScriptPath)}`);
+  }
+
+  steps.push(`exec ${options.command}`);
+  return `bash -lc ${quoteShellArg(steps.join(" && "))}`;
 }
 
 async function runBestEffortRemoteCleanup(handle: SandboxHandle, command: string): Promise<void> {
@@ -282,6 +361,15 @@ function toWsUrl(host: string): string {
 
 function quoteShellArg(value: string): string {
   return `'${value.replace(/'/g, `'"'"'`)}'`;
+}
+
+function resolveStartupEnvScriptPath(handle: SandboxHandle, session: SshBridgeSession): string {
+  if (session.artifacts?.sessionDir) {
+    return `${session.artifacts.sessionDir}/startup-env.sh`;
+  }
+
+  const random = Math.random().toString(16).slice(2, 10);
+  return `/tmp/ez-devbox-startup-env-${handle.sandboxId}-${random}.sh`;
 }
 
 async function runBestEffortLocalCleanup(tempDir: string): Promise<void> {

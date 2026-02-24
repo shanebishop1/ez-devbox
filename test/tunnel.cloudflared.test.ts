@@ -10,7 +10,7 @@ vi.mock("node:child_process", () => {
   };
 });
 
-import { withConfiguredTunnel } from "../src/tunnel/cloudflared.js";
+import { CLOUDFLARED_DOCKER_FALLBACK_IMAGE, withConfiguredTunnel } from "../src/tunnel/cloudflared.js";
 
 describe("withConfiguredTunnel", () => {
   afterEach(() => {
@@ -94,7 +94,7 @@ describe("withConfiguredTunnel", () => {
         "run",
         "--rm",
         "-i",
-        "cloudflare/cloudflared:latest",
+        CLOUDFLARED_DOCKER_FALLBACK_IMAGE,
         "tunnel",
         "--no-autoupdate",
         "--url",
@@ -136,7 +136,7 @@ describe("withConfiguredTunnel", () => {
         "run",
         "--rm",
         "-i",
-        "cloudflare/cloudflared:latest",
+        CLOUDFLARED_DOCKER_FALLBACK_IMAGE,
         "tunnel",
         "--no-autoupdate",
         "--url",

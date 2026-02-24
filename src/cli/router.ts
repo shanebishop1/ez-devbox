@@ -80,6 +80,7 @@ export function renderHelp(): string {
     "Options:",
     "  --mode <mode>         Startup mode (prompt|ssh-opencode|ssh-codex|web|ssh-shell)",
     "  --sandbox-id <id>     Sandbox id to connect/command",
+    "  --yes-sync            Skip create-time tooling sync confirmation prompt",
     "  --yes                 Skip wipe-all confirmation prompt",
     "  --verbose             Show detailed startup/provisioning logs",
     "  -h, --help            Show help"

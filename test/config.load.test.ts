@@ -43,8 +43,8 @@ describe("loadConfig", () => {
         'active = "prompt"',
         "",
         "[[project.repos]]",
-        'name = "agent-box"',
-        'url = "https://github.com/example/agent-box.git"'
+        'name = "ez-devbox"',
+        'url = "https://github.com/shanebishop1/ez-devbox.git"'
       ].join("\n")
     );
 
