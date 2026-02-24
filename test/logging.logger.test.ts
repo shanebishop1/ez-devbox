@@ -123,4 +123,57 @@ describe("logger formatting", () => {
       restoreStdout();
     }
   });
+
+  it("clears loading line when spinner stops", () => {
+    delete process.env.NO_COLOR;
+    delete process.env.FORCE_COLOR;
+    const restoreStdout = setTty(process.stdout, true);
+    const writeSpy = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+    vi.useFakeTimers();
+
+    try {
+      const stop = logger.startLoading("Bootstrapping...");
+      vi.advanceTimersByTime(90);
+      expect(writeSpy).toHaveBeenCalledWith(expect.stringContaining("Bootstrapping..."));
+
+      const callsBeforeStop = writeSpy.mock.calls.length;
+      stop();
+      expect(writeSpy).toHaveBeenCalledWith("\r\u001b[2K");
+
+      vi.advanceTimersByTime(500);
+      expect(writeSpy.mock.calls.length).toBe(callsBeforeStop + 1);
+    } finally {
+      vi.useRealTimers();
+      writeSpy.mockRestore();
+      restoreStdout();
+    }
+  });
+
+  it("stopping an old spinner does not clear a newer spinner", () => {
+    delete process.env.NO_COLOR;
+    delete process.env.FORCE_COLOR;
+    const restoreStdout = setTty(process.stdout, true);
+    const writeSpy = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+    vi.useFakeTimers();
+
+    try {
+      const firstStop = logger.startLoading("One");
+      vi.advanceTimersByTime(90);
+
+      const secondStop = logger.startLoading("Two");
+      vi.advanceTimersByTime(90);
+      const callsBeforeOldStop = writeSpy.mock.calls.length;
+
+      firstStop();
+      vi.advanceTimersByTime(200);
+      expect(writeSpy.mock.calls.length).toBeGreaterThan(callsBeforeOldStop);
+
+      secondStop();
+      expect(writeSpy).toHaveBeenCalledWith("\r\u001b[2K");
+    } finally {
+      vi.useRealTimers();
+      writeSpy.mockRestore();
+      restoreStdout();
+    }
+  });
 });
