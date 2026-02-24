@@ -1,18 +1,19 @@
 #!/usr/bin/env node
 
-import { logger } from "../logging/logger.js";
+import { logger, setVerboseLoggingEnabled } from "../logging/logger.js";
 import { runCommandCommand } from "./commands.command.js";
 import { runConnectCommand } from "./commands.connect.js";
 import { runCreateCommand } from "./commands.create.js";
 import { runListCommand } from "./commands.list.js";
-import { runStartCommand } from "./commands.start.js";
 import { runWipeCommand } from "./commands.wipe.js";
 import { runWipeAllCommand } from "./commands.wipe-all.js";
-import { renderHelp, resolveCliCommand } from "./router.js";
+import { parseGlobalCliOptions, renderHelp, resolveCliCommand } from "./router.js";
 
 export async function runCli(argv: string[]): Promise<number> {
   try {
-    const resolved = resolveCliCommand(argv);
+    const globalOptions = parseGlobalCliOptions(argv);
+    setVerboseLoggingEnabled(globalOptions.verbose);
+    const resolved = resolveCliCommand(globalOptions.args);
 
     if (resolved.command === "help") {
       logger.info(renderHelp());
@@ -55,9 +56,7 @@ export async function runCli(argv: string[]): Promise<number> {
       return result.exitCode ?? 0;
     }
 
-    const result = await runStartCommand(resolved.args);
-    logger.info(result.message);
-    return result.exitCode ?? 0;
+    throw new Error(`Unknown command: ${resolved.command}.`);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unexpected CLI failure";
     logger.error(message);

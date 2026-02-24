@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { renderHelp, resolveCliCommand } from "../src/cli/router.js";
+import { parseGlobalCliOptions, renderHelp, resolveCliCommand } from "../src/cli/router.js";
 
 describe("CLI bootstrap routing", () => {
   it("routes known command with passthrough args", () => {
@@ -30,6 +30,27 @@ describe("CLI bootstrap routing", () => {
     expect(resolved.args).toEqual(["--verbose"]);
   });
 
+  it("extracts global --verbose before command routing", () => {
+    const parsed = parseGlobalCliOptions(["--verbose", "connect", "--sandbox-id", "sbx-1"]);
+
+    expect(parsed.verbose).toBe(true);
+    expect(parsed.args).toEqual(["connect", "--sandbox-id", "sbx-1"]);
+  });
+
+  it("extracts global --verbose after -- for non-command commands", () => {
+    const parsed = parseGlobalCliOptions(["create", "--", "--verbose"]);
+
+    expect(parsed.verbose).toBe(true);
+    expect(parsed.args).toEqual(["create", "--"]);
+  });
+
+  it("does not treat args after -- as global --verbose", () => {
+    const parsed = parseGlobalCliOptions(["command", "--", "--verbose"]);
+
+    expect(parsed.verbose).toBe(false);
+    expect(parsed.args).toEqual(["command", "--", "--verbose"]);
+  });
+
   it("routes command command with passthrough args", () => {
     const resolved = resolveCliCommand(["command", "--sandbox-id", "sbx-1", "--", "pwd"]);
 
@@ -51,5 +72,9 @@ describe("CLI bootstrap routing", () => {
 
   it("includes command in help text", () => {
     expect(renderHelp()).toContain("command  Run a command in a selected sandbox");
+  });
+
+  it("includes verbose in help text", () => {
+    expect(renderHelp()).toContain("--verbose             Show detailed startup/provisioning logs");
   });
 });
