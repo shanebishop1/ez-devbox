@@ -1,8 +1,8 @@
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { loadConfig } from "../src/config/load.js";
+import { loadConfig, loadConfigWithMetadata } from "../src/config/load.js";
 import { defaultConfig } from "../src/config/defaults.js";
 
 describe("loadConfig", () => {
@@ -232,5 +232,105 @@ describe("loadConfig", () => {
     await writeFile(envPath, "E2B_API_KEY=test-e2b-key\n");
 
     await expect(loadConfig({ configPath, envPath })).rejects.toThrow("duplicate port");
+  });
+
+  it("prefers local launcher config over global", async () => {
+    const localConfigPath = join(tempDir, "launcher.config.toml");
+    const globalConfigRoot = join(tempDir, "xdg");
+    const globalConfigPath = join(globalConfigRoot, "ez-devbox", "launcher.config.toml");
+    const envPath = join(tempDir, ".env");
+
+    await writeFile(localConfigPath, "[sandbox]\nname = \"local\"\n");
+    await mkdir(join(globalConfigRoot, "ez-devbox"), { recursive: true });
+    await writeFile(globalConfigPath, "[sandbox]\nname = \"global\"\n");
+    await writeFile(envPath, "E2B_API_KEY=test-e2b-key\n");
+
+    const loaded = await loadConfigWithMetadata({
+      cwd: tempDir,
+      envPath,
+      env: { XDG_CONFIG_HOME: globalConfigRoot }
+    });
+
+    expect(loaded.scope).toBe("local");
+    expect(loaded.configPath).toBe(localConfigPath);
+    expect(loaded.config.sandbox.name).toBe("local");
+  });
+
+  it("falls back to global launcher config when local is missing", async () => {
+    const globalConfigRoot = join(tempDir, "xdg");
+    const globalConfigPath = join(globalConfigRoot, "ez-devbox", "launcher.config.toml");
+    const envPath = join(tempDir, ".env");
+
+    await mkdir(join(globalConfigRoot, "ez-devbox"), { recursive: true });
+    await writeFile(globalConfigPath, "[sandbox]\nname = \"global\"\n");
+    await writeFile(envPath, "E2B_API_KEY=test-e2b-key\n");
+
+    const loaded = await loadConfigWithMetadata({
+      cwd: tempDir,
+      envPath,
+      env: { XDG_CONFIG_HOME: globalConfigRoot }
+    });
+
+    expect(loaded.scope).toBe("global");
+    expect(loaded.configPath).toBe(globalConfigPath);
+    expect(loaded.config.sandbox.name).toBe("global");
+  });
+
+  it("creates local launcher config from prompt choice", async () => {
+    const envPath = join(tempDir, ".env");
+    const localConfigPath = join(tempDir, "launcher.config.toml");
+
+    await writeFile(envPath, "E2B_API_KEY=test-e2b-key\n");
+
+    const loaded = await loadConfigWithMetadata({
+      cwd: tempDir,
+      envPath,
+      isInteractiveTerminal: () => true,
+      promptInput: async () => "1",
+      env: { XDG_CONFIG_HOME: join(tempDir, "xdg") }
+    });
+
+    expect(loaded.scope).toBe("local");
+    expect(loaded.createdConfig).toBe(true);
+    expect(loaded.configPath).toBe(localConfigPath);
+    await expect(readFile(localConfigPath, "utf8")).resolves.toContain("[sandbox]");
+    expect(loaded.config.startup.mode).toBe("prompt");
+  });
+
+  it("creates global launcher config from prompt choice", async () => {
+    const envPath = join(tempDir, ".env");
+    const globalConfigRoot = join(tempDir, "xdg");
+    const globalConfigPath = join(globalConfigRoot, "ez-devbox", "launcher.config.toml");
+
+    await writeFile(envPath, "E2B_API_KEY=test-e2b-key\n");
+
+    const loaded = await loadConfigWithMetadata({
+      cwd: tempDir,
+      envPath,
+      isInteractiveTerminal: () => true,
+      promptInput: async () => "2",
+      env: { XDG_CONFIG_HOME: globalConfigRoot }
+    });
+
+    expect(loaded.scope).toBe("global");
+    expect(loaded.createdConfig).toBe(true);
+    expect(loaded.configPath).toBe(globalConfigPath);
+    await expect(readFile(globalConfigPath, "utf8")).resolves.toContain("[sandbox]");
+  });
+
+  it("errors with both local and global paths in non-interactive mode", async () => {
+    const envPath = join(tempDir, ".env");
+    const globalConfigRoot = join(tempDir, "xdg");
+
+    await writeFile(envPath, "E2B_API_KEY=test-e2b-key\n");
+
+    await expect(
+      loadConfigWithMetadata({
+        cwd: tempDir,
+        envPath,
+        isInteractiveTerminal: () => false,
+        env: { XDG_CONFIG_HOME: globalConfigRoot }
+      })
+    ).rejects.toThrow(`Create one at '${join(tempDir, "launcher.config.toml")}' or '${join(globalConfigRoot, "ez-devbox", "launcher.config.toml")}'.`);
   });
 });

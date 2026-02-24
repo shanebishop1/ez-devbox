@@ -141,6 +141,32 @@ describe("CLI command integration", () => {
     loggerVerbose.mockRestore();
   });
 
+  it("create logs the launcher config path when metadata loader is used", async () => {
+    const infoSpy = vi.spyOn(logger, "info").mockImplementation(() => undefined);
+
+    await runCreateCommand(["--mode", "ssh-opencode"], {
+      loadConfig: vi.fn().mockResolvedValue(config),
+      loadConfigWithMetadata: vi.fn().mockResolvedValue({
+        config,
+        configPath: "/tmp/launcher.config.toml",
+        createdConfig: false,
+        scope: "local"
+      }),
+      createSandbox: vi.fn().mockResolvedValue({ sandboxId: "sbx-created" }),
+      resolveEnvSource: vi.fn().mockResolvedValue({}),
+      resolveSandboxCreateEnv: vi.fn().mockReturnValue({ envs: {} }),
+      resolvePromptStartupMode: vi.fn().mockResolvedValue("ssh-opencode"),
+      launchMode: vi.fn().mockResolvedValue({ mode: "ssh-opencode", command: "opencode", message: "launched" }),
+      bootstrapProjectWorkspace: vi.fn().mockResolvedValue(bootstrapResult),
+      syncToolingToSandbox: vi.fn().mockResolvedValue(syncSummary),
+      saveLastRunState: vi.fn().mockResolvedValue(undefined),
+      now: () => "2026-02-01T00:00:00.000Z"
+    });
+
+    expect(infoSpy).toHaveBeenCalledWith("Using launcher config: /tmp/launcher.config.toml");
+    infoSpy.mockRestore();
+  });
+
   it("create auto-selects codex template for ssh-codex mode", async () => {
     const createSandbox = vi.fn().mockResolvedValue({ sandboxId: "sbx-created" });
     const syncToolingToSandbox = vi.fn().mockResolvedValue({
@@ -537,6 +563,31 @@ describe("CLI command integration", () => {
     });
     expect(loggerVerbose).toHaveBeenCalledWith("Startup mode selected via prompt: ssh-opencode.");
     loggerVerbose.mockRestore();
+  });
+
+  it("connect logs the launcher config path when metadata loader is used", async () => {
+    const infoSpy = vi.spyOn(logger, "info").mockImplementation(() => undefined);
+
+    await runConnectCommand(["--sandbox-id", "sbx-arg"], {
+      loadConfig: vi.fn().mockResolvedValue(config),
+      loadConfigWithMetadata: vi.fn().mockResolvedValue({
+        config,
+        configPath: "/tmp/global/launcher.config.toml",
+        createdConfig: false,
+        scope: "global"
+      }),
+      connectSandbox: vi.fn().mockResolvedValue({ sandboxId: "sbx-arg" }),
+      loadLastRunState: vi.fn().mockResolvedValue(null),
+      listSandboxes: vi.fn().mockResolvedValue([]),
+      resolvePromptStartupMode: vi.fn().mockResolvedValue("ssh-opencode"),
+      launchMode: vi.fn().mockResolvedValue({ mode: "ssh-opencode", command: "opencode", message: "launched" }),
+      bootstrapProjectWorkspace: vi.fn().mockResolvedValue(bootstrapResult),
+      saveLastRunState: vi.fn().mockResolvedValue(undefined),
+      now: () => "2026-02-01T00:00:00.000Z"
+    });
+
+    expect(infoSpy).toHaveBeenCalledWith("Using launcher config: /tmp/global/launcher.config.toml");
+    infoSpy.mockRestore();
   });
 
   it("connect reuses last active repo for matching sandbox", async () => {
