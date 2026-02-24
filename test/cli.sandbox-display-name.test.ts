@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-import type { ResolvedProjectRepoConfig } from "../src/config/schema.js";
 import {
   buildSandboxDisplayName,
   formatSandboxDisplayLabel,
@@ -7,28 +6,71 @@ import {
 } from "../src/cli/sandbox-display-name.js";
 
 describe("sandbox display naming", () => {
-  const repo = (name: string, branch: string): ResolvedProjectRepoConfig => ({
-    name,
-    branch,
-    url: `https://example.com/${name}.git`,
-    setup_pre_command: "",
-    setup_command: "",
-    setup_wrapper_command: "",
-    setup_env: {},
-    startup_env: {}
+  it("builds <repo-name> <branch> <timestamp> when exactly one repo is configured", () => {
+    expect(
+      buildSandboxDisplayName(
+        [
+          {
+            name: "next.js",
+            url: "https://github.com/vercel/next.js.git",
+            branch: "canary",
+            setup_command: "",
+            setup_env: {},
+            startup_env: {}
+          }
+        ],
+        "2026-02-01T12:34:56.789Z"
+      )
+    ).toBe("next.js canary 2026-02-01 12:34:56 UTC");
   });
 
-  it("builds <repo> <branch> <timestamp> when exactly one repo is configured", () => {
-    expect(buildSandboxDisplayName([repo("next.js", "canary")], "2026-02-01T12:34:56.789Z")).toBe(
-      "next.js canary 2026-02-01 12:34:56 UTC"
-    );
-  });
-
-  it("uses timestamp only when repo count is not one", () => {
+  it("builds <timestamp> when no repos are configured", () => {
     expect(buildSandboxDisplayName([], "2026-02-01T12:34:56.789Z")).toBe("2026-02-01 12:34:56 UTC");
-    expect(buildSandboxDisplayName([repo("next.js", "canary"), repo("react", "main")], "2026-02-01T12:34:56.789Z")).toBe(
-      "2026-02-01 12:34:56 UTC"
-    );
+  });
+
+  it("builds <timestamp> when multiple repos are configured", () => {
+    expect(
+      buildSandboxDisplayName(
+        [
+          {
+            name: "next.js",
+            url: "https://github.com/vercel/next.js.git",
+            branch: "canary",
+            setup_command: "",
+            setup_env: {},
+            startup_env: {}
+          },
+          {
+            name: "react",
+            url: "https://github.com/facebook/react.git",
+            branch: "main",
+            setup_command: "",
+            setup_env: {},
+            startup_env: {}
+          }
+        ],
+        "2026-02-01T12:34:56.789Z"
+      )
+    ).toBe("2026-02-01 12:34:56 UTC");
+  });
+
+  it("falls back for blank timestamp", () => {
+    expect(buildSandboxDisplayName([], "  ")).toBe("unknown-time");
+    expect(
+      buildSandboxDisplayName(
+        [
+          {
+            name: "next.js",
+            url: "https://github.com/vercel/next.js.git",
+            branch: "canary",
+            setup_command: "",
+            setup_env: {},
+            startup_env: {}
+          }
+        ],
+        "  "
+      )
+    ).toBe("next.js canary unknown-time");
   });
 
   it("resolves display name from metadata and falls back to sandbox id", () => {

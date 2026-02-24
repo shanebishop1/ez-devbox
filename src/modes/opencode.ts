@@ -1,6 +1,6 @@
 import type { SandboxHandle } from "../e2b/lifecycle.js";
 import { logger } from "../logging/logger.js";
-import type { ModeLaunchResult } from "./index.js";
+import type { LaunchContextOptions, ModeLaunchResult } from "./index.js";
 import {
   type SshModeDeps,
   cleanupSshBridgeSession,
@@ -9,7 +9,6 @@ import {
 } from "./ssh-bridge.js";
 
 const OPEN_CODE_SMOKE_COMMAND = "opencode --version";
-const OPEN_CODE_INTERACTIVE_COMMAND = "bash -lc 'opencode'";
 const COMMAND_TIMEOUT_MS = 15_000;
 
 type OpenCodeModeDeps = SshModeDeps;
@@ -21,9 +20,15 @@ const defaultDeps: OpenCodeModeDeps = {
   cleanupSession: cleanupSshBridgeSession
 };
 
-export async function startOpenCodeMode(handle: SandboxHandle, deps: OpenCodeModeDeps = defaultDeps): Promise<ModeLaunchResult> {
+export async function startOpenCodeMode(
+  handle: SandboxHandle,
+  launchContext: LaunchContextOptions = {},
+  deps: OpenCodeModeDeps = defaultDeps
+): Promise<ModeLaunchResult> {
+  const commandContext = resolveCommandContext(launchContext);
+
   if (!deps.isInteractiveTerminal()) {
-    return runSmokeCheck(handle);
+    return runSmokeCheck(handle, commandContext);
   }
 
   logger.info("Preparing secure SSH bridge (first run may install packages).");
@@ -31,7 +36,7 @@ export async function startOpenCodeMode(handle: SandboxHandle, deps: OpenCodeMod
 
   try {
     logger.info("Opening interactive SSH session.");
-    await deps.runInteractiveSession(session, OPEN_CODE_INTERACTIVE_COMMAND);
+    await deps.runInteractiveSession(session, buildInteractiveCommand("opencode", commandContext.cwd, commandContext.envs));
   } finally {
     logger.info("Cleaning up interactive SSH session.");
     await deps.cleanupSession(handle, session);
@@ -48,8 +53,13 @@ export async function startOpenCodeMode(handle: SandboxHandle, deps: OpenCodeMod
   };
 }
 
-async function runSmokeCheck(handle: SandboxHandle): Promise<ModeLaunchResult> {
+async function runSmokeCheck(
+  handle: SandboxHandle,
+  commandContext: { cwd?: string; envs: Record<string, string> }
+): Promise<ModeLaunchResult> {
   const result = await handle.run(OPEN_CODE_SMOKE_COMMAND, {
+    ...(commandContext.cwd ? { cwd: commandContext.cwd } : {}),
+    ...(Object.keys(commandContext.envs).length > 0 ? { envs: commandContext.envs } : {}),
     timeoutMs: COMMAND_TIMEOUT_MS
   });
 
@@ -65,6 +75,34 @@ async function runSmokeCheck(handle: SandboxHandle): Promise<ModeLaunchResult> {
     },
     message: `OpenCode CLI smoke passed in sandbox ${handle.sandboxId}: ${output}. Run from an interactive terminal for full OpenCode session attach.`
   };
+}
+
+function buildInteractiveCommand(command: string, cwd?: string, envs: Record<string, string> = {}): string {
+  const steps: string[] = [];
+  if (cwd) {
+    steps.push(`cd ${quoteShellArg(cwd)}`);
+  }
+  for (const [key, value] of Object.entries(envs)) {
+    steps.push(`export ${key}=${quoteShellArg(value)}`);
+  }
+  steps.push(`exec ${command}`);
+  return `bash -lc ${quoteShellArg(steps.join(" && "))}`;
+}
+
+function resolveCommandContext(launchContext: LaunchContextOptions): { cwd?: string; envs: Record<string, string> } {
+  return {
+    cwd: normalizeOptionalValue(launchContext.workingDirectory),
+    envs: launchContext.startupEnv ?? {}
+  };
+}
+
+function normalizeOptionalValue(value: string | undefined): string | undefined {
+  const normalized = value?.trim();
+  return normalized ? normalized : undefined;
+}
+
+function quoteShellArg(value: string): string {
+  return `'${value.replace(/'/g, `"'\"'\"'`)}'`;
 }
 
 function firstNonEmptyLine(stdout: string, stderr: string): string {

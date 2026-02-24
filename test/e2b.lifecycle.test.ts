@@ -25,6 +25,7 @@ describe("e2b lifecycle adapter", () => {
       mode: "single",
       active: "prompt",
       dir: "/workspace",
+      working_dir: "auto",
       setup_on_connect: false,
       setup_retries: 2,
       setup_continue_on_error: false,

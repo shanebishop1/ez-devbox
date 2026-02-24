@@ -8,9 +8,7 @@ export interface ResolvedProjectRepoConfig {
   name: string;
   url: string;
   branch: string;
-  setup_pre_command: string;
   setup_command: string;
-  setup_wrapper_command: string;
   setup_env: Record<string, string>;
   startup_env: Record<string, string>;
 }
@@ -30,6 +28,7 @@ export interface ResolvedLauncherConfig {
     mode: ProjectMode;
     active: ProjectActiveMode;
     dir: string;
+    working_dir: string;
     setup_on_connect: boolean;
     setup_retries: number;
     setup_continue_on_error: boolean;

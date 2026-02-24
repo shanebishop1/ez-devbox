@@ -9,12 +9,8 @@ describe("setup runner", () => {
 
     const executor: SetupCommandExecutor = {
       run: vi.fn().mockImplementation(async (command, options) => {
-        if (command === "echo pre") {
-          options.onStdoutLine?.("pre ok");
-          return { exitCode: 0 };
-        }
-
         setupAttempts += 1;
+        options.onStdoutLine?.(`setup attempt ${setupAttempts}`);
         options.onStderrLine?.(`setup attempt ${setupAttempts}`);
         if (setupAttempts === 1) {
           return { exitCode: 1, stderr: "transient failure" };
@@ -29,9 +25,7 @@ describe("setup runner", () => {
         {
           name: "repo-a",
           path: "/workspace/repo-a",
-          setup_pre_command: "echo pre",
           setup_command: "npm ci",
-          setup_wrapper_command: "bash -lc \"{command}\"",
           setup_env: { NODE_ENV: "test" }
         }
       ],
@@ -46,8 +40,8 @@ describe("setup runner", () => {
 
     expect(result.success).toBe(true);
     expect(executor.run).toHaveBeenNthCalledWith(
-      2,
-      'bash -lc "npm ci"',
+      1,
+      "npm ci",
       expect.objectContaining({ timeoutMs: 20_000, env: { NODE_ENV: "test" } })
     );
     expect(sleep).toHaveBeenCalledTimes(1);
@@ -67,17 +61,13 @@ describe("setup runner", () => {
           {
             name: "repo-a",
             path: "/workspace/repo-a",
-            setup_pre_command: "echo pre",
             setup_command: "npm ci",
-            setup_wrapper_command: "",
             setup_env: {}
           },
           {
             name: "repo-b",
             path: "/workspace/repo-b",
-            setup_pre_command: "",
             setup_command: "npm ci",
-            setup_wrapper_command: "",
             setup_env: {}
           }
         ],
@@ -104,17 +94,13 @@ describe("setup runner", () => {
         {
           name: "repo-a",
           path: "/workspace/repo-a",
-          setup_pre_command: "",
           setup_command: "npm ci",
-          setup_wrapper_command: "",
           setup_env: {}
         },
         {
           name: "repo-b",
           path: "/workspace/repo-b",
-          setup_pre_command: "",
           setup_command: "pnpm i",
-          setup_wrapper_command: "",
           setup_env: {}
         }
       ],

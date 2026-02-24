@@ -1,5 +1,5 @@
 import type { SandboxHandle } from "../e2b/lifecycle.js";
-import type { ModeLaunchResult } from "./index.js";
+import type { LaunchContextOptions, ModeLaunchResult } from "./index.js";
 
 const WEB_COMMAND = "nohup opencode serve --hostname 0.0.0.0 --port 3000 >/tmp/opencode-serve.log 2>&1 &";
 const WEB_READINESS_COMMAND =
@@ -9,14 +9,25 @@ const WEB_START_TIMEOUT_MS = 10_000;
 const WEB_READY_TIMEOUT_MS = 35_000;
 const WEB_AUTH_TIMEOUT_MS = 10_000;
 
-export async function startWebMode(handle: SandboxHandle): Promise<ModeLaunchResult> {
+export async function startWebMode(handle: SandboxHandle, launchContext: LaunchContextOptions = {}): Promise<ModeLaunchResult> {
+  const commandContext = {
+    cwd: normalizeOptionalValue(launchContext.workingDirectory),
+    envs: launchContext.startupEnv ?? {}
+  };
+
   await handle.run(WEB_COMMAND, {
+    ...(commandContext.cwd ? { cwd: commandContext.cwd } : {}),
+    ...(Object.keys(commandContext.envs).length > 0 ? { envs: commandContext.envs } : {}),
     timeoutMs: WEB_START_TIMEOUT_MS
   });
   await handle.run(WEB_READINESS_COMMAND, {
+    ...(commandContext.cwd ? { cwd: commandContext.cwd } : {}),
+    ...(Object.keys(commandContext.envs).length > 0 ? { envs: commandContext.envs } : {}),
     timeoutMs: WEB_READY_TIMEOUT_MS
   });
   const authProbe = await handle.run(WEB_AUTH_PROBE_COMMAND, {
+    ...(commandContext.cwd ? { cwd: commandContext.cwd } : {}),
+    ...(Object.keys(commandContext.envs).length > 0 ? { envs: commandContext.envs } : {}),
     timeoutMs: WEB_AUTH_TIMEOUT_MS
   });
 
@@ -44,6 +55,11 @@ export async function startWebMode(handle: SandboxHandle): Promise<ModeLaunchRes
     },
     message: `Started web mode in sandbox ${handle.sandboxId} at ${url}`
   };
+}
+
+function normalizeOptionalValue(value: string | undefined): string | undefined {
+  const normalized = value?.trim();
+  return normalized ? normalized : undefined;
 }
 
 function ensureHttps(host: string): string {

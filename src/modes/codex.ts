@@ -1,6 +1,6 @@
 import type { SandboxHandle } from "../e2b/lifecycle.js";
 import { logger } from "../logging/logger.js";
-import type { ModeLaunchResult } from "./index.js";
+import type { LaunchContextOptions, ModeLaunchResult } from "./index.js";
 import {
   type SshModeDeps,
   cleanupSshBridgeSession,
@@ -9,7 +9,6 @@ import {
 } from "./ssh-bridge.js";
 
 const CODEX_SMOKE_COMMAND = "codex --version";
-const CODEX_INTERACTIVE_COMMAND = "bash -lc 'codex'";
 const CODEX_AVAILABILITY_CHECK_COMMAND = "bash -lc 'if command -v codex >/dev/null 2>&1; then printf PRESENT; else printf MISSING; fi'";
 const CODEX_INSTALL_COMMAND = "npm i -g @openai/codex";
 const COMMAND_TIMEOUT_MS = 15_000;
@@ -24,11 +23,16 @@ const defaultDeps: CodexModeDeps = {
   cleanupSession: cleanupSshBridgeSession
 };
 
-export async function startCodexMode(handle: SandboxHandle, deps: CodexModeDeps = defaultDeps): Promise<ModeLaunchResult> {
-  await ensureCodexCliAvailable(handle);
+export async function startCodexMode(
+  handle: SandboxHandle,
+  launchContext: LaunchContextOptions = {},
+  deps: CodexModeDeps = defaultDeps
+): Promise<ModeLaunchResult> {
+  const commandContext = resolveCommandContext(launchContext);
+  await ensureCodexCliAvailable(handle, commandContext);
 
   if (!deps.isInteractiveTerminal()) {
-    return runSmokeCheck(handle);
+    return runSmokeCheck(handle, commandContext);
   }
 
   logger.info("Preparing secure SSH bridge (first run may install packages).");
@@ -36,7 +40,7 @@ export async function startCodexMode(handle: SandboxHandle, deps: CodexModeDeps 
 
   try {
     logger.info("Opening interactive SSH session.");
-    await deps.runInteractiveSession(session, CODEX_INTERACTIVE_COMMAND);
+    await deps.runInteractiveSession(session, buildInteractiveCommand("codex", commandContext.cwd, commandContext.envs));
   } finally {
     logger.info("Cleaning up interactive SSH session.");
     await deps.cleanupSession(handle, session);
@@ -53,9 +57,14 @@ export async function startCodexMode(handle: SandboxHandle, deps: CodexModeDeps 
   };
 }
 
-async function ensureCodexCliAvailable(handle: SandboxHandle): Promise<void> {
+async function ensureCodexCliAvailable(
+  handle: SandboxHandle,
+  commandContext: { cwd?: string; envs: Record<string, string> }
+): Promise<void> {
   logger.info("Checking Codex CLI availability in sandbox.");
   const checkResult = await handle.run(CODEX_AVAILABILITY_CHECK_COMMAND, {
+    ...(commandContext.cwd ? { cwd: commandContext.cwd } : {}),
+    ...(Object.keys(commandContext.envs).length > 0 ? { envs: commandContext.envs } : {}),
     timeoutMs: COMMAND_TIMEOUT_MS
   });
 
@@ -66,6 +75,8 @@ async function ensureCodexCliAvailable(handle: SandboxHandle): Promise<void> {
 
   logger.info("Codex CLI missing; installing @openai/codex globally.");
   const installResult = await handle.run(CODEX_INSTALL_COMMAND, {
+    ...(commandContext.cwd ? { cwd: commandContext.cwd } : {}),
+    ...(Object.keys(commandContext.envs).length > 0 ? { envs: commandContext.envs } : {}),
     timeoutMs: INSTALL_TIMEOUT_MS
   });
 
@@ -77,6 +88,8 @@ async function ensureCodexCliAvailable(handle: SandboxHandle): Promise<void> {
 
   logger.info("Codex CLI install completed; verifying availability.");
   const verifyResult = await handle.run(CODEX_AVAILABILITY_CHECK_COMMAND, {
+    ...(commandContext.cwd ? { cwd: commandContext.cwd } : {}),
+    ...(Object.keys(commandContext.envs).length > 0 ? { envs: commandContext.envs } : {}),
     timeoutMs: COMMAND_TIMEOUT_MS
   });
 
@@ -89,8 +102,13 @@ async function ensureCodexCliAvailable(handle: SandboxHandle): Promise<void> {
   logger.info("Codex CLI is available in sandbox.");
 }
 
-async function runSmokeCheck(handle: SandboxHandle): Promise<ModeLaunchResult> {
+async function runSmokeCheck(
+  handle: SandboxHandle,
+  commandContext: { cwd?: string; envs: Record<string, string> }
+): Promise<ModeLaunchResult> {
   const result = await handle.run(CODEX_SMOKE_COMMAND, {
+    ...(commandContext.cwd ? { cwd: commandContext.cwd } : {}),
+    ...(Object.keys(commandContext.envs).length > 0 ? { envs: commandContext.envs } : {}),
     timeoutMs: COMMAND_TIMEOUT_MS
   });
 
@@ -106,6 +124,34 @@ async function runSmokeCheck(handle: SandboxHandle): Promise<ModeLaunchResult> {
     },
     message: `Codex CLI smoke passed in sandbox ${handle.sandboxId}: ${output}`
   };
+}
+
+function buildInteractiveCommand(command: string, cwd?: string, envs: Record<string, string> = {}): string {
+  const steps: string[] = [];
+  if (cwd) {
+    steps.push(`cd ${quoteShellArg(cwd)}`);
+  }
+  for (const [key, value] of Object.entries(envs)) {
+    steps.push(`export ${key}=${quoteShellArg(value)}`);
+  }
+  steps.push(`exec ${command}`);
+  return `bash -lc ${quoteShellArg(steps.join(" && "))}`;
+}
+
+function resolveCommandContext(launchContext: LaunchContextOptions): { cwd?: string; envs: Record<string, string> } {
+  return {
+    cwd: normalizeOptionalValue(launchContext.workingDirectory),
+    envs: launchContext.startupEnv ?? {}
+  };
+}
+
+function normalizeOptionalValue(value: string | undefined): string | undefined {
+  const normalized = value?.trim();
+  return normalized ? normalized : undefined;
+}
+
+function quoteShellArg(value: string): string {
+  return `'${value.replace(/'/g, `"'\"'\"'`)}'`;
 }
 
 function firstNonEmptyLine(stdout: string, stderr: string): string {

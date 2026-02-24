@@ -11,6 +11,7 @@ import { resolvePromptStartupMode } from "./startup-mode-prompt.js";
 import { buildSandboxDisplayName, formatSandboxDisplayLabel } from "./sandbox-display-name.js";
 import { saveLastRunState, type LastRunState } from "../state/lastRun.js";
 import { logger } from "../logging/logger.js";
+import { bootstrapProjectWorkspace, type BootstrapProjectWorkspaceResult } from "../project/bootstrap.js";
 import {
   syncCodexAuthFile,
   syncCodexConfigDir,
@@ -35,7 +36,12 @@ export interface CreateCommandDeps {
     envSource?: Record<string, string | undefined>
   ) => SandboxCreateEnvResolution;
   resolvePromptStartupMode: (requestedMode: StartupMode) => Promise<StartupMode>;
-  launchMode: (handle: SandboxHandle, mode: StartupMode) => Promise<ModeLaunchResult>;
+  launchMode: (handle: SandboxHandle, mode: StartupMode, options?: { workingDirectory?: string; startupEnv?: Record<string, string> }) => Promise<ModeLaunchResult>;
+  bootstrapProjectWorkspace?: (
+    handle: SandboxHandle,
+    config: Awaited<ReturnType<typeof loadConfig>>,
+    options?: { isConnect?: boolean; onProgress?: (message: string) => void }
+  ) => Promise<BootstrapProjectWorkspaceResult>;
   syncToolingToSandbox: (
     config: Awaited<ReturnType<typeof loadConfig>>,
     sandbox: Pick<SandboxHandle, "writeFile">,
@@ -95,12 +101,26 @@ export async function runCreateCommand(args: string[], deps: CreateCommandDeps =
   logger.info(`Syncing local tooling config/auth for mode '${resolvedMode}'.`);
   const syncSummary = await deps.syncToolingToSandbox(config, handle, resolvedMode);
 
+  logger.info("Starting project bootstrap.");
+  const bootstrapResult = await (deps.bootstrapProjectWorkspace ?? bootstrapProjectWorkspace)(handle, config, {
+    isConnect: false,
+    onProgress: (message) => logger.info(`Bootstrap: ${message}`)
+  });
+  logger.info(`Selected repos summary: ${formatSelectedReposSummary(bootstrapResult.selectedRepoNames)}.`);
+  logger.info(`Setup outcome summary: ${formatSetupOutcomeSummary(bootstrapResult.setup)}.`);
+
   logger.info(`Launching startup mode '${mode}'.`);
-  const launched = await deps.launchMode(handle, mode);
+  const launched = await deps.launchMode(handle, mode, {
+    workingDirectory: bootstrapResult.workingDirectory,
+    startupEnv: bootstrapResult.startupEnv
+  });
+
+  const activeRepo = bootstrapResult.selectedRepoNames.length === 1 ? bootstrapResult.selectedRepoNames[0] : undefined;
 
   await deps.saveLastRunState({
     sandboxId: handle.sandboxId,
     mode: launched.mode,
+    activeRepo,
     updatedAt: deps.now()
   });
 
@@ -116,6 +136,21 @@ export async function runCreateCommand(args: string[], deps: CreateCommandDeps =
     message: `Created sandbox ${sandboxLabel}. ${launched.message}${templateSuffix}${syncSuffix}${warningSuffix}`,
     exitCode: 0
   };
+}
+
+function formatSelectedReposSummary(selectedRepoNames: string[]): string {
+  if (selectedRepoNames.length === 0) {
+    return "none";
+  }
+  return selectedRepoNames.join(", ");
+}
+
+function formatSetupOutcomeSummary(setup: BootstrapProjectWorkspaceResult["setup"]): string {
+  if (setup === null) {
+    return "skipped";
+  }
+
+  return `ran success=${setup.success} repos=${setup.repos.length}`;
 }
 
 async function syncToolingForMode(

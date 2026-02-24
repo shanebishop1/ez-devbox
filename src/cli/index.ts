@@ -1,8 +1,10 @@
 #!/usr/bin/env node
 
 import { logger } from "../logging/logger.js";
+import { runCommandCommand } from "./commands.command.js";
 import { runConnectCommand } from "./commands.connect.js";
 import { runCreateCommand } from "./commands.create.js";
+import { runListCommand } from "./commands.list.js";
 import { runStartCommand } from "./commands.start.js";
 import { runWipeCommand } from "./commands.wipe.js";
 import { runWipeAllCommand } from "./commands.wipe-all.js";
@@ -25,6 +27,18 @@ export async function runCli(argv: string[]): Promise<number> {
 
     if (resolved.command === "connect") {
       const result = await runConnectCommand(resolved.args);
+      logger.info(result.message);
+      return result.exitCode ?? 0;
+    }
+
+    if (resolved.command === "list") {
+      const result = await runListCommand(resolved.args);
+      logger.info(result.message);
+      return result.exitCode ?? 0;
+    }
+
+    if (resolved.command === "command") {
+      const result = await runCommandCommand(resolved.args);
       logger.info(result.message);
       return result.exitCode ?? 0;
     }

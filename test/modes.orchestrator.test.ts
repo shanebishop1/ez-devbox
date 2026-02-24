@@ -95,12 +95,16 @@ describe("startup modes orchestrator", () => {
     const runInteractiveSession = vi.fn().mockResolvedValue(undefined);
     const cleanupSession = vi.fn().mockResolvedValue(undefined);
 
-    const result = await startOpenCodeMode(handle, {
-      isInteractiveTerminal: () => true,
-      prepareSession,
-      runInteractiveSession,
-      cleanupSession
-    });
+    const result = await startOpenCodeMode(
+      handle,
+      {},
+      {
+        isInteractiveTerminal: () => true,
+        prepareSession,
+        runInteractiveSession,
+        cleanupSession
+      }
+    );
 
     expect(prepareSession).toHaveBeenCalledWith(handle);
     expect(runInteractiveSession).toHaveBeenCalledWith(
@@ -109,7 +113,7 @@ describe("startup modes orchestrator", () => {
       privateKeyPath: "/tmp/session/id_ed25519",
       wsUrl: "wss://8081-sbx.e2b.app"
       },
-      "bash -lc 'opencode'"
+      "bash -lc 'exec opencode'"
     );
     expect(cleanupSession).toHaveBeenCalledTimes(1);
     expect(result.mode).toBe("ssh-opencode");
@@ -139,6 +143,22 @@ describe("startup modes orchestrator", () => {
       smoke: "codex-cli",
       status: "ready",
       output: "codex 0.9.0"
+    });
+  });
+
+  it("ssh-opencode smoke check forwards cwd/env launch context", async () => {
+    const run = vi.fn().mockResolvedValue({ stdout: "OpenCode 1.2.3\n", stderr: "", exitCode: 0 });
+    const handle = createHandle({ run });
+
+    await launchMode(handle, "ssh-opencode", {
+      workingDirectory: "/workspace/alpha",
+      startupEnv: { PROJECT_NAME: "alpha" }
+    });
+
+    expect(run).toHaveBeenCalledWith("opencode --version", {
+      cwd: "/workspace/alpha",
+      envs: { PROJECT_NAME: "alpha" },
+      timeoutMs: 15_000
     });
   });
 
@@ -203,12 +223,16 @@ describe("startup modes orchestrator", () => {
     const runInteractiveSession = vi.fn().mockResolvedValue(undefined);
     const cleanupSession = vi.fn().mockResolvedValue(undefined);
 
-    const result = await startCodexMode(handle, {
-      isInteractiveTerminal: () => true,
-      prepareSession,
-      runInteractiveSession,
-      cleanupSession
-    });
+    const result = await startCodexMode(
+      handle,
+      {},
+      {
+        isInteractiveTerminal: () => true,
+        prepareSession,
+        runInteractiveSession,
+        cleanupSession
+      }
+    );
 
     expect(prepareSession).toHaveBeenCalledWith(handle);
     expect(runInteractiveSession).toHaveBeenCalledWith(
@@ -218,7 +242,7 @@ describe("startup modes orchestrator", () => {
         knownHostsPath: "/tmp/session/known_hosts",
         wsUrl: "wss://8081-sbx.e2b.app"
       },
-      "bash -lc 'codex'"
+      "bash -lc 'exec codex'"
     );
     expect(cleanupSession).toHaveBeenCalledTimes(1);
     expect(result.mode).toBe("ssh-codex");
@@ -243,6 +267,30 @@ describe("startup modes orchestrator", () => {
     });
   });
 
+  it("web mode forwards cwd/env launch context", async () => {
+    const run = vi
+      .fn()
+      .mockResolvedValueOnce({ stdout: "", stderr: "", exitCode: 0 })
+      .mockResolvedValueOnce({ stdout: "", stderr: "", exitCode: 0 })
+      .mockResolvedValueOnce({ stdout: "401", stderr: "", exitCode: 0 });
+    const handle = createHandle({ run, getHost: vi.fn().mockResolvedValue("sandbox-ctx.e2b.dev") });
+
+    await launchMode(handle, "web", {
+      workingDirectory: "/workspace/alpha",
+      startupEnv: { PROJECT_NAME: "alpha" }
+    });
+
+    expect(run).toHaveBeenNthCalledWith(
+      1,
+      "nohup opencode serve --hostname 0.0.0.0 --port 3000 >/tmp/opencode-serve.log 2>&1 &",
+      {
+        cwd: "/workspace/alpha",
+        envs: { PROJECT_NAME: "alpha" },
+        timeoutMs: 10_000
+      }
+    );
+  });
+
   it("ssh-shell mode uses interactive attach in tty environments", async () => {
     const handle = createHandle({ run: vi.fn().mockResolvedValue({ stdout: "", stderr: "", exitCode: 0 }) });
     const prepareSession = vi.fn().mockResolvedValue({
@@ -254,12 +302,16 @@ describe("startup modes orchestrator", () => {
     const runInteractiveSession = vi.fn().mockResolvedValue(undefined);
     const cleanupSession = vi.fn().mockResolvedValue(undefined);
 
-    const result = await startShellMode(handle, {
-      isInteractiveTerminal: () => true,
-      prepareSession,
-      runInteractiveSession,
-      cleanupSession
-    });
+    const result = await startShellMode(
+      handle,
+      {},
+      {
+        isInteractiveTerminal: () => true,
+        prepareSession,
+        runInteractiveSession,
+        cleanupSession
+      }
+    );
 
     expect(prepareSession).toHaveBeenCalledWith(handle);
     expect(runInteractiveSession).toHaveBeenCalledWith(
@@ -269,7 +321,7 @@ describe("startup modes orchestrator", () => {
         knownHostsPath: "/tmp/session/known_hosts",
         wsUrl: "wss://8081-sbx.e2b.app"
       },
-      "bash"
+      "bash -lc 'exec bash -i'"
     );
     expect(cleanupSession).toHaveBeenCalledTimes(1);
     expect(result.mode).toBe("ssh-shell");
@@ -277,6 +329,80 @@ describe("startup modes orchestrator", () => {
       session: "interactive",
       status: "completed"
     });
+  });
+
+  it("interactive modes cd into launch working directory", async () => {
+    const session = {
+      tempDir: "/tmp/session",
+      privateKeyPath: "/tmp/session/id_ed25519",
+      knownHostsPath: "/tmp/session/known_hosts",
+      wsUrl: "wss://8081-sbx.e2b.app"
+    };
+
+    const opencodeRunInteractiveSession = vi.fn().mockResolvedValue(undefined);
+    await startOpenCodeMode(
+      createHandle({ run: vi.fn().mockResolvedValue({ stdout: "", stderr: "", exitCode: 0 }) }),
+      { workingDirectory: "/workspace/repo-a", startupEnv: { PROJECT_NAME: "repo-a" } },
+      {
+        isInteractiveTerminal: () => true,
+        prepareSession: vi.fn().mockResolvedValue(session),
+        runInteractiveSession: opencodeRunInteractiveSession,
+        cleanupSession: vi.fn().mockResolvedValue(undefined)
+      }
+    );
+
+    const codexRunInteractiveSession = vi.fn().mockResolvedValue(undefined);
+    await startCodexMode(
+      createHandle({
+        run: vi
+          .fn()
+          .mockResolvedValueOnce({ stdout: "PRESENT", stderr: "", exitCode: 0 })
+          .mockResolvedValueOnce({ stdout: "", stderr: "", exitCode: 0 })
+      }),
+      { workingDirectory: "/workspace/repo-b", startupEnv: { PROJECT_NAME: "repo-b" } },
+      {
+        isInteractiveTerminal: () => true,
+        prepareSession: vi.fn().mockResolvedValue(session),
+        runInteractiveSession: codexRunInteractiveSession,
+        cleanupSession: vi.fn().mockResolvedValue(undefined)
+      }
+    );
+
+    const shellRunInteractiveSession = vi.fn().mockResolvedValue(undefined);
+    await startShellMode(
+      createHandle({ run: vi.fn().mockResolvedValue({ stdout: "", stderr: "", exitCode: 0 }) }),
+      { workingDirectory: "/workspace/repo-c", startupEnv: { PROJECT_NAME: "repo-c" } },
+      {
+        isInteractiveTerminal: () => true,
+        prepareSession: vi.fn().mockResolvedValue(session),
+        runInteractiveSession: shellRunInteractiveSession,
+        cleanupSession: vi.fn().mockResolvedValue(undefined)
+      }
+    );
+
+    expect(opencodeRunInteractiveSession).toHaveBeenCalledWith(
+      session,
+      expect.stringContaining("cd")
+    );
+    expect(opencodeRunInteractiveSession.mock.calls[0]?.[1]).toContain("/workspace/repo-a");
+    expect(opencodeRunInteractiveSession.mock.calls[0]?.[1]).toContain("export PROJECT_NAME");
+    expect(opencodeRunInteractiveSession.mock.calls[0]?.[1]).toContain("exec opencode");
+
+    expect(codexRunInteractiveSession).toHaveBeenCalledWith(
+      session,
+      expect.stringContaining("cd")
+    );
+    expect(codexRunInteractiveSession.mock.calls[0]?.[1]).toContain("/workspace/repo-b");
+    expect(codexRunInteractiveSession.mock.calls[0]?.[1]).toContain("export PROJECT_NAME");
+    expect(codexRunInteractiveSession.mock.calls[0]?.[1]).toContain("exec codex");
+
+    expect(shellRunInteractiveSession).toHaveBeenCalledWith(
+      session,
+      expect.stringContaining("cd")
+    );
+    expect(shellRunInteractiveSession.mock.calls[0]?.[1]).toContain("/workspace/repo-c");
+    expect(shellRunInteractiveSession.mock.calls[0]?.[1]).toContain("export PROJECT_NAME");
+    expect(shellRunInteractiveSession.mock.calls[0]?.[1]).toContain("exec bash -i");
   });
 });
 

@@ -68,6 +68,8 @@ export async function loadConfig(options: LoadConfigOptions = {}): Promise<Resol
         getOptionalEnum(projectRaw, "active", "project.active", PROJECT_ACTIVE_MODES) ??
         defaultConfig.project.active,
       dir: getOptionalString(projectRaw, "dir", "project.dir") ?? defaultConfig.project.dir,
+      working_dir:
+        getOptionalString(projectRaw, "working_dir", "project.working_dir") ?? defaultConfig.project.working_dir,
       setup_on_connect:
         getOptionalBoolean(projectRaw, "setup_on_connect", "project.setup_on_connect") ??
         defaultConfig.project.setup_on_connect,
@@ -110,6 +112,10 @@ export async function loadConfig(options: LoadConfigOptions = {}): Promise<Resol
 
   if (resolved.project.setup_retries < 0 || !Number.isInteger(resolved.project.setup_retries)) {
     throw new Error("Invalid project.setup_retries: expected an integer greater than or equal to 0.");
+  }
+
+  if (resolved.project.working_dir !== "auto" && resolved.project.working_dir.trim() === "") {
+    throw new Error("Invalid project.working_dir: expected 'auto' or a non-empty path string.");
   }
 
   validateFirecrawlPreflight(resolved, mergedEnv);
@@ -170,14 +176,8 @@ function resolveRepos(rawRepos: unknown[] | undefined): ResolvedLauncherConfig["
       branch:
         getOptionalString(entry, "branch", `project.repos[${index}].branch`) ??
         "main",
-      setup_pre_command:
-        getOptionalString(entry, "setup_pre_command", `project.repos[${index}].setup_pre_command`) ??
-        "",
       setup_command:
         getOptionalString(entry, "setup_command", `project.repos[${index}].setup_command`) ??
-        "",
-      setup_wrapper_command:
-        getOptionalString(entry, "setup_wrapper_command", `project.repos[${index}].setup_wrapper_command`) ??
         "",
       setup_env:
         getOptionalStringRecord(entry, "setup_env", `project.repos[${index}].setup_env`) ?? {},
