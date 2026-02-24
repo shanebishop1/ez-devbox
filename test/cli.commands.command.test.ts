@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { runCommandCommand } from "../src/cli/commands.command.js";
 import type { ResolvedLauncherConfig } from "../src/config/schema.js";
+import { logger } from "../src/logging/logger.js";
 
 const baseConfig: ResolvedLauncherConfig = {
   sandbox: {
@@ -203,5 +204,26 @@ describe("runCommandCommand", () => {
         FIRECRAWL_API_KEY: "fc-test"
       }
     });
+  });
+
+  it("logs launcher config path when metadata loader is used", async () => {
+    const infoSpy = vi.spyOn(logger, "info").mockImplementation(() => undefined);
+    const run = vi.fn().mockResolvedValue({ stdout: "ok", stderr: "", exitCode: 0 });
+
+    await runCommandCommand(["--sandbox-id", "sbx-1", "pwd"], {
+      loadConfig: vi.fn().mockResolvedValue(baseConfig),
+      loadConfigWithMetadata: vi.fn().mockResolvedValue({
+        config: baseConfig,
+        configPath: "/tmp/launcher.config.toml",
+        createdConfig: false,
+        scope: "local"
+      }),
+      listSandboxes: vi.fn().mockResolvedValue([]),
+      connectSandbox: vi.fn().mockResolvedValue({ sandboxId: "sbx-1", run }),
+      loadLastRunState: vi.fn().mockResolvedValue(null)
+    });
+
+    expect(infoSpy).toHaveBeenCalledWith("Using launcher config: /tmp/launcher.config.toml");
+    infoSpy.mockRestore();
   });
 });

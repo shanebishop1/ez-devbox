@@ -1,6 +1,6 @@
 import { posix } from "node:path";
 import { createInterface } from "node:readline/promises";
-import { loadConfig, type LoadConfigOptions } from "../config/load.js";
+import { loadConfig, loadConfigWithMetadata, type LoadConfigOptions } from "../config/load.js";
 import { connectSandbox, listSandboxes, type LifecycleOperationOptions, type ListSandboxesOptions, type SandboxHandle, type SandboxListItem } from "../e2b/lifecycle.js";
 import { resolveSandboxCreateEnv, type SandboxCreateEnvResolution } from "../e2b/env.js";
 import { loadLastRunState, type LastRunState } from "../state/lastRun.js";
@@ -9,9 +9,11 @@ import { formatSandboxDisplayLabel } from "./sandbox-display-name.js";
 import { withConfiguredTunnel } from "../tunnel/cloudflared.js";
 import { formatPromptChoice } from "./prompt-style.js";
 import { loadCliEnvSource } from "./env-source.js";
+import { logger } from "../logging/logger.js";
 
 export interface CommandCommandDeps {
   loadConfig: (options?: LoadConfigOptions) => ReturnType<typeof loadConfig>;
+  loadConfigWithMetadata?: (options?: LoadConfigOptions) => ReturnType<typeof loadConfigWithMetadata>;
   listSandboxes: (options?: ListSandboxesOptions) => Promise<SandboxListItem[]>;
   connectSandbox: (
     sandboxId: string,
@@ -30,6 +32,7 @@ export interface CommandCommandDeps {
 
 const defaultDeps: CommandCommandDeps = {
   loadConfig,
+  loadConfigWithMetadata,
   listSandboxes,
   connectSandbox,
   resolveEnvSource: loadCliEnvSource,
@@ -41,7 +44,11 @@ const defaultDeps: CommandCommandDeps = {
 
 export async function runCommandCommand(args: string[], deps: CommandCommandDeps = defaultDeps): Promise<CommandResult> {
   const parsed = parseCommandArgs(args);
-  const config = await deps.loadConfig();
+  const loadedConfig = deps.loadConfigWithMetadata ? await deps.loadConfigWithMetadata() : undefined;
+  const config = loadedConfig ? loadedConfig.config : await deps.loadConfig();
+  if (loadedConfig) {
+    logger.info(`Using launcher config: ${loadedConfig.configPath}`);
+  }
   return withConfiguredTunnel(config, async (tunnelRuntimeEnv) => {
     const sandboxTarget = await resolveSandboxTarget(parsed.sandboxId, deps);
     const selectedRepos = await resolveSelectedRepos(config.project.repos, config.project.mode, config.project.active, deps);

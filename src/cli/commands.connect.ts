@@ -1,7 +1,7 @@
 import { createInterface } from "node:readline/promises";
 import type { CommandResult } from "../types/index.js";
 import type { StartupMode } from "../types/index.js";
-import { loadConfig, type LoadConfigOptions } from "../config/load.js";
+import { loadConfig, loadConfigWithMetadata, type LoadConfigOptions } from "../config/load.js";
 import {
   connectSandbox,
   listSandboxes,
@@ -24,6 +24,7 @@ import { loadCliEnvSource } from "./env-source.js";
 
 export interface ConnectCommandDeps {
   loadConfig: (options?: LoadConfigOptions) => ReturnType<typeof loadConfig>;
+  loadConfigWithMetadata?: (options?: LoadConfigOptions) => ReturnType<typeof loadConfigWithMetadata>;
   connectSandbox: (
     sandboxId: string,
     config: Awaited<ReturnType<typeof loadConfig>>,
@@ -52,6 +53,7 @@ export interface ConnectCommandDeps {
 
 const defaultDeps: ConnectCommandDeps = {
   loadConfig,
+  loadConfigWithMetadata,
   connectSandbox,
   loadLastRunState,
   listSandboxes,
@@ -75,7 +77,11 @@ export async function runConnectCommand(
   options: ConnectCommandOptions = {}
 ): Promise<CommandResult> {
   const parsed = parseConnectArgs(args);
-  const config = await deps.loadConfig();
+  const loadedConfig = deps.loadConfigWithMetadata ? await deps.loadConfigWithMetadata() : undefined;
+  const config = loadedConfig ? loadedConfig.config : await deps.loadConfig();
+  if (loadedConfig) {
+    logger.info(`Using launcher config: ${loadedConfig.configPath}`);
+  }
 
   return withConfiguredTunnel(config, async (tunnelRuntimeEnv) => {
     const target = await resolveSandboxTarget(parsed.sandboxId, deps, options);
