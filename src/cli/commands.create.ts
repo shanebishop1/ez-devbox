@@ -1,6 +1,6 @@
 import type { CommandResult } from "../types/index.js";
 import type { StartupMode } from "../types/index.js";
-import { loadConfig, type LoadConfigOptions } from "../config/load.js";
+import { loadConfig, loadConfigWithMetadata, type LoadConfigOptions } from "../config/load.js";
 import { createSandbox, type CreateSandboxOptions, type SandboxHandle } from "../e2b/lifecycle.js";
 import { resolveSandboxCreateEnv, type SandboxCreateEnvResolution } from "../e2b/env.js";
 import { launchMode, resolveStartupMode, type ConcreteStartupMode, type ModeLaunchResult } from "../modes/index.js";
@@ -28,6 +28,7 @@ const TOOLING_SYNC_PROGRESS_LOG_INTERVAL = 50;
 
 export interface CreateCommandDeps {
   loadConfig: (options?: LoadConfigOptions) => ReturnType<typeof loadConfig>;
+  loadConfigWithMetadata?: (options?: LoadConfigOptions) => ReturnType<typeof loadConfigWithMetadata>;
   createSandbox: (
     config: Awaited<ReturnType<typeof loadConfig>>,
     options?: CreateSandboxOptions
@@ -56,6 +57,7 @@ export interface CreateCommandDeps {
 
 const defaultDeps: CreateCommandDeps = {
   loadConfig,
+  loadConfigWithMetadata,
   createSandbox,
   resolveEnvSource: loadCliEnvSource,
   resolveSandboxCreateEnv,
@@ -68,7 +70,11 @@ const defaultDeps: CreateCommandDeps = {
 
 export async function runCreateCommand(args: string[], deps: CreateCommandDeps = defaultDeps): Promise<CommandResult> {
   const parsed = parseCreateArgs(args);
-  const config = await deps.loadConfig();
+  const loadedConfig = deps.loadConfigWithMetadata ? await deps.loadConfigWithMetadata() : undefined;
+  const config = loadedConfig ? loadedConfig.config : await deps.loadConfig();
+  if (loadedConfig) {
+    logger.info(`Using launcher config: ${loadedConfig.configPath}`);
+  }
   return withConfiguredTunnel(config, async (tunnelRuntimeEnv) => {
     const requestedMode = parsed.mode ?? config.startup.mode;
     logger.verbose(`Resolving startup mode from '${requestedMode}'.`);
