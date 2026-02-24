@@ -77,6 +77,7 @@ function createConfig(mcp: Partial<ResolvedLauncherConfig["mcp"]>): ResolvedLaun
       mode: "single",
       active: "prompt",
       dir: "/workspace",
+      working_dir: "auto",
       setup_on_connect: false,
       setup_retries: 2,
       setup_continue_on_error: false,

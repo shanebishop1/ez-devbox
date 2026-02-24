@@ -8,9 +8,7 @@ function createRepo(name: string): ResolvedProjectRepoConfig {
     name,
     url: `https://example.com/${name}.git`,
     branch: "main",
-    setup_pre_command: "",
     setup_command: "npm ci",
-    setup_wrapper_command: "",
     setup_env: {},
     startup_env: {
       REPO_NAME: name
@@ -34,6 +32,7 @@ function createConfig(overrides?: Partial<ResolvedLauncherConfig["project"]>): R
       mode: "single",
       active: "prompt",
       dir: "/workspace",
+      working_dir: "auto",
       setup_on_connect: false,
       setup_retries: 2,
       setup_continue_on_error: false,
@@ -94,7 +93,84 @@ describe("project bootstrap", () => {
     expect(result.selectedRepoNames).toEqual(["alpha", "beta"]);
     expect(result.workingDirectory).toBe("/workspace");
     expect(result.startupEnv).toEqual({});
-    expect(provisionSelectedRepos).toHaveBeenCalledWith(handle, "/workspace", repos);
+    expect(provisionSelectedRepos).toHaveBeenCalledWith(handle, "/workspace", repos, expect.objectContaining({ timeoutMs: 1000 }));
+  });
+
+  it("keeps auto working_dir behavior for none/single/multiple repos", async () => {
+    const handle = createHandle();
+    const ensureProjectDirectory = vi.fn().mockResolvedValue(undefined);
+    const runSetupForRepos = vi.fn().mockResolvedValue({ success: true, repos: [] });
+
+    const noneResult = await bootstrapProjectWorkspace(handle, createConfig({ repos: [], working_dir: "auto" }), {
+      deps: {
+        ensureProjectDirectory,
+        provisionSelectedRepos: vi.fn().mockResolvedValue([]),
+        runSetupForRepos
+      }
+    });
+
+    const singleResult = await bootstrapProjectWorkspace(handle, createConfig({ repos: [createRepo("alpha")], working_dir: "auto" }), {
+      deps: {
+        ensureProjectDirectory,
+        provisionSelectedRepos: vi.fn().mockResolvedValue([
+          { repo: "alpha", path: "/workspace/alpha", cloned: false, reused: true, branchSwitched: false }
+        ]),
+        runSetupForRepos
+      }
+    });
+
+    const multiResult = await bootstrapProjectWorkspace(
+      handle,
+      createConfig({ mode: "all", repos: [createRepo("alpha"), createRepo("beta")], working_dir: "auto" }),
+      {
+        deps: {
+          ensureProjectDirectory,
+          provisionSelectedRepos: vi.fn().mockResolvedValue([
+            { repo: "alpha", path: "/workspace/alpha", cloned: false, reused: true, branchSwitched: false },
+            { repo: "beta", path: "/workspace/beta", cloned: false, reused: true, branchSwitched: false }
+          ]),
+          runSetupForRepos
+        }
+      }
+    );
+
+    expect(noneResult.workingDirectory).toBeUndefined();
+    expect(singleResult.workingDirectory).toBe("/workspace/alpha");
+    expect(multiResult.workingDirectory).toBe("/workspace");
+  });
+
+  it("uses absolute project.working_dir as launch cwd", async () => {
+    const config = createConfig({ working_dir: "/opt/custom-cwd", repos: [createRepo("alpha")] });
+    const handle = createHandle();
+
+    const result = await bootstrapProjectWorkspace(handle, config, {
+      deps: {
+        ensureProjectDirectory: vi.fn().mockResolvedValue(undefined),
+        provisionSelectedRepos: vi.fn().mockResolvedValue([
+          { repo: "alpha", path: "/workspace/alpha", cloned: false, reused: true, branchSwitched: false }
+        ]),
+        runSetupForRepos: vi.fn().mockResolvedValue({ success: true, repos: [] })
+      }
+    });
+
+    expect(result.workingDirectory).toBe("/opt/custom-cwd");
+  });
+
+  it("resolves relative project.working_dir under project.dir", async () => {
+    const config = createConfig({ working_dir: "./custom-cwd", repos: [createRepo("alpha")] });
+    const handle = createHandle();
+
+    const result = await bootstrapProjectWorkspace(handle, config, {
+      deps: {
+        ensureProjectDirectory: vi.fn().mockResolvedValue(undefined),
+        provisionSelectedRepos: vi.fn().mockResolvedValue([
+          { repo: "alpha", path: "/workspace/alpha", cloned: false, reused: true, branchSwitched: false }
+        ]),
+        runSetupForRepos: vi.fn().mockResolvedValue({ success: true, repos: [] })
+      }
+    });
+
+    expect(result.workingDirectory).toBe("/workspace/custom-cwd");
   });
 
   it("supports single prompt selection", async () => {
@@ -119,7 +195,12 @@ describe("project bootstrap", () => {
     expect(result.selectedRepoNames).toEqual(["beta"]);
     expect(result.workingDirectory).toBe("/workspace/beta");
     expect(result.startupEnv).toEqual({ REPO_NAME: "beta" });
-    expect(provisionSelectedRepos).toHaveBeenCalledWith(handle, "/workspace", [repos[1]]);
+    expect(provisionSelectedRepos).toHaveBeenCalledWith(
+      handle,
+      "/workspace",
+      [repos[1]],
+      expect.objectContaining({ timeoutMs: 1000 })
+    );
   });
 
   it("falls back to first repo for non-interactive prompt", async () => {
@@ -198,5 +279,75 @@ describe("project bootstrap", () => {
 
     expect(runSetupForReposA).toHaveBeenCalledTimes(1);
     expect(runSetupForReposB).toHaveBeenCalledTimes(1);
+  });
+
+  it("uses deterministic stdout markers for boolean repo existence checks", async () => {
+    const config = createConfig({ repos: [createRepo("alpha")] });
+    const run = vi.fn().mockImplementation(async (command: string) => {
+      if (command.startsWith("mkdir -p")) {
+        return { stdout: "", stderr: "", exitCode: 0 };
+      }
+      if (command.includes("if [ -e '/workspace/alpha' ]")) {
+        return { stdout: "EZBOX_FALSE", stderr: "", exitCode: 0 };
+      }
+      if (command.startsWith("git clone ")) {
+        return { stdout: "", stderr: "", exitCode: 0 };
+      }
+      if (command.includes("rev-parse --abbrev-ref HEAD")) {
+        return { stdout: "main\n", stderr: "", exitCode: 0 };
+      }
+      if (command === "npm ci") {
+        return { stdout: "done\n", stderr: "", exitCode: 0 };
+      }
+
+      return { stdout: "", stderr: "", exitCode: 0 };
+    });
+    const handle = {
+      ...createHandle(),
+      run
+    };
+
+    const result = await bootstrapProjectWorkspace(handle, config);
+
+    expect(result.selectedRepoNames).toEqual(["alpha"]);
+    expect(run).toHaveBeenCalledWith(
+      "if [ -e '/workspace/alpha' ]; then printf EZBOX_TRUE; else printf EZBOX_FALSE; fi",
+      expect.objectContaining({ timeoutMs: 1000 })
+    );
+  });
+
+  it("maps setup runner events to progress callback", async () => {
+    const progress = vi.fn();
+    const runSetupForRepos = vi.fn().mockImplementation(async (_handle, _repos, _provisionedRepos, options) => {
+      options.onEvent?.({ type: "step:start", repo: "alpha", step: "setup_command", command: "npm ci", attempt: 1 });
+      options.onEvent?.({
+        type: "step:retry",
+        repo: "alpha",
+        step: "setup_command",
+        command: "npm ci",
+        attempt: 1,
+        nextAttempt: 2,
+        error: "deadline exceeded"
+      });
+      options.onEvent?.({ type: "step:success", repo: "alpha", step: "setup_command", command: "npm ci", attempts: 2 });
+      return { success: true, repos: [] };
+    });
+
+    await bootstrapProjectWorkspace(createHandle(), createConfig({ repos: [createRepo("alpha")] }), {
+      onProgress: progress,
+      deps: {
+        ensureProjectDirectory: vi.fn().mockResolvedValue(undefined),
+        provisionSelectedRepos: vi.fn().mockResolvedValue([
+          { repo: "alpha", path: "/workspace/alpha", cloned: true, reused: false, branchSwitched: false }
+        ]),
+        runSetupForRepos
+      }
+    });
+
+    expect(progress).toHaveBeenCalledWith("Setup start: repo=alpha step=setup_command attempt=1");
+    expect(progress).toHaveBeenCalledWith(
+      "Setup retry: repo=alpha step=setup_command attempt=1 next=2 error=deadline exceeded"
+    );
+    expect(progress).toHaveBeenCalledWith("Setup success: repo=alpha step=setup_command attempts=2");
   });
 });

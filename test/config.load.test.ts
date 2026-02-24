@@ -69,6 +69,7 @@ describe("loadConfig", () => {
 
     expect(resolved.startup.mode).toBe("web");
     expect(resolved.project.dir).toBe("/home/user/projects/workspace");
+    expect(resolved.project.working_dir).toBe("auto");
     expect(resolved.project.setup_on_connect).toBe(false);
     expect(resolved.project.setup_retries).toBe(2);
     expect(resolved.project.setup_continue_on_error).toBe(false);
@@ -132,6 +133,36 @@ describe("loadConfig", () => {
 
     await expect(loadConfig({ configPath, envPath })).rejects.toThrow(
       "startup.mode"
+    );
+  });
+
+  it("accepts project.working_dir path override", async () => {
+    const configPath = join(tempDir, "launcher.config.toml");
+    const envPath = join(tempDir, ".env");
+
+    await writeFile(
+      configPath,
+      ["[project]", 'working_dir = "./custom-cwd"'].join("\n")
+    );
+    await writeFile(envPath, "E2B_API_KEY=test-e2b-key\n");
+
+    const resolved = await loadConfig({ configPath, envPath });
+
+    expect(resolved.project.working_dir).toBe("./custom-cwd");
+  });
+
+  it("rejects empty project.working_dir", async () => {
+    const configPath = join(tempDir, "launcher.config.toml");
+    const envPath = join(tempDir, ".env");
+
+    await writeFile(
+      configPath,
+      ["[project]", 'working_dir = ""'].join("\n")
+    );
+    await writeFile(envPath, "E2B_API_KEY=test-e2b-key\n");
+
+    await expect(loadConfig({ configPath, envPath })).rejects.toThrow(
+      "project.working_dir"
     );
   });
 

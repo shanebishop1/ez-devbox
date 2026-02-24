@@ -1,9 +1,15 @@
 import { createInterface } from "node:readline/promises";
-import { join } from "node:path";
+import { isAbsolute, join, resolve as resolvePath } from "node:path";
 import type { ResolvedLauncherConfig, ResolvedProjectRepoConfig } from "../config/schema.js";
 import type { SandboxHandle } from "../e2b/lifecycle.js";
 import { provisionRepos, type GitAdapter, type ProvisionedRepoSummary, type RepoExecutor } from "../repo/manager.js";
-import { runSetupPipeline, type RunSetupPipelineOptions, type SetupCommandExecutor, type SetupPipelineResult } from "../setup/runner.js";
+import {
+  runSetupPipeline,
+  type RunSetupPipelineOptions,
+  type SetupCommandExecutor,
+  type SetupPipelineResult,
+  type SetupRunnerEvent
+} from "../setup/runner.js";
 
 export interface BootstrapProjectWorkspaceResult {
   selectedRepoNames: string[];
@@ -14,11 +20,12 @@ export interface BootstrapProjectWorkspaceResult {
 }
 
 export interface BootstrapProjectWorkspaceDeps {
-  ensureProjectDirectory: (handle: SandboxHandle, projectDir: string) => Promise<void>;
+  ensureProjectDirectory: (handle: SandboxHandle, projectDir: string, options: { timeoutMs: number }) => Promise<void>;
   provisionSelectedRepos: (
     handle: SandboxHandle,
     projectDir: string,
-    repos: ResolvedProjectRepoConfig[]
+    repos: ResolvedProjectRepoConfig[],
+    options: { timeoutMs: number; onProgress?: (message: string) => void }
   ) => Promise<ProvisionedRepoSummary[]>;
   runSetupForRepos: (
     handle: SandboxHandle,
@@ -32,6 +39,7 @@ export interface BootstrapProjectWorkspaceOptions {
   isConnect?: boolean;
   isInteractiveTerminal?: () => boolean;
   promptInput?: (question: string) => Promise<string>;
+  onProgress?: (message: string) => void;
   deps?: Partial<BootstrapProjectWorkspaceDeps>;
 }
 
@@ -51,20 +59,29 @@ export async function bootstrapProjectWorkspace(
     ...(options.deps ?? {})
   };
 
-  await deps.ensureProjectDirectory(handle, config.project.dir);
+  const timeoutMs = config.sandbox.timeout_ms;
+  await deps.ensureProjectDirectory(handle, config.project.dir, { timeoutMs });
 
   const selectedRepos = await selectRepos(config.project.repos, config.project.mode, config.project.active, {
     isInteractiveTerminal: options.isInteractiveTerminal,
     promptInput: options.promptInput
   });
+  options.onProgress?.(
+    selectedRepos.length === 0
+      ? "Bootstrap repos: none selected"
+      : `Bootstrap repos selected: ${selectedRepos.map((repo) => repo.name).join(", ")}`
+  );
 
-  const provisionedRepos = await deps.provisionSelectedRepos(handle, config.project.dir, selectedRepos);
+  const provisionedRepos = await deps.provisionSelectedRepos(handle, config.project.dir, selectedRepos, {
+    timeoutMs,
+    onProgress: options.onProgress
+  });
   const selectedRepoNames = selectedRepos.map((repo) => repo.name);
-  const setup = await maybeRunSetup(handle, selectedRepos, provisionedRepos, config, options.isConnect ?? false, deps);
+  const setup = await maybeRunSetup(handle, selectedRepos, provisionedRepos, config, options.isConnect ?? false, deps, options.onProgress);
 
   return {
     selectedRepoNames,
-    workingDirectory: resolveWorkingDirectory(config.project.dir, provisionedRepos),
+    workingDirectory: resolveWorkingDirectory(config.project.dir, config.project.working_dir, provisionedRepos),
     startupEnv: resolveStartupEnv(selectedRepos),
     provisionedRepos,
     setup
@@ -77,7 +94,8 @@ async function maybeRunSetup(
   provisionedRepos: ProvisionedRepoSummary[],
   config: ResolvedLauncherConfig,
   isConnect: boolean,
-  deps: BootstrapProjectWorkspaceDeps
+  deps: BootstrapProjectWorkspaceDeps,
+  onProgress?: (message: string) => void
 ): Promise<SetupPipelineResult | null> {
   if (selectedRepos.length === 0) {
     return null;
@@ -96,7 +114,14 @@ async function maybeRunSetup(
     retryPolicy: {
       attempts: config.project.setup_retries + 1
     },
-    continueOnError: config.project.setup_continue_on_error
+    continueOnError: config.project.setup_continue_on_error,
+    timeoutMs: config.sandbox.timeout_ms,
+    onEvent: (event) => {
+      const message = formatSetupProgressEvent(event);
+      if (message) {
+        onProgress?.(message);
+      }
+    }
   });
 }
 
@@ -155,16 +180,24 @@ async function promptInput(question: string): Promise<string> {
   }
 }
 
-function resolveWorkingDirectory(projectDir: string, provisionedRepos: ProvisionedRepoSummary[]): string | undefined {
-  if (provisionedRepos.length === 0) {
-    return undefined;
+function resolveWorkingDirectory(
+  projectDir: string,
+  workingDirConfig: string,
+  provisionedRepos: ProvisionedRepoSummary[]
+): string | undefined {
+  if (workingDirConfig === "auto") {
+    if (provisionedRepos.length === 0) {
+      return undefined;
+    }
+
+    if (provisionedRepos.length === 1) {
+      return provisionedRepos[0].path;
+    }
+
+    return projectDir;
   }
 
-  if (provisionedRepos.length === 1) {
-    return provisionedRepos[0].path;
-  }
-
-  return projectDir;
+  return isAbsolute(workingDirConfig) ? workingDirConfig : resolvePath(projectDir, workingDirConfig);
 }
 
 function resolveStartupEnv(selectedRepos: ResolvedProjectRepoConfig[]): Record<string, string> {
@@ -177,8 +210,11 @@ function resolveStartupEnv(selectedRepos: ResolvedProjectRepoConfig[]): Record<s
   };
 }
 
-async function ensureProjectDirectory(handle: SandboxHandle, projectDir: string): Promise<void> {
-  const result = await handle.run(`mkdir -p ${quoteShellArg(projectDir)}`);
+async function ensureProjectDirectory(handle: SandboxHandle, projectDir: string, options: { timeoutMs: number }): Promise<void> {
+  const result = await runCommand(handle, `mkdir -p ${quoteShellArg(projectDir)}`, {
+    timeoutMs: options.timeoutMs,
+    commandLabel: `ensure project directory '${projectDir}'`
+  });
   if (result.exitCode !== 0) {
     throw new Error(`Failed to create project directory '${projectDir}': ${result.stderr || "unknown error"}`);
   }
@@ -187,36 +223,67 @@ async function ensureProjectDirectory(handle: SandboxHandle, projectDir: string)
 async function provisionSelectedRepos(
   handle: SandboxHandle,
   projectDir: string,
-  repos: ResolvedProjectRepoConfig[]
+  repos: ResolvedProjectRepoConfig[],
+  options: { timeoutMs: number; onProgress?: (message: string) => void }
 ): Promise<ProvisionedRepoSummary[]> {
   const git: GitAdapter = {
     async exists(path) {
-      return runBoolCheck(handle, `[ -e ${quoteShellArg(path)} ]`);
+      options.onProgress?.(`Repo check: ${path}`);
+      return runBoolCheck(handle, `if [ -e ${quoteShellArg(path)} ]; then printf EZBOX_TRUE; else printf EZBOX_FALSE; fi`, {
+        timeoutMs: options.timeoutMs,
+        commandLabel: `check path exists '${path}'`
+      });
     },
     async isGitRepo(path) {
-      return runBoolCheck(handle, `[ -d ${quoteShellArg(join(path, ".git"))} ]`);
+      options.onProgress?.(`Repo validate git: ${path}`);
+      return runBoolCheck(
+        handle,
+        `if [ -d ${quoteShellArg(join(path, ".git"))} ]; then printf EZBOX_TRUE; else printf EZBOX_FALSE; fi`,
+        {
+          timeoutMs: options.timeoutMs,
+          commandLabel: `check git repo '${path}'`
+        }
+      );
     }
   };
 
   const executor: RepoExecutor = {
     async clone(url, targetPath) {
-      await runRequiredCommand(handle, `git clone ${quoteShellArg(url)} ${quoteShellArg(targetPath)}`);
+      options.onProgress?.(`Repo clone: ${targetPath}`);
+      await runRequiredCommand(handle, `git clone ${quoteShellArg(url)} ${quoteShellArg(targetPath)}`, {
+        timeoutMs: options.timeoutMs,
+        commandLabel: `clone repo '${targetPath}'`
+      });
     },
     async getCurrentBranch(repoPath) {
-      const result = await runRequiredCommand(handle, `git -C ${quoteShellArg(repoPath)} rev-parse --abbrev-ref HEAD`);
+      options.onProgress?.(`Repo branch detect: ${repoPath}`);
+      const result = await runRequiredCommand(handle, `git -C ${quoteShellArg(repoPath)} rev-parse --abbrev-ref HEAD`, {
+        timeoutMs: options.timeoutMs,
+        commandLabel: `detect branch '${repoPath}'`
+      });
       return result.stdout.trim();
     },
     async checkoutBranch(repoPath, branch) {
-      await runRequiredCommand(handle, `git -C ${quoteShellArg(repoPath)} checkout ${quoteShellArg(branch)}`);
+      options.onProgress?.(`Repo branch switch: ${repoPath} -> ${branch}`);
+      await runRequiredCommand(handle, `git -C ${quoteShellArg(repoPath)} checkout ${quoteShellArg(branch)}`, {
+        timeoutMs: options.timeoutMs,
+        commandLabel: `checkout branch '${branch}' in '${repoPath}'`
+      });
     }
   };
 
-  return provisionRepos({
+  const summaries = await provisionRepos({
     projectDir,
     repos,
     git,
     executor
   });
+
+  for (const summary of summaries) {
+    options.onProgress?.(`Repo provisioned: ${summary.repo} reused=${summary.reused} cloned=${summary.cloned} branchSwitched=${summary.branchSwitched}`);
+  }
+
+  return summaries;
 }
 
 async function runSetupForRepos(
@@ -228,10 +295,11 @@ async function runSetupForRepos(
   const pathByName = new Map(provisionedRepos.map((repo) => [repo.repo, repo.path]));
   const executor: SetupCommandExecutor = {
     async run(command, runOptions) {
-      const result = await handle.run(command, {
+      const result = await runCommand(handle, command, {
         cwd: runOptions.cwd,
         envs: runOptions.env,
-        timeoutMs: runOptions.timeoutMs
+        timeoutMs: runOptions.timeoutMs,
+        commandLabel: `setup command '${command}'`
       });
 
       emitLines(result.stdout, runOptions.onStdoutLine);
@@ -254,9 +322,7 @@ async function runSetupForRepos(
     return {
       name: repo.name,
       path,
-      setup_pre_command: repo.setup_pre_command,
       setup_command: repo.setup_command,
-      setup_wrapper_command: repo.setup_wrapper_command,
       setup_env: repo.setup_env
     };
   });
@@ -264,26 +330,81 @@ async function runSetupForRepos(
   return runSetupPipeline(setupRepos, executor, options);
 }
 
-async function runBoolCheck(handle: SandboxHandle, command: string): Promise<boolean> {
-  const result = await handle.run(command);
-  if (result.exitCode === 0) {
+async function runBoolCheck(
+  handle: SandboxHandle,
+  command: string,
+  options: { timeoutMs: number; commandLabel: string }
+): Promise<boolean> {
+  const result = await runCommand(handle, command, {
+    timeoutMs: options.timeoutMs,
+    commandLabel: options.commandLabel
+  });
+  if (result.exitCode !== 0) {
+    throw new Error(`Command failed: ${command}: ${result.stderr || "unknown error"}`);
+  }
+
+  const marker = result.stdout.trim();
+  if (marker === "EZBOX_TRUE") {
     return true;
   }
-  if (result.exitCode === 1) {
+  if (marker === "EZBOX_FALSE") {
     return false;
   }
-  throw new Error(`Command failed: ${command}: ${result.stderr || "unknown error"}`);
+
+  throw new Error(`Command failed: ${command}: unexpected boolean marker '${marker || "empty"}'`);
 }
 
 async function runRequiredCommand(
   handle: SandboxHandle,
-  command: string
+  command: string,
+  options: { timeoutMs: number; commandLabel: string }
 ): Promise<{ stdout: string; stderr: string; exitCode: number }> {
-  const result = await handle.run(command);
+  const result = await runCommand(handle, command, {
+    timeoutMs: options.timeoutMs,
+    commandLabel: options.commandLabel
+  });
   if (result.exitCode !== 0) {
     throw new Error(`Command failed: ${command}: ${result.stderr || "unknown error"}`);
   }
   return result;
+}
+
+async function runCommand(
+  handle: SandboxHandle,
+  command: string,
+  options: { timeoutMs?: number; cwd?: string; envs?: Record<string, string>; commandLabel: string }
+): Promise<{ stdout: string; stderr: string; exitCode: number }> {
+  try {
+    return await handle.run(command, {
+      timeoutMs: options.timeoutMs,
+      cwd: options.cwd,
+      envs: options.envs
+    });
+  } catch (error) {
+    throw new Error(`Bootstrap command failed (${options.commandLabel}): ${toErrorMessage(error)}`);
+  }
+}
+
+function formatSetupProgressEvent(event: SetupRunnerEvent): string | null {
+  switch (event.type) {
+    case "step:start":
+      return `Setup start: repo=${event.repo} step=${event.step} attempt=${event.attempt}`;
+    case "step:retry":
+      return `Setup retry: repo=${event.repo} step=${event.step} attempt=${event.attempt} next=${event.nextAttempt} error=${event.error}`;
+    case "step:success":
+      return `Setup success: repo=${event.repo} step=${event.step} attempts=${event.attempts}`;
+    case "step:failure":
+      return `Setup failure: repo=${event.repo} step=${event.step} attempts=${event.attempts} error=${event.error}`;
+    default:
+      return null;
+  }
+}
+
+function toErrorMessage(error: unknown): string {
+  if (error instanceof Error && error.message.trim() !== "") {
+    return error.message;
+  }
+  return "unknown error";
 }
 
 function emitLines(output: string, onLine?: (line: string) => void): void {

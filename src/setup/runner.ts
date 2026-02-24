@@ -3,9 +3,7 @@ import { resolveRetryPolicy, type RetryPolicy, type SleepFn, withRetry } from ".
 export interface SetupRepoConfig {
   name: string;
   path: string;
-  setup_pre_command: string;
   setup_command: string;
-  setup_wrapper_command: string;
   setup_env: Record<string, string>;
 }
 
@@ -28,7 +26,7 @@ export interface SetupCommandExecutor {
 }
 
 export interface SetupStepSummary {
-  step: "setup_pre_command" | "setup_command";
+  step: "setup_command";
   command: string;
   success: boolean;
   attempts: number;
@@ -83,10 +81,7 @@ export async function runSetupPipeline(
   const repoResults: SetupRepoSummary[] = [];
 
   for (const repo of repos) {
-    const stepDefinitions = [
-      { step: "setup_pre_command" as const, command: repo.setup_pre_command.trim() },
-      { step: "setup_command" as const, command: buildWrappedSetupCommand(repo.setup_command, repo.setup_wrapper_command) }
-    ];
+    const stepDefinitions = [{ step: "setup_command" as const, command: repo.setup_command.trim() }];
 
     const stepSummaries: SetupStepSummary[] = [];
     let repoSuccess = true;
@@ -212,24 +207,6 @@ export async function runSetupPipeline(
     success: repoResults.every((entry) => entry.success),
     repos: repoResults
   };
-}
-
-function buildWrappedSetupCommand(setupCommand: string, wrapperCommand: string): string {
-  const normalizedSetup = setupCommand.trim();
-  if (!normalizedSetup) {
-    return "";
-  }
-
-  const normalizedWrapper = wrapperCommand.trim();
-  if (!normalizedWrapper) {
-    return normalizedSetup;
-  }
-
-  if (normalizedWrapper.includes("{command}")) {
-    return normalizedWrapper.replaceAll("{command}", normalizedSetup);
-  }
-
-  return `${normalizedWrapper} ${normalizedSetup}`;
 }
 
 function formatCommandError(command: string, exitCode: number, stderr?: string): string {

@@ -24,6 +24,7 @@ import {
   type ToolingSyncSummary
 } from "../tooling/host-sandbox-sync.js";
 import { resolvePromptStartupMode } from "./startup-mode-prompt.js";
+import { bootstrapProjectWorkspace, type BootstrapProjectWorkspaceResult } from "../project/bootstrap.js";
 
 const TOOLING_SYNC_PROGRESS_LOG_INTERVAL = 50;
 
@@ -37,7 +38,12 @@ export interface ConnectCommandDeps {
   loadLastRunState: () => Promise<LastRunState | null>;
   listSandboxes: (options?: ListSandboxesOptions) => Promise<SandboxListItem[]>;
   resolvePromptStartupMode: (requestedMode: StartupMode) => Promise<StartupMode>;
-  launchMode: (handle: SandboxHandle, mode: StartupMode) => Promise<ModeLaunchResult>;
+  launchMode: (handle: SandboxHandle, mode: StartupMode, options?: { workingDirectory?: string; startupEnv?: Record<string, string> }) => Promise<ModeLaunchResult>;
+  bootstrapProjectWorkspace?: (
+    handle: SandboxHandle,
+    config: Awaited<ReturnType<typeof loadConfig>>,
+    options?: { isConnect?: boolean; onProgress?: (message: string) => void }
+  ) => Promise<BootstrapProjectWorkspaceResult>;
   syncToolingToSandbox: (
     config: Awaited<ReturnType<typeof loadConfig>>,
     sandbox: Pick<SandboxHandle, "writeFile">,
@@ -92,12 +98,26 @@ export async function runConnectCommand(
   logger.info(`Syncing local tooling config/auth for mode '${resolvedMode}'.`);
   const syncSummary = await deps.syncToolingToSandbox(config, handle, resolvedMode);
 
+  logger.info("Starting project bootstrap.");
+  const bootstrapResult = await (deps.bootstrapProjectWorkspace ?? bootstrapProjectWorkspace)(handle, config, {
+    isConnect: true,
+    onProgress: (message) => logger.info(`Bootstrap: ${message}`)
+  });
+  logger.info(`Selected repos summary: ${formatSelectedReposSummary(bootstrapResult.selectedRepoNames)}.`);
+  logger.info(`Setup outcome summary: ${formatSetupOutcomeSummary(bootstrapResult.setup)}.`);
+
   logger.info(`Launching startup mode '${mode}'.`);
-  const launched = await deps.launchMode(handle, mode);
+  const launched = await deps.launchMode(handle, mode, {
+    workingDirectory: bootstrapResult.workingDirectory,
+    startupEnv: bootstrapResult.startupEnv
+  });
+
+  const activeRepo = bootstrapResult.selectedRepoNames.length === 1 ? bootstrapResult.selectedRepoNames[0] : undefined;
 
   await deps.saveLastRunState({
     sandboxId: handle.sandboxId,
     mode: launched.mode,
+    activeRepo,
     updatedAt: deps.now()
   });
 
@@ -105,6 +125,21 @@ export async function runConnectCommand(
     message: `Connected to sandbox ${targetLabel}. ${launched.message}\nTooling sync: ${formatToolingSyncSummary(syncSummary)}`,
     exitCode: 0
   };
+}
+
+function formatSelectedReposSummary(selectedRepoNames: string[]): string {
+  if (selectedRepoNames.length === 0) {
+    return "none";
+  }
+  return selectedRepoNames.join(", ");
+}
+
+function formatSetupOutcomeSummary(setup: BootstrapProjectWorkspaceResult["setup"]): string {
+  if (setup === null) {
+    return "skipped";
+  }
+
+  return `ran success=${setup.success} repos=${setup.repos.length}`;
 }
 
 async function syncToolingForMode(

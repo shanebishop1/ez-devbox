@@ -23,11 +23,33 @@ describe("CLI bootstrap routing", () => {
     expect(resolved.args).toEqual(["--yes"]);
   });
 
+  it("routes list command with passthrough args", () => {
+    const resolved = resolveCliCommand(["list", "--verbose"]);
+
+    expect(resolved.command).toBe("list");
+    expect(resolved.args).toEqual(["--verbose"]);
+  });
+
+  it("routes command command with passthrough args", () => {
+    const resolved = resolveCliCommand(["command", "--sandbox-id", "sbx-1", "--", "pwd"]);
+
+    expect(resolved.command).toBe("command");
+    expect(resolved.args).toEqual(["--sandbox-id", "sbx-1", "--", "pwd"]);
+  });
+
   it("includes wipe in help text", () => {
     expect(renderHelp()).toContain("wipe     Delete a sandbox by prompt or --sandbox-id");
   });
 
   it("includes wipe-all in help text", () => {
     expect(renderHelp()).toContain("wipe-all Delete all sandboxes (use --yes to skip prompt)");
+  });
+
+  it("includes list in help text", () => {
+    expect(renderHelp()).toContain("list     List available sandboxes");
+  });
+
+  it("includes command in help text", () => {
+    expect(renderHelp()).toContain("command  Run a command in a selected sandbox");
   });
 });

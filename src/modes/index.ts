@@ -17,11 +17,18 @@ export interface ModeLaunchResult {
   details?: Record<string, string | number | boolean>;
 }
 
-export interface LaunchModeOptions {
-  promptFallbackMode?: ConcreteStartupMode;
+export interface LaunchContextOptions {
+  workingDirectory?: string;
+  startupEnv?: Record<string, string>;
 }
 
-type ConcreteModeRunner = (handle: SandboxHandle) => Promise<ModeLaunchResult>;
+export interface LaunchModeOptions {
+  promptFallbackMode?: ConcreteStartupMode;
+  workingDirectory?: string;
+  startupEnv?: Record<string, string>;
+}
+
+type ConcreteModeRunner = (handle: SandboxHandle, options?: LaunchContextOptions) => Promise<ModeLaunchResult>;
 
 const DEFAULT_PROMPT_FALLBACK_MODE: ConcreteStartupMode = "ssh-opencode";
 
@@ -45,6 +52,7 @@ export async function launchMode(
   mode: StartupMode,
   options: LaunchModeOptions = {}
 ): Promise<ModeLaunchResult> {
-  const resolvedMode = resolveStartupMode(mode, options);
-  return MODE_RUNNERS[resolvedMode](handle);
+  const { promptFallbackMode, workingDirectory, startupEnv } = options;
+  const resolvedMode = resolveStartupMode(mode, { promptFallbackMode });
+  return MODE_RUNNERS[resolvedMode](handle, { workingDirectory, startupEnv });
 }

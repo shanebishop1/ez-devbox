@@ -23,6 +23,8 @@
     "create": "tsx src/cli/index.ts create",
     "connect": "tsx src/cli/index.ts connect",
     "start": "tsx src/cli/index.ts start",
+    "list": "tsx src/cli/index.ts list",
+    "command": "tsx src/cli/index.ts command",
     "wipe": "tsx src/cli/index.ts wipe",
     "wipe-all": "tsx src/cli/index.ts wipe-all",
     "test": "vitest run",

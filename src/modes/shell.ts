@@ -1,6 +1,6 @@
 import type { SandboxHandle } from "../e2b/lifecycle.js";
 import { logger } from "../logging/logger.js";
-import type { ModeLaunchResult } from "./index.js";
+import type { LaunchContextOptions, ModeLaunchResult } from "./index.js";
 import {
   type SshModeDeps,
   cleanupSshBridgeSession,
@@ -9,7 +9,6 @@ import {
 } from "./ssh-bridge.js";
 
 const SHELL_SMOKE_COMMAND = "bash -lc 'echo shell-ready'";
-const SHELL_INTERACTIVE_COMMAND = "bash";
 const COMMAND_TIMEOUT_MS = 15_000;
 
 type ShellModeDeps = SshModeDeps;
@@ -21,9 +20,15 @@ const defaultDeps: ShellModeDeps = {
   cleanupSession: cleanupSshBridgeSession
 };
 
-export async function startShellMode(handle: SandboxHandle, deps: ShellModeDeps = defaultDeps): Promise<ModeLaunchResult> {
+export async function startShellMode(
+  handle: SandboxHandle,
+  launchContext: LaunchContextOptions = {},
+  deps: ShellModeDeps = defaultDeps
+): Promise<ModeLaunchResult> {
+  const commandContext = resolveCommandContext(launchContext);
+
   if (!deps.isInteractiveTerminal()) {
-    return runSmokeCheck(handle);
+    return runSmokeCheck(handle, commandContext);
   }
 
   logger.info("Preparing secure SSH bridge (first run may install packages).");
@@ -31,7 +36,7 @@ export async function startShellMode(handle: SandboxHandle, deps: ShellModeDeps 
 
   try {
     logger.info("Opening interactive SSH session.");
-    await deps.runInteractiveSession(session, SHELL_INTERACTIVE_COMMAND);
+    await deps.runInteractiveSession(session, buildInteractiveCommand(commandContext.cwd, commandContext.envs));
   } finally {
     logger.info("Cleaning up interactive SSH session.");
     await deps.cleanupSession(handle, session);
@@ -48,8 +53,13 @@ export async function startShellMode(handle: SandboxHandle, deps: ShellModeDeps 
   };
 }
 
-async function runSmokeCheck(handle: SandboxHandle): Promise<ModeLaunchResult> {
+async function runSmokeCheck(
+  handle: SandboxHandle,
+  commandContext: { cwd?: string; envs: Record<string, string> }
+): Promise<ModeLaunchResult> {
   const result = await handle.run(SHELL_SMOKE_COMMAND, {
+    ...(commandContext.cwd ? { cwd: commandContext.cwd } : {}),
+    ...(Object.keys(commandContext.envs).length > 0 ? { envs: commandContext.envs } : {}),
     timeoutMs: COMMAND_TIMEOUT_MS
   });
 
@@ -65,4 +75,32 @@ async function runSmokeCheck(handle: SandboxHandle): Promise<ModeLaunchResult> {
     },
     message: `Shell smoke check in sandbox ${handle.sandboxId}: ${output}`
   };
+}
+
+function buildInteractiveCommand(cwd?: string, envs: Record<string, string> = {}): string {
+  const steps: string[] = [];
+  if (cwd) {
+    steps.push(`cd ${quoteShellArg(cwd)}`);
+  }
+  for (const [key, value] of Object.entries(envs)) {
+    steps.push(`export ${key}=${quoteShellArg(value)}`);
+  }
+  steps.push("exec bash -i");
+  return `bash -lc ${quoteShellArg(steps.join(" && "))}`;
+}
+
+function resolveCommandContext(launchContext: LaunchContextOptions): { cwd?: string; envs: Record<string, string> } {
+  return {
+    cwd: normalizeOptionalValue(launchContext.workingDirectory),
+    envs: launchContext.startupEnv ?? {}
+  };
+}
+
+function normalizeOptionalValue(value: string | undefined): string | undefined {
+  const normalized = value?.trim();
+  return normalized ? normalized : undefined;
+}
+
+function quoteShellArg(value: string): string {
+  return `'${value.replace(/'/g, `"'\"'\"'`)}'`;
 }
