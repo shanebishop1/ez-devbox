@@ -5,6 +5,7 @@ Lightweight TypeScript CLI for creating, reconnecting, and launching E2B coding 
 ## What it does
 
 - Creates or connects to an E2B sandbox
+- Resumes the last saved sandbox/mode with a single command
 - Launches one startup mode:
   - `ssh-opencode`
   - `ssh-codex`
@@ -14,7 +15,7 @@ Lightweight TypeScript CLI for creating, reconnecting, and launching E2B coding 
 - Persists last-run state locally so reconnects are fast
 - Bootstraps configured repos on create/connect (clone, branch checkout, setup command)
 - Starts tools in the expected directory (`project.working_dir = "auto"` picks repo or workspace)
-- Optionally syncs local tool auth/config (OpenCode, Codex, GitHub CLI) into sandbox
+- Optionally syncs local tool auth/config (OpenCode, Codex, GitHub CLI) into sandbox during `create`
 - Supports optional auto-managed local port tunneling for sandbox access
 
 ## Requirements
@@ -73,6 +74,10 @@ ez-box connect
 - Connect to specific sandbox:
   - `ez-box connect -- --sandbox-id <sandbox-id>`
   - `npm run connect -- --sandbox-id <sandbox-id>`
+- Resume last saved sandbox + mode:
+  - `ez-box resume`
+  - `npm run resume`
+  - Reuses the last selected repo for that sandbox when `project.active = "prompt"` and the repo still exists.
 - Enable verbose startup/provisioning logs:
   - `ez-box create -- --verbose`
   - `ez-box connect -- --verbose`
@@ -89,7 +94,7 @@ ez-box connect
 
 ## Verbose mode
 
-- Use `--verbose` to show detailed operational logs during `create/connect` (startup mode resolution, sandbox lifecycle steps, tooling sync progress, bootstrap progress, SSH/tunnel setup details).
+- Use `--verbose` to show detailed operational logs during `create/connect` (startup mode resolution, sandbox lifecycle steps, create-time tooling sync progress, bootstrap progress, SSH/tunnel setup details).
 - Interactive pickers/prompts still show as normal.
 - Without `--verbose`, ez-box keeps output focused on prompts and final command results.
 
@@ -147,7 +152,8 @@ When `project.working_dir = "auto"`, working directory behavior after repo selec
 ### `[env]`
 
 - `pass_through` (string array): extra host env var names to forward into sandbox creation.
-- Built-in pass-through vars are always considered as well: `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GITHUB_TOKEN`, `GH_TOKEN`, `OPENCODE_SERVER_PASSWORD`, `FIRECRAWL_API_KEY`, `FIRECRAWL_API_URL`.
+- Built-in pass-through vars are always considered as well: `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GITHUB_TOKEN`, `GH_TOKEN`, `OPENCODE_SERVER_PASSWORD`.
+- Add service-specific keys (for example Firecrawl) explicitly in `pass_through`.
 
 ### `[opencode]`
 

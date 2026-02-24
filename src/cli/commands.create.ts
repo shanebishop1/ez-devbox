@@ -1,6 +1,3 @@
-import { readFile } from "node:fs/promises";
-import { resolve } from "node:path";
-import { parse as parseDotEnv } from "dotenv";
 import type { CommandResult } from "../types/index.js";
 import type { StartupMode } from "../types/index.js";
 import { loadConfig, type LoadConfigOptions } from "../config/load.js";
@@ -25,6 +22,7 @@ import {
   type PathSyncSummary,
   type ToolingSyncSummary
 } from "../tooling/host-sandbox-sync.js";
+import { loadCliEnvSource } from "./env-source.js";
 
 const TOOLING_SYNC_PROGRESS_LOG_INTERVAL = 50;
 
@@ -59,7 +57,7 @@ export interface CreateCommandDeps {
 const defaultDeps: CreateCommandDeps = {
   loadConfig,
   createSandbox,
-  resolveEnvSource: loadEnvSource,
+  resolveEnvSource: loadCliEnvSource,
   resolveSandboxCreateEnv,
   resolvePromptStartupMode,
   launchMode,
@@ -113,13 +111,17 @@ export async function runCreateCommand(args: string[], deps: CreateCommandDeps =
     logger.verbose(`Sandbox ready: ${sandboxLabel}.`);
 
     let stopLoading: (() => void) | undefined;
+    const stopLoadingIfRunning = (): void => {
+      stopLoading?.();
+      stopLoading = undefined;
+    };
     const ensureLoading = (): void => {
       if (!stopLoading) {
         stopLoading = logger.startLoading("Bootstrapping...");
       }
     };
     try {
-      logger.verbose(`Syncing local tooling config/auth for mode '${resolvedMode}'.`);
+      logger.verbose("Syncing local tooling config/auth.");
       const syncSummary = await deps.syncToolingToSandbox(config, handle, resolvedMode);
 
       const bootstrapResult = await (deps.bootstrapProjectWorkspace ?? bootstrapProjectWorkspace)(handle, config, {
@@ -130,6 +132,7 @@ export async function runCreateCommand(args: string[], deps: CreateCommandDeps =
           logger.verbose(`Bootstrap: ${message}`);
         }
       });
+      stopLoadingIfRunning();
       logger.verbose(`Selected repos summary: ${formatSelectedReposSummary(bootstrapResult.selectedRepoNames)}.`);
       logger.verbose(`Setup outcome summary: ${formatSetupOutcomeSummary(bootstrapResult.setup)}.`);
 
@@ -180,7 +183,7 @@ export async function runCreateCommand(args: string[], deps: CreateCommandDeps =
         cause: error
       });
     } finally {
-      stopLoading?.();
+      stopLoadingIfRunning();
     }
   });
 }
@@ -227,23 +230,9 @@ function formatSetupOutcomeSummary(setup: BootstrapProjectWorkspaceResult["setup
 export async function syncToolingForMode(
   config: Awaited<ReturnType<typeof loadConfig>>,
   sandbox: Pick<SandboxHandle, "writeFile">,
-  mode: ConcreteStartupMode
+  _mode: ConcreteStartupMode
 ): Promise<ToolingSyncSummary> {
   const ghConfig = await maybeSyncGhConfig(config, sandbox);
-
-  if (mode === "ssh-opencode" || mode === "web") {
-    const opencodeConfig = await runSyncUnit("OpenCode config", (onProgress) =>
-      syncOpenCodeConfigDir(config, sandbox, { onProgress })
-    );
-    const opencodeAuth = await runSyncUnit("OpenCode auth", () => syncOpenCodeAuthFile(config, sandbox));
-    return summarizeToolingSync(opencodeConfig, opencodeAuth, null, null, ghConfig, config.gh.enabled);
-  }
-
-  if (mode === "ssh-codex") {
-    const codexConfig = await runSyncUnit("Codex config", (onProgress) => syncCodexConfigDir(config, sandbox, { onProgress }));
-    const codexAuth = await runSyncUnit("Codex auth", () => syncCodexAuthFile(config, sandbox));
-    return summarizeToolingSync(null, null, codexConfig, codexAuth, ghConfig, config.gh.enabled);
-  }
 
   const opencodeConfig = await runSyncUnit("OpenCode config", (onProgress) =>
     syncOpenCodeConfigDir(config, sandbox, { onProgress })
@@ -356,29 +345,6 @@ function resolveTemplateForMode(
     template: "opencode",
     autoSelected: true
   };
-}
-
-async function loadEnvSource(): Promise<Record<string, string | undefined>> {
-  const envPath = resolve(process.cwd(), ".env");
-
-  let parsedFileEnv: Record<string, string | undefined> = {};
-
-  try {
-    parsedFileEnv = parseDotEnv(await readFile(envPath, "utf8"));
-  } catch (error) {
-    if (!isErrnoException(error) || error.code !== "ENOENT") {
-      throw error;
-    }
-  }
-
-  return {
-    ...parsedFileEnv,
-    ...process.env
-  };
-}
-
-function isErrnoException(error: unknown): error is NodeJS.ErrnoException {
-  return typeof error === "object" && error !== null && "code" in error;
 }
 
 function toErrorMessage(error: unknown): string {

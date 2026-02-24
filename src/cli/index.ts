@@ -5,6 +5,7 @@ import { runCommandCommand } from "./commands.command.js";
 import { runConnectCommand } from "./commands.connect.js";
 import { runCreateCommand } from "./commands.create.js";
 import { runListCommand } from "./commands.list.js";
+import { runResumeCommand } from "./commands.resume.js";
 import { runWipeCommand } from "./commands.wipe.js";
 import { runWipeAllCommand } from "./commands.wipe-all.js";
 import { parseGlobalCliOptions, renderHelp, resolveCliCommand } from "./router.js";
@@ -28,6 +29,12 @@ export async function runCli(argv: string[]): Promise<number> {
 
     if (resolved.command === "connect") {
       const result = await runConnectCommand(resolved.args);
+      logger.info(result.message);
+      return result.exitCode ?? 0;
+    }
+
+    if (resolved.command === "resume") {
+      const result = await runResumeCommand(resolved.args);
       logger.info(result.message);
       return result.exitCode ?? 0;
     }

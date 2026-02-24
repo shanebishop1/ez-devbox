@@ -7,9 +7,7 @@ const BUILTIN_PASSTHROUGH_VARS = [
   "ANTHROPIC_API_KEY",
   "GITHUB_TOKEN",
   "GH_TOKEN",
-  "OPENCODE_SERVER_PASSWORD",
-  "FIRECRAWL_API_KEY",
-  "FIRECRAWL_API_URL"
+  "OPENCODE_SERVER_PASSWORD"
 ] as const;
 
 export interface SandboxCreateEnvResolution {
