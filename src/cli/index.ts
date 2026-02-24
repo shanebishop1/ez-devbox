@@ -4,6 +4,8 @@ import { logger } from "../logging/logger.js";
 import { runConnectCommand } from "./commands.connect.js";
 import { runCreateCommand } from "./commands.create.js";
 import { runStartCommand } from "./commands.start.js";
+import { runWipeCommand } from "./commands.wipe.js";
+import { runWipeAllCommand } from "./commands.wipe-all.js";
 import { renderHelp, resolveCliCommand } from "./router.js";
 
 export async function runCli(argv: string[]): Promise<number> {
@@ -23,6 +25,18 @@ export async function runCli(argv: string[]): Promise<number> {
 
     if (resolved.command === "connect") {
       const result = await runConnectCommand(resolved.args);
+      logger.info(result.message);
+      return result.exitCode ?? 0;
+    }
+
+    if (resolved.command === "wipe") {
+      const result = await runWipeCommand(resolved.args);
+      logger.info(result.message);
+      return result.exitCode ?? 0;
+    }
+
+    if (resolved.command === "wipe-all") {
+      const result = await runWipeAllCommand(resolved.args);
       logger.info(result.message);
       return result.exitCode ?? 0;
     }

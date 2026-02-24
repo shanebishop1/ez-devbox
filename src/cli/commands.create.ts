@@ -7,15 +7,21 @@ import { loadConfig, type LoadConfigOptions } from "../config/load.js";
 import { createSandbox, type CreateSandboxOptions, type SandboxHandle } from "../e2b/lifecycle.js";
 import { resolveSandboxCreateEnv, type SandboxCreateEnvResolution } from "../e2b/env.js";
 import { launchMode, resolveStartupMode, type ConcreteStartupMode, type ModeLaunchResult } from "../modes/index.js";
+import { resolvePromptStartupMode } from "./startup-mode-prompt.js";
+import { buildSandboxDisplayName, formatSandboxDisplayLabel } from "./sandbox-display-name.js";
 import { saveLastRunState, type LastRunState } from "../state/lastRun.js";
+import { logger } from "../logging/logger.js";
 import {
   syncCodexAuthFile,
   syncCodexConfigDir,
   syncOpenCodeAuthFile,
   syncOpenCodeConfigDir,
+  type DirectorySyncProgress,
   type PathSyncSummary,
   type ToolingSyncSummary
 } from "../tooling/host-sandbox-sync.js";
+
+const TOOLING_SYNC_PROGRESS_LOG_INTERVAL = 50;
 
 export interface CreateCommandDeps {
   loadConfig: (options?: LoadConfigOptions) => ReturnType<typeof loadConfig>;
@@ -28,6 +34,7 @@ export interface CreateCommandDeps {
     config: Awaited<ReturnType<typeof loadConfig>>,
     envSource?: Record<string, string | undefined>
   ) => SandboxCreateEnvResolution;
+  resolvePromptStartupMode: (requestedMode: StartupMode) => Promise<StartupMode>;
   launchMode: (handle: SandboxHandle, mode: StartupMode) => Promise<ModeLaunchResult>;
   syncToolingToSandbox: (
     config: Awaited<ReturnType<typeof loadConfig>>,
@@ -43,6 +50,7 @@ const defaultDeps: CreateCommandDeps = {
   createSandbox,
   resolveEnvSource: loadEnvSource,
   resolveSandboxCreateEnv,
+  resolvePromptStartupMode,
   launchMode,
   syncToolingToSandbox: syncToolingForMode,
   saveLastRunState,
@@ -52,8 +60,14 @@ const defaultDeps: CreateCommandDeps = {
 export async function runCreateCommand(args: string[], deps: CreateCommandDeps = defaultDeps): Promise<CommandResult> {
   const parsed = parseCreateArgs(args);
   const config = await deps.loadConfig();
-  const mode = parsed.mode ?? config.startup.mode;
+  const requestedMode = parsed.mode ?? config.startup.mode;
+  logger.info(`Resolving startup mode from '${requestedMode}'.`);
+  const mode = await deps.resolvePromptStartupMode(requestedMode);
+  if (requestedMode === "prompt") {
+    logger.info(`Startup mode selected via prompt: ${mode}.`);
+  }
   const resolvedMode = resolveStartupMode(mode);
+  const displayName = buildSandboxDisplayName(config.sandbox.name, mode, deps.now());
   const templateResolution = resolveTemplateForMode(config.sandbox.template, resolvedMode);
   const createConfig =
     templateResolution.template === config.sandbox.template
@@ -68,10 +82,20 @@ export async function runCreateCommand(args: string[], deps: CreateCommandDeps =
   const envSource = await deps.resolveEnvSource();
   const envResolution = deps.resolveSandboxCreateEnv(config, envSource);
 
+  logger.info(`Creating sandbox '${displayName}' with template '${createConfig.sandbox.template}'.`);
   const handle = await deps.createSandbox(createConfig, {
-    envs: envResolution.envs
+    envs: envResolution.envs,
+    metadata: {
+      "launcher.name": displayName
+    }
   });
+  const sandboxLabel = formatSandboxDisplayLabel(handle.sandboxId, { "launcher.name": displayName });
+  logger.info(`Sandbox ready: ${sandboxLabel}.`);
+
+  logger.info(`Syncing local tooling config/auth for mode '${resolvedMode}'.`);
   const syncSummary = await deps.syncToolingToSandbox(config, handle, resolvedMode);
+
+  logger.info(`Launching startup mode '${mode}'.`);
   const launched = await deps.launchMode(handle, mode);
 
   await deps.saveLastRunState({
@@ -89,7 +113,7 @@ export async function runCreateCommand(args: string[], deps: CreateCommandDeps =
   const syncSuffix = `\nTooling sync: ${formatToolingSyncSummary(syncSummary)}`;
 
   return {
-    message: `Created sandbox ${handle.sandboxId}. ${launched.message}${templateSuffix}${syncSuffix}${warningSuffix}`,
+    message: `Created sandbox ${sandboxLabel}. ${launched.message}${templateSuffix}${syncSuffix}${warningSuffix}`,
     exitCode: 0
   };
 }
@@ -100,22 +124,54 @@ async function syncToolingForMode(
   mode: ConcreteStartupMode
 ): Promise<ToolingSyncSummary> {
   if (mode === "ssh-opencode" || mode === "web") {
-    const opencodeConfig = await syncOpenCodeConfigDir(config, sandbox);
-    const opencodeAuth = await syncOpenCodeAuthFile(config, sandbox);
+    const opencodeConfig = await runSyncUnit("OpenCode config", (onProgress) =>
+      syncOpenCodeConfigDir(config, sandbox, { onProgress })
+    );
+    const opencodeAuth = await runSyncUnit("OpenCode auth", () => syncOpenCodeAuthFile(config, sandbox));
     return summarizeToolingSync(opencodeConfig, opencodeAuth, null, null);
   }
 
   if (mode === "ssh-codex") {
-    const codexConfig = await syncCodexConfigDir(config, sandbox);
-    const codexAuth = await syncCodexAuthFile(config, sandbox);
+    const codexConfig = await runSyncUnit("Codex config", (onProgress) => syncCodexConfigDir(config, sandbox, { onProgress }));
+    const codexAuth = await runSyncUnit("Codex auth", () => syncCodexAuthFile(config, sandbox));
     return summarizeToolingSync(null, null, codexConfig, codexAuth);
   }
 
-  const opencodeConfig = await syncOpenCodeConfigDir(config, sandbox);
-  const opencodeAuth = await syncOpenCodeAuthFile(config, sandbox);
-  const codexConfig = await syncCodexConfigDir(config, sandbox);
-  const codexAuth = await syncCodexAuthFile(config, sandbox);
+  const opencodeConfig = await runSyncUnit("OpenCode config", (onProgress) =>
+    syncOpenCodeConfigDir(config, sandbox, { onProgress })
+  );
+  const opencodeAuth = await runSyncUnit("OpenCode auth", () => syncOpenCodeAuthFile(config, sandbox));
+  const codexConfig = await runSyncUnit("Codex config", (onProgress) => syncCodexConfigDir(config, sandbox, { onProgress }));
+  const codexAuth = await runSyncUnit("Codex auth", () => syncCodexAuthFile(config, sandbox));
   return summarizeToolingSync(opencodeConfig, opencodeAuth, codexConfig, codexAuth);
+}
+
+async function runSyncUnit(
+  label: string,
+  syncUnit: (onProgress?: (progress: DirectorySyncProgress) => void) => Promise<PathSyncSummary>
+): Promise<PathSyncSummary> {
+  let lastLoggedCount = 0;
+  const onProgress = (progress: DirectorySyncProgress): void => {
+    if (progress.filesDiscovered === 0) {
+      return;
+    }
+
+    const isCompletion = progress.filesWritten === progress.filesDiscovered;
+    const reachedInterval = progress.filesWritten - lastLoggedCount >= TOOLING_SYNC_PROGRESS_LOG_INTERVAL;
+    if (!isCompletion && !reachedInterval) {
+      return;
+    }
+
+    lastLoggedCount = progress.filesWritten;
+    logger.info(`Tooling sync progress: ${label} ${progress.filesWritten}/${progress.filesDiscovered}`);
+  };
+
+  logger.info(`Tooling sync start: ${label}.`);
+  const summary = await syncUnit(onProgress);
+  logger.info(
+    `Tooling sync done: ${label} discovered=${summary.filesDiscovered}, written=${summary.filesWritten}, skippedMissing=${summary.skippedMissing}.`
+  );
+  return summary;
 }
 
 function summarizeToolingSync(

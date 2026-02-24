@@ -9,6 +9,27 @@ const OPEN_CODE_AUTH_DEST = "/home/user/.local/share/opencode/auth.json";
 const CODEX_CONFIG_DEST = "/home/user/.codex";
 const CODEX_AUTH_DEST = "/home/user/.codex/auth.json";
 
+const SKIPPED_DIRECTORY_NAMES = new Set([
+  "archived_sessions",
+  "sessions",
+  "logs",
+  "log",
+  "cache",
+  ".cache",
+  "tmp",
+  "temp",
+  "node_modules",
+  ".git",
+  "vendor_imports",
+  "shell_snapshots",
+  "sqlite",
+  ".system",
+  ".curated"
+]);
+
+const SKIPPED_FILE_EXTENSIONS = new Set([".jsonl", ".log", ".tmp", ".swp", ".db", ".sqlite"]);
+const SKIPPED_FILE_NAMES = new Set([".DS_Store", ".codex-global-state.json", "models_cache.json"]);
+
 export interface HostPathResolveOptions {
   homeDir?: string;
   cwd?: string;
@@ -20,7 +41,14 @@ export interface PathSyncSummary {
   filesWritten: number;
 }
 
-export interface HostToSandboxSyncOptions extends HostPathResolveOptions {}
+export interface DirectorySyncProgress {
+  filesWritten: number;
+  filesDiscovered: number;
+}
+
+export interface HostToSandboxSyncOptions extends HostPathResolveOptions {
+  onProgress?: (progress: DirectorySyncProgress) => void | Promise<void>;
+}
 
 export interface ToolingSyncSummary {
   totalDiscovered: number;
@@ -125,17 +153,26 @@ async function syncDirectory(
   }
 
   const files = await discoverDirectoryFiles(resolvedLocalDirectoryPath);
+  let filesWritten = 0;
   for (const absoluteFilePath of files) {
     const fileContent = await readFile(absoluteFilePath);
     const relativePath = relative(resolvedLocalDirectoryPath, absoluteFilePath).split(sep).join(posix.sep);
     const sandboxPath = posix.join(sandboxDirectoryPath, relativePath);
     await sandbox.writeFile(sandboxPath, toArrayBuffer(fileContent));
+    filesWritten += 1;
+
+    if (options?.onProgress) {
+      await options.onProgress({
+        filesWritten,
+        filesDiscovered: files.length
+      });
+    }
   }
 
   return {
     skippedMissing: false,
     filesDiscovered: files.length,
-    filesWritten: files.length
+    filesWritten
   };
 }
 
@@ -182,22 +219,45 @@ async function walkDirectory(rootPath: string, foundFiles: string[]): Promise<vo
   entries.sort((left, right) => left.name.localeCompare(right.name));
 
   for (const entry of entries) {
-    if (entry.name === "node_modules") {
-      continue;
-    }
-
     const fullPath = join(rootPath, entry.name);
     if (entry.isDirectory()) {
+      if (shouldSkipDirectoryEntry(entry.name)) {
+        continue;
+      }
+
       await walkDirectory(fullPath, foundFiles);
       continue;
     }
 
     if (entry.isFile()) {
+      if (shouldSkipFileEntry(entry.name)) {
+        continue;
+      }
+
       foundFiles.push(fullPath);
       continue;
     }
 
   }
+}
+
+function shouldSkipDirectoryEntry(name: string): boolean {
+  return SKIPPED_DIRECTORY_NAMES.has(name.toLowerCase());
+}
+
+function shouldSkipFileEntry(name: string): boolean {
+  if (SKIPPED_FILE_NAMES.has(name)) {
+    return true;
+  }
+
+  const lowerCaseName = name.toLowerCase();
+  for (const extension of SKIPPED_FILE_EXTENSIONS) {
+    if (lowerCaseName.endsWith(extension)) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 function toArrayBuffer(data: Uint8Array): ArrayBuffer {

@@ -6,7 +6,7 @@ export interface ResolvedCliCommand {
   args: string[];
 }
 
-const commands = new Set<CliCommandName>(["create", "connect", "start", "help"]);
+const commands = new Set<CliCommandName>(["create", "connect", "start", "wipe", "wipe-all", "help"]);
 
 export function resolveCliCommand(argv: string[]): ResolvedCliCommand {
   const [first, ...rest] = argv;
@@ -36,11 +36,14 @@ export function renderHelp(): string {
     "  create   Create a new sandbox and launch startup mode",
     "  connect  Connect to an existing sandbox and launch mode",
     "  start    Alias of connect; supports --no-reuse",
+    "  wipe     Delete a sandbox by prompt or --sandbox-id",
+    "  wipe-all Delete all sandboxes (use --yes to skip prompt)",
     "",
     "Options:",
     "  --mode <mode>         Startup mode (prompt|ssh-opencode|ssh-codex|web|ssh-shell)",
     "  --sandbox-id <id>     Sandbox id to connect/start",
     "  --no-reuse            Start/connect without last-run fallback",
+    "  --yes                 Skip wipe-all confirmation prompt",
     "  -h, --help            Show help"
   ].join("\n");
 }

@@ -3,15 +3,17 @@ import { chmod, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join, resolve } from "node:path";
 import type { SandboxHandle } from "../e2b/lifecycle.js";
+import { logger } from "../logging/logger.js";
 
 const SSH_SETUP_TIMEOUT_MS = 8 * 60 * 1000;
 const SSH_SHORT_TIMEOUT_MS = 15_000;
 const SSH_HOST = "e2b-sandbox";
-const SSH_USER = "user";
+const SSH_USER_FALLBACK = "user";
 const SSHD_PORT = 2222;
 const WEBSOCKIFY_PORT = 8081;
 
 export interface SshBridgeSessionArtifacts {
+  sessionDir: string;
   authorizedKeysPath: string;
   hostPrivateKeyPath: string;
   hostPublicKeyPath: string;
@@ -26,6 +28,7 @@ export interface SshBridgeSession {
   privateKeyPath: string;
   knownHostsPath: string;
   wsUrl: string;
+  remoteUser?: string;
   artifacts?: SshBridgeSessionArtifacts;
 }
 
@@ -37,6 +40,7 @@ export interface SshModeDeps {
 }
 
 export async function prepareSshBridgeSession(handle: SandboxHandle): Promise<SshBridgeSession> {
+  logger.info("SSH bridge: checking/installing dependencies.");
   await handle.run(
     "bash -lc 'command -v sshd >/dev/null 2>&1 && command -v websockify >/dev/null 2>&1 && command -v ssh-keygen >/dev/null 2>&1 || (sudo apt-get update && sudo apt-get install -y openssh-server websockify)'",
     { timeoutMs: SSH_SETUP_TIMEOUT_MS }
@@ -45,6 +49,7 @@ export async function prepareSshBridgeSession(handle: SandboxHandle): Promise<Ss
   const tempDir = await mkdtemp(join(tmpdir(), "agent-box-ssh-"));
   const privateKeyPath = join(tempDir, "id_ed25519");
 
+  logger.info("SSH bridge: generating local key pair.");
   await runLocalCommand("ssh-keygen", ["-t", "ed25519", "-N", "", "-f", privateKeyPath, "-q"], SSH_SHORT_TIMEOUT_MS);
 
   const publicKey = (await readFile(`${privateKeyPath}.pub`, "utf8")).trim();
@@ -53,15 +58,32 @@ export async function prepareSshBridgeSession(handle: SandboxHandle): Promise<Ss
   }
 
   const sessionId = basename(tempDir);
+  const remoteUserResult = await handle.run("whoami", { timeoutMs: SSH_SHORT_TIMEOUT_MS });
+  const remoteUser = remoteUserResult.stdout.trim() || SSH_USER_FALLBACK;
+  const remoteHomeResult = await handle.run("bash -lc 'printf %s \"$HOME\"'", { timeoutMs: SSH_SHORT_TIMEOUT_MS });
+  const remoteHome = remoteHomeResult.stdout.trim();
+  if (remoteHome === "") {
+    throw new Error("Failed to resolve remote home directory for SSH bridge session.");
+  }
+  const sessionDir = `${remoteHome}/.agent-box-ssh/${sessionId}`;
   const artifacts = {
-    authorizedKeysPath: `/tmp/${sessionId}-authorized_keys`,
-    hostPrivateKeyPath: `/tmp/${sessionId}-host-ed25519`,
-    hostPublicKeyPath: `/tmp/${sessionId}-host-ed25519.pub`,
-    sshdConfigPath: `/tmp/${sessionId}-sshd_config`,
-    sshdPidPath: `/tmp/${sessionId}-sshd.pid`,
-    websockifyPidPath: `/tmp/${sessionId}-websockify.pid`,
-    websockifyLogPath: `/tmp/${sessionId}-websockify.log`
+    sessionDir,
+    authorizedKeysPath: `${sessionDir}/authorized_keys`,
+    hostPrivateKeyPath: `${sessionDir}/host-ed25519`,
+    hostPublicKeyPath: `${sessionDir}/host-ed25519.pub`,
+    sshdConfigPath: `${sessionDir}/sshd_config`,
+    sshdPidPath: `${sessionDir}/sshd.pid`,
+    websockifyPidPath: `${sessionDir}/websockify.pid`,
+    websockifyLogPath: `${sessionDir}/websockify.log`
   } satisfies SshBridgeSessionArtifacts;
+
+  logger.info("SSH bridge: configuring remote sshd/websockify.");
+  await handle.run(
+    `bash -lc 'mkdir -p ${quoteShellArg(`${remoteHome}/.agent-box-ssh`)} && chmod 700 ${quoteShellArg(
+      `${remoteHome}/.agent-box-ssh`
+    )} && rm -rf ${quoteShellArg(sessionDir)} && mkdir -p ${quoteShellArg(sessionDir)} && chmod 700 ${quoteShellArg(sessionDir)}'`,
+    { timeoutMs: SSH_SHORT_TIMEOUT_MS }
+  );
 
   const publicKeyBase64 = Buffer.from(publicKey, "utf8").toString("base64");
 
@@ -107,12 +129,14 @@ export async function prepareSshBridgeSession(handle: SandboxHandle): Promise<Ss
   );
 
   const wsUrl = toWsUrl(await handle.getHost(WEBSOCKIFY_PORT));
+  logger.info(`SSH bridge ready: ${wsUrl}`);
 
   return {
     tempDir,
     privateKeyPath,
     knownHostsPath,
     wsUrl,
+    remoteUser,
     artifacts
   };
 }
@@ -120,6 +144,8 @@ export async function prepareSshBridgeSession(handle: SandboxHandle): Promise<Ss
 export function buildSshClientArgs(session: SshBridgeSession, remoteCommand: string): string[] {
   const proxyScriptPath = resolve(process.cwd(), "scripts/ws-ssh-proxy.mjs");
   const proxyCommand = `node ${quoteShellArg(proxyScriptPath)} ${quoteShellArg(session.wsUrl)}`;
+
+  const sshUser = session.remoteUser?.trim() || SSH_USER_FALLBACK;
 
   return [
     "-tt",
@@ -145,7 +171,7 @@ export function buildSshClientArgs(session: SshBridgeSession, remoteCommand: str
     `ProxyCommand=${proxyCommand}`,
     "-i",
     session.privateKeyPath,
-    `${SSH_USER}@${SSH_HOST}`,
+    `${sshUser}@${SSH_HOST}`,
     remoteCommand
   ];
 }
@@ -202,7 +228,7 @@ export async function cleanupSshBridgeSession(handle: SandboxHandle, session: Ss
     );
     await runBestEffortRemoteCleanup(
       handle,
-      `for path in ${removePaths.map(quoteShellArg).join(" ")} ; do rm -f "$path"; done`
+      `for path in ${removePaths.map(quoteShellArg).join(" ")} ; do rm -f "$path"; done; rm -rf ${quoteShellArg(artifacts.sessionDir)}`
     );
   }
 

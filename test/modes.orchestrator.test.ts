@@ -120,12 +120,20 @@ describe("startup modes orchestrator", () => {
   });
 
   it("ssh-codex mode runs codex smoke check", async () => {
-    const run = vi.fn().mockResolvedValue({ stdout: "codex 0.9.0\n", stderr: "", exitCode: 0 });
+    const run = vi
+      .fn()
+      .mockResolvedValueOnce({ stdout: "PRESENT", stderr: "", exitCode: 0 })
+      .mockResolvedValueOnce({ stdout: "codex 0.9.0\n", stderr: "", exitCode: 0 });
     const handle = createHandle({ run });
 
     const result = await launchMode(handle, "ssh-codex");
 
-    expect(run).toHaveBeenCalledWith("codex --version", { timeoutMs: 15_000 });
+    expect(run).toHaveBeenNthCalledWith(
+      1,
+      "bash -lc 'if command -v codex >/dev/null 2>&1; then printf PRESENT; else printf MISSING; fi'",
+      { timeoutMs: 15_000 }
+    );
+    expect(run).toHaveBeenNthCalledWith(2, "codex --version", { timeoutMs: 15_000 });
     expect(result.mode).toBe("ssh-codex");
     expect(result.details).toEqual({
       smoke: "codex-cli",
@@ -134,8 +142,58 @@ describe("startup modes orchestrator", () => {
     });
   });
 
+  it("ssh-codex mode auto-installs codex when missing", async () => {
+    const run = vi
+      .fn()
+      .mockResolvedValueOnce({ stdout: "MISSING", stderr: "", exitCode: 0 })
+      .mockResolvedValueOnce({ stdout: "installed", stderr: "", exitCode: 0 })
+      .mockResolvedValueOnce({ stdout: "PRESENT", stderr: "", exitCode: 0 })
+      .mockResolvedValueOnce({ stdout: "codex 0.9.0\n", stderr: "", exitCode: 0 });
+    const handle = createHandle({ run });
+
+    const result = await launchMode(handle, "ssh-codex");
+
+    expect(run).toHaveBeenNthCalledWith(
+      1,
+      "bash -lc 'if command -v codex >/dev/null 2>&1; then printf PRESENT; else printf MISSING; fi'",
+      { timeoutMs: 15_000 }
+    );
+    expect(run).toHaveBeenNthCalledWith(2, "npm i -g @openai/codex", { timeoutMs: 120_000 });
+    expect(run).toHaveBeenNthCalledWith(
+      3,
+      "bash -lc 'if command -v codex >/dev/null 2>&1; then printf PRESENT; else printf MISSING; fi'",
+      { timeoutMs: 15_000 }
+    );
+    expect(run).toHaveBeenNthCalledWith(4, "codex --version", { timeoutMs: 15_000 });
+    expect(result.mode).toBe("ssh-codex");
+    expect(result.details).toEqual({
+      smoke: "codex-cli",
+      status: "ready",
+      output: "codex 0.9.0"
+    });
+  });
+
+  it("ssh-codex mode fails with actionable error when codex install fails", async () => {
+    const run = vi
+      .fn()
+      .mockResolvedValueOnce({ stdout: "MISSING", stderr: "", exitCode: 0 })
+      .mockResolvedValueOnce({ stdout: "", stderr: "npm failed", exitCode: 1 });
+    const handle = createHandle({ run });
+
+    await expect(launchMode(handle, "ssh-codex")).rejects.toThrow(
+      "Codex CLI is not available in the sandbox and automatic install failed"
+    );
+
+    expect(run).toHaveBeenNthCalledWith(
+      1,
+      "bash -lc 'if command -v codex >/dev/null 2>&1; then printf PRESENT; else printf MISSING; fi'",
+      { timeoutMs: 15_000 }
+    );
+    expect(run).toHaveBeenNthCalledWith(2, "npm i -g @openai/codex", { timeoutMs: 120_000 });
+  });
+
   it("ssh-codex mode uses interactive attach in tty environments", async () => {
-    const handle = createHandle({ run: vi.fn().mockResolvedValue({ stdout: "", stderr: "", exitCode: 0 }) });
+    const handle = createHandle({ run: vi.fn().mockResolvedValue({ stdout: "PRESENT", stderr: "", exitCode: 0 }) });
     const prepareSession = vi.fn().mockResolvedValue({
       tempDir: "/tmp/session",
       privateKeyPath: "/tmp/session/id_ed25519",
