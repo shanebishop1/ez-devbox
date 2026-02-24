@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { logger } from "../src/logging/logger.js";
+import { logger, setVerboseLoggingEnabled } from "../src/logging/logger.js";
 
 function setTty(stream: NodeJS.WriteStream, value: boolean): () => void {
   const descriptor = Object.getOwnPropertyDescriptor(stream, "isTTY");
@@ -37,6 +37,8 @@ describe("logger formatting", () => {
     } else {
       process.env.FORCE_COLOR = originalForceColor;
     }
+
+    setVerboseLoggingEnabled(false);
 
     vi.restoreAllMocks();
   });
@@ -94,6 +96,29 @@ describe("logger formatting", () => {
     try {
       logger.info("hello");
       expect(logSpy).toHaveBeenCalledWith("\u001b[36m[INFO]\u001b[0m hello");
+    } finally {
+      restoreStdout();
+    }
+  });
+
+  it("suppresses verbose logs by default", () => {
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => undefined);
+
+    logger.verbose("hidden");
+
+    expect(logSpy).not.toHaveBeenCalled();
+  });
+
+  it("prints verbose logs when enabled", () => {
+    delete process.env.NO_COLOR;
+    delete process.env.FORCE_COLOR;
+    const restoreStdout = setTty(process.stdout, false);
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    setVerboseLoggingEnabled(true);
+
+    try {
+      logger.verbose("detail");
+      expect(logSpy).toHaveBeenCalledWith("[INFO] detail");
     } finally {
       restoreStdout();
     }
