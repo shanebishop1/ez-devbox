@@ -57,7 +57,7 @@ describe("resolvePromptStartupMode", () => {
 
     expect(promptInput).toHaveBeenCalledWith(
       [
-        "ez-box",
+        "ez-devbox",
         "Select startup mode:",
         "1) ssh-opencode",
         "2) ssh-codex",

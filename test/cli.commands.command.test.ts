@@ -6,7 +6,7 @@ const baseConfig: ResolvedLauncherConfig = {
   sandbox: {
     template: "base",
     reuse: true,
-    name: "ez-box",
+    name: "ez-devbox",
     timeout_ms: 1_800_000,
     delete_on_exit: false
   },

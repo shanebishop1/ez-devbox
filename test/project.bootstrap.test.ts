@@ -25,7 +25,7 @@ function createConfig(overrides?: Partial<ResolvedLauncherConfig["project"]>): R
     sandbox: {
       template: "opencode",
       reuse: true,
-      name: "ez-box",
+      name: "ez-devbox",
       timeout_ms: 1000,
       delete_on_exit: false
     },

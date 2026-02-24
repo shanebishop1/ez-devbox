@@ -1,11 +1,11 @@
 {
-  "name": "ez-box",
+  "name": "ez-devbox",
   "version": "0.1.0",
   "description": "CLI for creating, reconnecting, and launching E2B sandboxes",
   "main": "dist/src/cli/index.js",
   "types": "dist/src/cli/index.d.ts",
   "bin": {
-    "ez-box": "dist/src/cli/index.js"
+    "ez-devbox": "dist/src/cli/index.js"
   },
   "files": [
     "dist"
@@ -42,12 +42,12 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/shanebishop1/ez-box.git"
+    "url": "git+https://github.com/shanebishop1/ez-devbox.git"
   },
   "bugs": {
-    "url": "https://github.com/shanebishop1/ez-box/issues"
+    "url": "https://github.com/shanebishop1/ez-devbox/issues"
   },
-  "homepage": "https://github.com/shanebishop1/ez-box#readme",
+  "homepage": "https://github.com/shanebishop1/ez-devbox#readme",
   "publishConfig": {
     "access": "public"
   },

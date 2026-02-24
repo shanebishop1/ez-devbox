@@ -35,7 +35,7 @@ describe("last-run state persistence", () => {
 
   it("defaults to an isolated path in the OS temp directory", async () => {
     const cwdHash = createHash("sha1").update(process.cwd()).digest("hex");
-    const expectedStatePath = join(tmpdir(), "ez-box", "last-run", "cwd-state", cwdHash, ".ez-box-last-run.json");
+    const expectedStatePath = join(tmpdir(), "ez-devbox", "last-run", "cwd-state", cwdHash, ".ez-devbox-last-run.json");
 
     await clearLastRunState();
     await saveLastRunState({
@@ -57,8 +57,8 @@ describe("last-run state persistence", () => {
   });
 
   it("falls back to legacy .agent-box-last-run.json when new default file is missing", async () => {
-    const directory = await mkdtemp(join(tmpdir(), "ez-box-last-run-"));
-    const newStatePath = join(directory, ".ez-box-last-run.json");
+    const directory = await mkdtemp(join(tmpdir(), "ez-devbox-last-run-"));
+    const newStatePath = join(directory, ".ez-devbox-last-run.json");
     const legacyStatePath = join(directory, ".agent-box-last-run.json");
 
     await writeFile(

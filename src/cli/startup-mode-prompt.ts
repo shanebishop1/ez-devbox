@@ -34,7 +34,7 @@ export async function resolvePromptStartupMode(
   }
 
   const question = [
-    formatPromptHeader("ez-box"),
+    formatPromptHeader("ez-devbox"),
     "Select startup mode:",
     formatPromptChoice(1, "ssh-opencode"),
     formatPromptChoice(2, "ssh-codex"),

@@ -130,7 +130,7 @@ async function resolveSandboxTarget(
   const sandboxes = await deps.listSandboxes();
   const firstSandbox = sandboxes[0];
   if (!firstSandbox) {
-    throw new Error("No sandboxes are available. Create one with 'ez-box create' or pass --sandbox-id <sandbox-id>.");
+    throw new Error("No sandboxes are available. Create one with 'ez-devbox create' or pass --sandbox-id <sandbox-id>.");
   }
 
   if (sandboxes.length === 1) {

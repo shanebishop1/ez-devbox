@@ -19,7 +19,7 @@ export async function runResumeCommand(args: string[], deps: ResumeCommandDeps =
 
   const lastRun = await deps.loadLastRunState();
   if (!lastRun) {
-    throw new Error("No last-run state found. Run 'ez-box create' or 'ez-box connect' first.");
+    throw new Error("No last-run state found. Run 'ez-devbox create' or 'ez-devbox connect' first.");
   }
 
   const resumeMode = toConcreteStartupMode(lastRun.mode);

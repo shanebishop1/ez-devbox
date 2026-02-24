@@ -57,10 +57,10 @@ export function resolveCliCommand(argv: string[]): ResolvedCliCommand {
 
 export function renderHelp(): string {
   return [
-    "ez-box CLI",
+    "ez-devbox CLI",
     "",
     "Usage:",
-    "  ez-box <command> [options]",
+    "  ez-devbox <command> [options]",
     "",
     "Local development usage:",
     "  npm run dev -- <command> [options]",
