@@ -2,10 +2,12 @@ import type { SandboxHandle } from "../e2b/lifecycle.js";
 import { logger } from "../logging/logger.js";
 import type { LaunchContextOptions, ModeLaunchResult } from "./index.js";
 import {
+  buildInteractiveRemoteCommand,
   type SshModeDeps,
   cleanupSshBridgeSession,
   prepareSshBridgeSession,
-  runInteractiveSshSession
+  runInteractiveSshSession,
+  stageInteractiveStartupEnv
 } from "./ssh-bridge.js";
 
 const SHELL_SMOKE_COMMAND = "bash -lc 'echo shell-ready'";
@@ -35,8 +37,16 @@ export async function startShellMode(
   const session = await deps.prepareSession(handle);
 
   try {
+    const envScriptPath = await stageInteractiveStartupEnv(handle, session, commandContext.envs);
     logger.verbose("Opening interactive SSH session.");
-    await deps.runInteractiveSession(session, buildInteractiveCommand(commandContext.cwd, commandContext.envs));
+    await deps.runInteractiveSession(
+      session,
+      buildInteractiveRemoteCommand({
+        cwd: commandContext.cwd,
+        envScriptPath,
+        command: "bash -i"
+      })
+    );
   } finally {
     logger.verbose("Cleaning up interactive SSH session.");
     await deps.cleanupSession(handle, session);
@@ -77,18 +87,6 @@ async function runSmokeCheck(
   };
 }
 
-function buildInteractiveCommand(cwd?: string, envs: Record<string, string> = {}): string {
-  const steps: string[] = [];
-  if (cwd) {
-    steps.push(`cd ${quoteShellArg(cwd)}`);
-  }
-  for (const [key, value] of Object.entries(envs)) {
-    steps.push(`export ${key}=${quoteShellArg(value)}`);
-  }
-  steps.push("exec bash -i");
-  return `bash -lc ${quoteShellArg(steps.join(" && "))}`;
-}
-
 function resolveCommandContext(launchContext: LaunchContextOptions): { cwd?: string; envs: Record<string, string> } {
   return {
     cwd: normalizeOptionalValue(launchContext.workingDirectory),
@@ -99,8 +97,4 @@ function resolveCommandContext(launchContext: LaunchContextOptions): { cwd?: str
 function normalizeOptionalValue(value: string | undefined): string | undefined {
   const normalized = value?.trim();
   return normalized ? normalized : undefined;
-}
-
-function quoteShellArg(value: string): string {
-  return `'${value.replace(/'/g, `'"'"'`)}'`;
 }

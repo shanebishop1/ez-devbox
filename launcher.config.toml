@@ -36,9 +36,9 @@ setup_continue_on_error = false
 [[project.repos]]
 # Repo entry used for clone, optional checkout, setup, and startup environment.
 # Repo directory name under project.dir (also used as display label).
-name = "sample-repo"
+name = "ez-devbox"
 # Git remote URL to clone.
-url = "https://github.com/bukatea/sample-repo.git"
+url = "https://github.com/shanebishop1/ez-devbox.git"
 # Branch checked out after clone/connect (defaults to main when omitted).
 branch = "main"
 # Primary setup command run in repo directory.

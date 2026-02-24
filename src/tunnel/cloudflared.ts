@@ -6,6 +6,7 @@ import { logger } from "../logging/logger.js";
 const CLOUDFLARED_START_TIMEOUT_MS = 20_000;
 const CLOUDFLARED_DOCKER_START_TIMEOUT_MS = 60_000;
 const CLOUDFLARED_STOP_TIMEOUT_MS = 5_000;
+export const CLOUDFLARED_DOCKER_FALLBACK_IMAGE = "cloudflare/cloudflared:2024.11.0";
 const SIGNALS: NodeJS.Signals[] = ["SIGINT", "SIGTERM", "SIGHUP"];
 const URL_REGEX = /https:\/\/[a-z0-9.-]+/gi;
 const RATE_LIMIT_SNIPPETS = ["429 too many requests", "error code: 1015", "status_code=\"429"];
@@ -365,7 +366,7 @@ function spawnDockerCloudflared(port: number): CloudflaredProcess {
   }
 
   args.push(
-    "cloudflare/cloudflared:latest",
+    CLOUDFLARED_DOCKER_FALLBACK_IMAGE,
     "tunnel",
     "--no-autoupdate",
     "--url",

@@ -184,6 +184,25 @@ describe("e2b lifecycle adapter", () => {
       "stderr=fatal: repository 'https://github.com/org/private.git/' not found"
     );
   });
+
+  it("redacts sensitive token-like strings in surfaced lifecycle errors", async () => {
+    const commandExitError = Object.assign(new Error("auth failed: GH_TOKEN=ghp_very_secret"), {
+      exitCode: 1,
+      stdout: "Authorization: Bearer super-secret-token",
+      stderr:
+        "fatal: https://x-access-token:ghp_very_secret@github.com/org/private.git not found Authorization: Bearer super-secret-token"
+    });
+    const sdkSandbox = createMockSandbox("sbx-redact", vi.fn().mockRejectedValue(commandExitError));
+    const client = createMockClient({
+      connect: vi.fn().mockResolvedValue(sdkSandbox)
+    });
+
+    const handle = await connectSandbox("sbx-redact", baseConfig, { client });
+
+    await expect(handle.run("git clone https://github.com/org/private.git")).rejects.toThrow(
+      /GH_TOKEN=\[REDACTED\].*https:\/\/x-access-token:\[REDACTED\]@github\.com.*Bearer \[REDACTED\]/
+    );
+  });
 });
 
 function createMockSandbox(

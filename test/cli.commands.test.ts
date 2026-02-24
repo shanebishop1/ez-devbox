@@ -141,6 +141,76 @@ describe("CLI command integration", () => {
     loggerVerbose.mockRestore();
   });
 
+  it("create skips tooling sync when user declines interactive confirmation", async () => {
+    const syncToolingToSandbox = vi.fn().mockResolvedValue(syncSummary);
+    const promptInput = vi.fn().mockResolvedValue("n");
+
+    const result = await runCreateCommand(["--mode", "ssh-opencode"], {
+      loadConfig: vi.fn().mockResolvedValue(config),
+      createSandbox: vi.fn().mockResolvedValue({ sandboxId: "sbx-created" }),
+      resolveEnvSource: vi.fn().mockResolvedValue({}),
+      resolveSandboxCreateEnv: vi.fn().mockReturnValue({ envs: {} }),
+      resolvePromptStartupMode: vi.fn().mockResolvedValue("ssh-opencode"),
+      launchMode: vi.fn().mockResolvedValue({ mode: "ssh-opencode", command: "opencode", message: "launched" }),
+      bootstrapProjectWorkspace: vi.fn().mockResolvedValue(bootstrapResult),
+      syncToolingToSandbox,
+      isInteractiveTerminal: () => true,
+      promptInput,
+      saveLastRunState: vi.fn().mockResolvedValue(undefined),
+      now: () => "2026-02-01T00:00:00.000Z"
+    });
+
+    expect(promptInput).toHaveBeenCalledWith("Sync local tooling auth/config into sandbox now? [Y/n]: ");
+    expect(syncToolingToSandbox).not.toHaveBeenCalled();
+    expect(result.message).toContain("Tooling sync: skipped by user");
+  });
+
+  it("create --yes-sync bypasses interactive tooling sync confirmation", async () => {
+    const syncToolingToSandbox = vi.fn().mockResolvedValue(syncSummary);
+    const promptInput = vi.fn().mockResolvedValue("n");
+
+    await runCreateCommand(["--mode", "ssh-opencode", "--yes-sync"], {
+      loadConfig: vi.fn().mockResolvedValue(config),
+      createSandbox: vi.fn().mockResolvedValue({ sandboxId: "sbx-created" }),
+      resolveEnvSource: vi.fn().mockResolvedValue({}),
+      resolveSandboxCreateEnv: vi.fn().mockReturnValue({ envs: {} }),
+      resolvePromptStartupMode: vi.fn().mockResolvedValue("ssh-opencode"),
+      launchMode: vi.fn().mockResolvedValue({ mode: "ssh-opencode", command: "opencode", message: "launched" }),
+      bootstrapProjectWorkspace: vi.fn().mockResolvedValue(bootstrapResult),
+      syncToolingToSandbox,
+      isInteractiveTerminal: () => true,
+      promptInput,
+      saveLastRunState: vi.fn().mockResolvedValue(undefined),
+      now: () => "2026-02-01T00:00:00.000Z"
+    });
+
+    expect(promptInput).not.toHaveBeenCalled();
+    expect(syncToolingToSandbox).toHaveBeenCalledTimes(1);
+  });
+
+  it("create keeps tooling sync enabled in non-interactive mode without prompt", async () => {
+    const syncToolingToSandbox = vi.fn().mockResolvedValue(syncSummary);
+    const promptInput = vi.fn().mockResolvedValue("n");
+
+    await runCreateCommand(["--mode", "ssh-opencode"], {
+      loadConfig: vi.fn().mockResolvedValue(config),
+      createSandbox: vi.fn().mockResolvedValue({ sandboxId: "sbx-created" }),
+      resolveEnvSource: vi.fn().mockResolvedValue({}),
+      resolveSandboxCreateEnv: vi.fn().mockReturnValue({ envs: {} }),
+      resolvePromptStartupMode: vi.fn().mockResolvedValue("ssh-opencode"),
+      launchMode: vi.fn().mockResolvedValue({ mode: "ssh-opencode", command: "opencode", message: "launched" }),
+      bootstrapProjectWorkspace: vi.fn().mockResolvedValue(bootstrapResult),
+      syncToolingToSandbox,
+      isInteractiveTerminal: () => false,
+      promptInput,
+      saveLastRunState: vi.fn().mockResolvedValue(undefined),
+      now: () => "2026-02-01T00:00:00.000Z"
+    });
+
+    expect(promptInput).not.toHaveBeenCalled();
+    expect(syncToolingToSandbox).toHaveBeenCalledTimes(1);
+  });
+
   it("create logs the launcher config path when metadata loader is used", async () => {
     const infoSpy = vi.spyOn(logger, "info").mockImplementation(() => undefined);
 

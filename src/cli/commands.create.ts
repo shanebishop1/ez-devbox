@@ -1,3 +1,4 @@
+import { createInterface } from "node:readline/promises";
 import type { CommandResult } from "../types/index.js";
 import type { StartupMode } from "../types/index.js";
 import { loadConfig, loadConfigWithMetadata, type LoadConfigOptions } from "../config/load.js";
@@ -10,7 +11,7 @@ import { saveLastRunState, type LastRunState } from "../state/lastRun.js";
 import { logger } from "../logging/logger.js";
 import { bootstrapProjectWorkspace, type BootstrapProjectWorkspaceResult } from "../project/bootstrap.js";
 import { resolveHostGhToken } from "../auth/gh-host-token.js";
-import { PromptCancelledError, isPromptCancelledError } from "./prompt-cancelled.js";
+import { PromptCancelledError, isPromptCancelledError, normalizePromptCancelledError } from "./prompt-cancelled.js";
 import { withConfiguredTunnel } from "../tunnel/cloudflared.js";
 import {
   syncCodexAuthFile,
@@ -51,6 +52,8 @@ export interface CreateCommandDeps {
     sandbox: Pick<SandboxHandle, "writeFile">,
     mode: ConcreteStartupMode
   ) => Promise<ToolingSyncSummary>;
+  isInteractiveTerminal?: () => boolean;
+  promptInput?: (question: string) => Promise<string>;
   saveLastRunState: (state: LastRunState) => Promise<void>;
   now: () => string;
 }
@@ -64,6 +67,8 @@ const defaultDeps: CreateCommandDeps = {
   resolvePromptStartupMode,
   launchMode,
   syncToolingToSandbox: syncToolingForMode,
+  isInteractiveTerminal: () => Boolean(process.stdin.isTTY && process.stdout.isTTY),
+  promptInput,
   saveLastRunState,
   now: () => new Date().toISOString()
 };
@@ -127,8 +132,14 @@ export async function runCreateCommand(args: string[], deps: CreateCommandDeps =
       }
     };
     try {
-      logger.verbose("Syncing local tooling config/auth.");
-      const syncSummary = await deps.syncToolingToSandbox(config, handle, resolvedMode);
+      const shouldSyncTooling = await resolveToolingSyncPreference(parsed.yesSync, deps);
+      let syncSummary: ToolingSyncSummary | null = null;
+      if (shouldSyncTooling) {
+        logger.verbose("Syncing local tooling config/auth.");
+        syncSummary = await deps.syncToolingToSandbox(config, handle, resolvedMode);
+      } else {
+        logger.info("Tooling sync skipped by user.");
+      }
 
       const bootstrapResult = await (deps.bootstrapProjectWorkspace ?? bootstrapProjectWorkspace)(handle, config, {
         isConnect: false,
@@ -164,7 +175,7 @@ export async function runCreateCommand(args: string[], deps: CreateCommandDeps =
         templateResolution.autoSelected
           ? `\nTemplate auto-selected for ${resolvedMode}: ${templateResolution.template}`
           : "";
-      const syncSuffix = `\nTooling sync: ${formatToolingSyncSummary(syncSummary)}`;
+      const syncSuffix = `\nTooling sync: ${syncSummary ? formatToolingSyncSummary(syncSummary) : "skipped by user"}`;
 
       return {
         message: `Created sandbox ${sandboxLabel}. ${launched.message}${templateSuffix}${syncSuffix}`,
@@ -360,8 +371,9 @@ function toErrorMessage(error: unknown): string {
   return "unknown error";
 }
 
-function parseCreateArgs(args: string[]): { mode?: StartupMode } {
+function parseCreateArgs(args: string[]): { mode?: StartupMode; yesSync: boolean } {
   let mode: StartupMode | undefined;
+  let yesSync = false;
 
   for (let index = 0; index < args.length; index += 1) {
     const token = args[index];
@@ -374,10 +386,49 @@ function parseCreateArgs(args: string[]): { mode?: StartupMode } {
 
       mode = next;
       index += 1;
+      continue;
+    }
+
+    if (token === "--yes-sync") {
+      yesSync = true;
     }
   }
 
-  return { mode };
+  return { mode, yesSync };
+}
+
+async function resolveToolingSyncPreference(yesSync: boolean, deps: CreateCommandDeps): Promise<boolean> {
+  if (yesSync) {
+    return true;
+  }
+
+  const isInteractiveTerminal = deps.isInteractiveTerminal ?? (() => Boolean(process.stdin.isTTY && process.stdout.isTTY));
+  if (!isInteractiveTerminal()) {
+    return true;
+  }
+
+  const prompt = deps.promptInput ?? promptInput;
+  const answer = (await prompt("Sync local tooling auth/config into sandbox now? [Y/n]: ")).trim().toLowerCase();
+  return answer !== "n" && answer !== "no";
+}
+
+async function promptInput(question: string): Promise<string> {
+  const readline = createInterface({
+    input: process.stdin,
+    output: process.stdout
+  });
+
+  try {
+    return await readline.question(question);
+  } catch (error) {
+    const cancelled = normalizePromptCancelledError(error, "Tooling sync selection cancelled.");
+    if (cancelled) {
+      throw cancelled;
+    }
+    throw error;
+  } finally {
+    readline.close();
+  }
 }
 
 function isStartupMode(value: string | undefined): value is StartupMode {

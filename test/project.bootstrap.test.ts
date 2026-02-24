@@ -449,6 +449,40 @@ describe("project bootstrap", () => {
     );
   });
 
+  it("redacts sensitive output in bootstrap command errors", async () => {
+    const repo: ResolvedProjectRepoConfig = {
+      ...createRepo("alpha"),
+      url: "https://github.com/acme/private.git"
+    };
+    const config = createConfig({ repos: [repo] });
+    const run = vi.fn().mockImplementation(async (command: string) => {
+      if (command.startsWith("mkdir -p")) {
+        return { stdout: "", stderr: "", exitCode: 0 };
+      }
+      if (command.includes("if [ -e '/workspace/alpha' ]")) {
+        return { stdout: "EZBOX_FALSE", stderr: "", exitCode: 0 };
+      }
+      if (command.startsWith("git clone ")) {
+        return {
+          stdout: "",
+          stderr:
+            "fatal: auth failed GH_TOKEN=ghp_secret https://x-access-token:ghp_secret@github.com/acme/private.git Authorization: Bearer abc123",
+          exitCode: 1
+        };
+      }
+
+      return { stdout: "", stderr: "", exitCode: 0 };
+    });
+    const handle = {
+      ...createHandle(),
+      run
+    };
+
+    await expect(bootstrapProjectWorkspace(handle, config)).rejects.toThrow(
+      /GH_TOKEN=\[REDACTED\].*x-access-token:\[REDACTED\]@github\.com.*Bearer \[REDACTED\]/
+    );
+  });
+
   it("injects sandbox PATH into setup env when runtime env omits PATH", async () => {
     const config = createConfig({ repos: [createRepo("alpha")] });
     const run = vi.fn().mockImplementation(async (command: string) => {

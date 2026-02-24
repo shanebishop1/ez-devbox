@@ -88,4 +88,8 @@ describe("CLI bootstrap routing", () => {
   it("includes verbose in help text", () => {
     expect(renderHelp()).toContain("--verbose             Show detailed startup/provisioning logs");
   });
+
+  it("includes yes-sync in help text", () => {
+    expect(renderHelp()).toContain("--yes-sync            Skip create-time tooling sync confirmation prompt");
+  });
 });
