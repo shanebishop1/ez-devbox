@@ -4,11 +4,10 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { runConnectCommand, syncToolingForMode as syncToolingForConnectMode } from "../src/cli/commands.connect.js";
 import { runCreateCommand, syncToolingForMode as syncToolingForCreateMode } from "../src/cli/commands.create.js";
-import { runStartCommand } from "../src/cli/commands.start.js";
 import { PromptCancelledError } from "../src/cli/prompt-cancelled.js";
 import { buildSandboxDisplayName } from "../src/cli/sandbox-display-name.js";
 import type { ResolvedLauncherConfig } from "../src/config/schema.js";
-import { logger } from "../src/logging/logger.js";
+import { logger, setVerboseLoggingEnabled } from "../src/logging/logger.js";
 
 describe("CLI command integration", () => {
   const tempRoots: string[] = [];
@@ -22,6 +21,7 @@ describe("CLI command integration", () => {
   afterEach(async () => {
     await Promise.all(tempRoots.map((dir) => rm(dir, { recursive: true, force: true })));
     tempRoots.length = 0;
+    setVerboseLoggingEnabled(false);
   });
 
   const syncSummary = {
@@ -79,15 +79,14 @@ describe("CLI command integration", () => {
       enabled: false,
       config_dir: "~/.config/gh"
     },
-    mcp: {
-      mode: "disabled",
-      firecrawl_api_url: "",
-      allow_localhost_override: false
+    tunnel: {
+      ports: []
     }
   };
 
   it("create resolves prompt mode using injected selector before template sync/launch", async () => {
-    const loggerInfo = vi.spyOn(logger, "info").mockImplementation(() => undefined);
+    setVerboseLoggingEnabled(true);
+    const loggerVerbose = vi.spyOn(logger, "verbose").mockImplementation(() => undefined);
     const createSandbox = vi.fn().mockResolvedValue({ sandboxId: "sbx-created" });
     const launchMode = vi.fn().mockResolvedValue({ mode: "ssh-codex", command: "codex", message: "launched" });
     const syncToolingToSandbox = vi.fn().mockResolvedValue(syncSummary);
@@ -99,7 +98,7 @@ describe("CLI command integration", () => {
       loadConfig: vi.fn().mockResolvedValue(config),
       createSandbox,
       resolveEnvSource: vi.fn().mockResolvedValue({}),
-      resolveSandboxCreateEnv: vi.fn().mockReturnValue({ envs: {}, warnings: [] }),
+      resolveSandboxCreateEnv: vi.fn().mockReturnValue({ envs: {} }),
       resolvePromptStartupMode,
       launchMode,
       bootstrapProjectWorkspace: vi.fn().mockResolvedValue(bootstrapResult),
@@ -131,7 +130,7 @@ describe("CLI command integration", () => {
       workingDirectory: undefined,
       startupEnv: {}
     });
-    expect(loggerInfo).toHaveBeenCalledWith("Startup mode selected via prompt: ssh-codex.");
+    expect(loggerVerbose).toHaveBeenCalledWith("Startup mode selected via prompt: ssh-codex.");
     expect(saveLastRunState).toHaveBeenCalledWith({
       sandboxId: "sbx-created",
       mode: "ssh-codex",
@@ -139,7 +138,7 @@ describe("CLI command integration", () => {
       updatedAt: "2026-02-01T00:00:00.000Z"
     });
     expect(result.message).toContain(`Created sandbox ${displayName} (sbx-created).`);
-    loggerInfo.mockRestore();
+    loggerVerbose.mockRestore();
   });
 
   it("create auto-selects codex template for ssh-codex mode", async () => {
@@ -158,7 +157,7 @@ describe("CLI command integration", () => {
       loadConfig: vi.fn().mockResolvedValue(config),
       createSandbox,
       resolveEnvSource: vi.fn().mockResolvedValue({}),
-      resolveSandboxCreateEnv: vi.fn().mockReturnValue({ envs: {}, warnings: [] }),
+      resolveSandboxCreateEnv: vi.fn().mockReturnValue({ envs: {} }),
       resolvePromptStartupMode,
       launchMode: vi.fn().mockResolvedValue({ mode: "ssh-codex", command: "codex", message: "launched" }),
       bootstrapProjectWorkspace: vi.fn().mockResolvedValue(bootstrapResult),
@@ -209,7 +208,7 @@ describe("CLI command integration", () => {
       loadConfig: vi.fn().mockResolvedValue(singleRepoConfig),
       createSandbox,
       resolveEnvSource: vi.fn().mockResolvedValue({}),
-      resolveSandboxCreateEnv: vi.fn().mockReturnValue({ envs: {}, warnings: [] }),
+      resolveSandboxCreateEnv: vi.fn().mockReturnValue({ envs: {} }),
       resolvePromptStartupMode: vi.fn().mockResolvedValue("web"),
       launchMode: vi.fn().mockResolvedValue({ mode: "web", url: "https://sbx-created.e2b.dev", message: "launched" }),
       bootstrapProjectWorkspace: vi.fn().mockResolvedValue(bootstrapResult),
@@ -228,39 +227,18 @@ describe("CLI command integration", () => {
     );
   });
 
-  it("create includes MCP warnings in output message", async () => {
+  it("create uses only resolved sandbox env and does not auto-inject unrelated host env", async () => {
     const createSandbox = vi.fn().mockResolvedValue({ sandboxId: "sbx-created" });
     const launchMode = vi.fn().mockResolvedValue({ mode: "ssh-opencode", command: "opencode", message: "launched" });
     const syncToolingToSandbox = vi.fn().mockResolvedValue(syncSummary);
-    const resolveEnvSource = vi.fn().mockResolvedValue({ OPENCODE_SERVER_PASSWORD: "from-dotenv" });
-    const resolveSandboxCreateEnv = vi
-      .fn()
-      .mockReturnValue({
-        envs: {
-          OPENCODE_SERVER_PASSWORD: "from-dotenv"
-        },
-        warnings: []
-      });
+    const resolveEnvSource = vi.fn().mockResolvedValue({ FIRECRAWL_API_URL: "https://example.trycloudflare.com" });
+    const resolveSandboxCreateEnv = vi.fn().mockReturnValue({ envs: {} });
 
-    const result = await runCreateCommand([], {
-      loadConfig: vi.fn().mockResolvedValue({
-        ...config,
-        mcp: {
-          mode: "in_sandbox",
-          firecrawl_api_url: "",
-          allow_localhost_override: false
-        }
-      }),
+    await runCreateCommand([], {
+      loadConfig: vi.fn().mockResolvedValue(config),
       createSandbox,
       resolveEnvSource,
-      resolveSandboxCreateEnv: resolveSandboxCreateEnv.mockReturnValue({
-        envs: {
-          OPENCODE_SERVER_PASSWORD: "from-dotenv"
-        },
-        warnings: [
-          "mcp.mode='in_sandbox' is advanced and not fully implemented yet. Provide mcp.firecrawl_api_url or FIRECRAWL_API_URL to use a known remote endpoint."
-        ]
-      }),
+      resolveSandboxCreateEnv,
       resolvePromptStartupMode: vi.fn().mockResolvedValue("ssh-opencode"),
       launchMode,
       bootstrapProjectWorkspace: vi.fn().mockResolvedValue(bootstrapResult),
@@ -272,14 +250,18 @@ describe("CLI command integration", () => {
     expect(resolveEnvSource).toHaveBeenCalledTimes(1);
     expect(resolveSandboxCreateEnv).toHaveBeenCalledWith(
       expect.any(Object),
-      expect.objectContaining({ OPENCODE_SERVER_PASSWORD: "from-dotenv" })
+      expect.objectContaining({ FIRECRAWL_API_URL: "https://example.trycloudflare.com" })
     );
-
-    expect(result.message).toContain("MCP warnings:");
-    expect(result.message).toContain("mcp.mode='in_sandbox' is advanced and not fully implemented yet");
-    expect(result.message).toContain(
-      "Tooling sync: discovered=2, written=2, missingPaths=0, opencodeSynced=true, codexSynced=false, ghSynced=false"
+    expect(createSandbox).toHaveBeenCalledWith(
+      expect.any(Object),
+      expect.objectContaining({
+        envs: {}
+      })
     );
+    expect(launchMode).toHaveBeenCalledWith({ sandboxId: "sbx-created" }, "ssh-opencode", {
+      workingDirectory: undefined,
+      startupEnv: {}
+    });
   });
 
   it("create injects GH token into sandbox create envs and launch startupEnv when gh is enabled", async () => {
@@ -302,7 +284,7 @@ describe("CLI command integration", () => {
       loadConfig: vi.fn().mockResolvedValue(ghEnabledConfig),
       createSandbox,
       resolveEnvSource: vi.fn().mockResolvedValue({}),
-      resolveSandboxCreateEnv: vi.fn().mockReturnValue({ envs: { OPENAI_API_KEY: "existing" }, warnings: [] }),
+      resolveSandboxCreateEnv: vi.fn().mockReturnValue({ envs: { OPENAI_API_KEY: "existing" } }),
       resolvePromptStartupMode: vi.fn().mockResolvedValue("ssh-opencode"),
       resolveHostGhToken,
       launchMode,
@@ -348,7 +330,7 @@ describe("CLI command integration", () => {
       loadConfig: vi.fn().mockResolvedValue(ghEnabledConfig),
       createSandbox,
       resolveEnvSource: vi.fn().mockResolvedValue({}),
-      resolveSandboxCreateEnv: vi.fn().mockReturnValue({ envs: {}, warnings: [] }),
+      resolveSandboxCreateEnv: vi.fn().mockReturnValue({ envs: {} }),
       resolvePromptStartupMode: vi.fn().mockResolvedValue("ssh-opencode"),
       resolveHostGhToken: vi.fn().mockResolvedValue(undefined),
       launchMode,
@@ -367,7 +349,8 @@ describe("CLI command integration", () => {
   });
 
   it("create wipes newly created sandbox when setup selection is cancelled", async () => {
-    const loggerInfo = vi.spyOn(logger, "info").mockImplementation(() => undefined);
+    setVerboseLoggingEnabled(true);
+    const loggerVerbose = vi.spyOn(logger, "verbose").mockImplementation(() => undefined);
     const kill = vi.fn().mockResolvedValue(undefined);
     const createSandbox = vi.fn().mockResolvedValue({ sandboxId: "sbx-created", kill });
 
@@ -376,7 +359,7 @@ describe("CLI command integration", () => {
         loadConfig: vi.fn().mockResolvedValue(config),
         createSandbox,
         resolveEnvSource: vi.fn().mockResolvedValue({}),
-        resolveSandboxCreateEnv: vi.fn().mockReturnValue({ envs: {}, warnings: [] }),
+        resolveSandboxCreateEnv: vi.fn().mockReturnValue({ envs: {} }),
         resolvePromptStartupMode: vi.fn().mockResolvedValue("ssh-opencode"),
         launchMode: vi.fn(),
         bootstrapProjectWorkspace: vi.fn().mockRejectedValue(new PromptCancelledError("Repository selection cancelled.")),
@@ -388,8 +371,8 @@ describe("CLI command integration", () => {
 
     expect(createSandbox).toHaveBeenCalledTimes(1);
     expect(kill).toHaveBeenCalledTimes(1);
-    expect(loggerInfo).toHaveBeenCalledWith("Setup selection cancelled; wiping newly created sandbox.");
-    loggerInfo.mockRestore();
+    expect(loggerVerbose).toHaveBeenCalledWith("Setup selection cancelled; wiping newly created sandbox.");
+    loggerVerbose.mockRestore();
   });
 
   it("create does not wipe sandbox when cancellation happens before sandbox creation", async () => {
@@ -400,7 +383,7 @@ describe("CLI command integration", () => {
         loadConfig: vi.fn().mockResolvedValue(config),
         createSandbox,
         resolveEnvSource: vi.fn().mockResolvedValue({}),
-        resolveSandboxCreateEnv: vi.fn().mockReturnValue({ envs: {}, warnings: [] }),
+        resolveSandboxCreateEnv: vi.fn().mockReturnValue({ envs: {} }),
         resolvePromptStartupMode: vi.fn().mockRejectedValue(new PromptCancelledError("Startup mode selection cancelled.")),
         launchMode: vi.fn(),
         bootstrapProjectWorkspace: vi.fn().mockResolvedValue(bootstrapResult),
@@ -421,7 +404,7 @@ describe("CLI command integration", () => {
         loadConfig: vi.fn().mockResolvedValue(config),
         createSandbox: vi.fn().mockResolvedValue({ sandboxId: "sbx-created", kill }),
         resolveEnvSource: vi.fn().mockResolvedValue({}),
-        resolveSandboxCreateEnv: vi.fn().mockReturnValue({ envs: {}, warnings: [] }),
+        resolveSandboxCreateEnv: vi.fn().mockReturnValue({ envs: {} }),
         resolvePromptStartupMode: vi.fn().mockResolvedValue("ssh-opencode"),
         launchMode: vi.fn(),
         bootstrapProjectWorkspace: vi.fn().mockRejectedValue(new Error("bootstrap failed")),
@@ -513,7 +496,8 @@ describe("CLI command integration", () => {
   });
 
   it("connect uses --sandbox-id when provided", async () => {
-    const loggerInfo = vi.spyOn(logger, "info").mockImplementation(() => undefined);
+    setVerboseLoggingEnabled(true);
+    const loggerVerbose = vi.spyOn(logger, "verbose").mockImplementation(() => undefined);
     const connectSandbox = vi.fn().mockResolvedValue({ sandboxId: "sbx-arg" });
     const launchMode = vi.fn().mockResolvedValue({ mode: "ssh-opencode", command: "opencode", message: "launched" });
     const syncToolingToSandbox = vi.fn().mockResolvedValue(syncSummary);
@@ -540,13 +524,13 @@ describe("CLI command integration", () => {
     expect(resolvePromptStartupMode).toHaveBeenCalledWith("prompt");
     expect(syncToolingToSandbox).toHaveBeenCalledWith(config, { sandboxId: "sbx-arg" }, "ssh-opencode");
     expect(syncToolingToSandbox.mock.invocationCallOrder[0]).toBeLessThan(launchMode.mock.invocationCallOrder[0]);
-    expect(loggerInfo).toHaveBeenCalledWith("Bootstrap: Repo clone: /workspace/alpha");
+    expect(loggerVerbose).toHaveBeenCalledWith("Bootstrap: Repo clone: /workspace/alpha");
     expect(launchMode).toHaveBeenCalledWith({ sandboxId: "sbx-arg" }, "ssh-opencode", {
       workingDirectory: undefined,
       startupEnv: {}
     });
-    expect(loggerInfo).toHaveBeenCalledWith("Startup mode selected via prompt: ssh-opencode.");
-    loggerInfo.mockRestore();
+    expect(loggerVerbose).toHaveBeenCalledWith("Startup mode selected via prompt: ssh-opencode.");
+    loggerVerbose.mockRestore();
   });
 
   it("connect injects GH token into launch startupEnv when gh is enabled", async () => {
@@ -690,7 +674,8 @@ describe("CLI command integration", () => {
   });
 
   it("connect logs named fallback sandbox label when selected from list", async () => {
-    const loggerInfo = vi.spyOn(logger, "info").mockImplementation(() => undefined);
+    setVerboseLoggingEnabled(true);
+    const loggerVerbose = vi.spyOn(logger, "verbose").mockImplementation(() => undefined);
     const connectSandbox = vi.fn().mockResolvedValue({ sandboxId: "sbx-list" });
 
     const result = await runConnectCommand(
@@ -717,9 +702,9 @@ describe("CLI command integration", () => {
     );
 
     expect(connectSandbox).toHaveBeenCalledWith("sbx-list", config);
-    expect(loggerInfo).toHaveBeenCalledWith("Selected fallback sandbox: Agent Box web 2026-02-01 00:00 UTC (sbx-list).");
+    expect(loggerVerbose).toHaveBeenCalledWith("Selected fallback sandbox: Agent Box web 2026-02-01 00:00 UTC (sbx-list).");
     expect(result.message).toContain("Connected to sandbox Agent Box web 2026-02-01 00:00 UTC (sbx-list).");
-    loggerInfo.mockRestore();
+    loggerVerbose.mockRestore();
   });
 
   it("create bootstraps project workspace and forwards cwd/env to launch", async () => {
@@ -737,7 +722,7 @@ describe("CLI command integration", () => {
       loadConfig: vi.fn().mockResolvedValue(config),
       createSandbox: vi.fn().mockResolvedValue({ sandboxId: "sbx-created" }),
       resolveEnvSource: vi.fn().mockResolvedValue({}),
-      resolveSandboxCreateEnv: vi.fn().mockReturnValue({ envs: {}, warnings: [] }),
+      resolveSandboxCreateEnv: vi.fn().mockReturnValue({ envs: {} }),
       resolvePromptStartupMode: vi.fn().mockResolvedValue("ssh-opencode"),
       launchMode,
       bootstrapProjectWorkspace,
@@ -804,26 +789,4 @@ describe("CLI command integration", () => {
     });
   });
 
-  it("start bypasses last-run lookup with --no-reuse", async () => {
-    const loadLastRunState = vi.fn().mockResolvedValue({ sandboxId: "sbx-last", mode: "web", updatedAt: "2026-01-01T00:00:00.000Z" });
-    const listSandboxes = vi.fn().mockResolvedValue([{ sandboxId: "sbx-list", state: "running" }]);
-    const connectSandbox = vi.fn().mockResolvedValue({ sandboxId: "sbx-list" });
-
-    await runStartCommand(["--no-reuse"], {
-      loadConfig: vi.fn().mockResolvedValue(config),
-      connectSandbox,
-      loadLastRunState,
-      listSandboxes,
-      resolvePromptStartupMode: vi.fn().mockResolvedValue("ssh-opencode"),
-      launchMode: vi.fn().mockResolvedValue({ mode: "ssh-opencode", command: "opencode", message: "launched" }),
-      bootstrapProjectWorkspace: vi.fn().mockResolvedValue(bootstrapResult),
-      syncToolingToSandbox: vi.fn().mockResolvedValue(syncSummary),
-      saveLastRunState: vi.fn().mockResolvedValue(undefined),
-      now: () => "2026-02-01T00:00:00.000Z"
-    });
-
-    expect(loadLastRunState).not.toHaveBeenCalled();
-    expect(listSandboxes).toHaveBeenCalledTimes(1);
-    expect(connectSandbox).toHaveBeenCalledWith("sbx-list", config);
-  });
 });

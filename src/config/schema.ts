@@ -2,7 +2,6 @@ import type { StartupMode } from "../types/index.js";
 
 export type ProjectMode = "single" | "all";
 export type ProjectActiveMode = "prompt" | "name" | "index";
-export type McpMode = "disabled" | "remote_url" | "in_sandbox";
 
 export interface ResolvedProjectRepoConfig {
   name: string;
@@ -49,9 +48,7 @@ export interface ResolvedLauncherConfig {
     enabled: boolean;
     config_dir: string;
   };
-  mcp: {
-    mode: McpMode;
-    firecrawl_api_url: string;
-    allow_localhost_override: boolean;
+  tunnel: {
+    ports: number[];
   };
 }

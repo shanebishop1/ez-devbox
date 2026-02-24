@@ -4,7 +4,6 @@ import { parse as parseDotEnv } from "dotenv";
 import { parse as parseToml } from "smol-toml";
 import type { ResolvedLauncherConfig } from "./schema.js";
 import { defaultConfig } from "./defaults.js";
-import { validateFirecrawlPreflight } from "../mcp/firecrawl.js";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -16,7 +15,6 @@ export interface LoadConfigOptions {
 const STARTUP_MODES = ["prompt", "ssh-opencode", "ssh-codex", "web", "ssh-shell"] as const;
 const PROJECT_MODES = ["single", "all"] as const;
 const PROJECT_ACTIVE_MODES = ["prompt", "name", "index"] as const;
-const MCP_MODES = ["disabled", "remote_url", "in_sandbox"] as const;
 
 export async function loadConfig(options: LoadConfigOptions = {}): Promise<ResolvedLauncherConfig> {
   const configPath = options.configPath ?? resolve(process.cwd(), "launcher.config.toml");
@@ -43,7 +41,7 @@ export async function loadConfig(options: LoadConfigOptions = {}): Promise<Resol
   const opencodeRaw = getOptionalTable(rawConfig, "opencode", "opencode");
   const codexRaw = getOptionalTable(rawConfig, "codex", "codex");
   const ghRaw = getOptionalTable(rawConfig, "gh", "gh");
-  const mcpRaw = getOptionalTable(rawConfig, "mcp", "mcp");
+  const tunnelRaw = getOptionalTable(rawConfig, "tunnel", "tunnel");
 
   const projectReposRaw =
     projectRaw === undefined ? undefined : getOptionalArray(projectRaw, "repos", "project.repos");
@@ -100,14 +98,8 @@ export async function loadConfig(options: LoadConfigOptions = {}): Promise<Resol
       enabled: getOptionalBoolean(ghRaw, "enabled", "gh.enabled") ?? defaultConfig.gh.enabled,
       config_dir: getOptionalString(ghRaw, "config_dir", "gh.config_dir") ?? defaultConfig.gh.config_dir
     },
-    mcp: {
-      mode: getOptionalEnum(mcpRaw, "mode", "mcp.mode", MCP_MODES) ?? defaultConfig.mcp.mode,
-      firecrawl_api_url:
-        getOptionalString(mcpRaw, "firecrawl_api_url", "mcp.firecrawl_api_url") ??
-        (typeof mergedEnv.FIRECRAWL_API_URL === "string" ? mergedEnv.FIRECRAWL_API_URL : defaultConfig.mcp.firecrawl_api_url),
-      allow_localhost_override:
-        getOptionalBoolean(mcpRaw, "allow_localhost_override", "mcp.allow_localhost_override") ??
-        defaultConfig.mcp.allow_localhost_override
+    tunnel: {
+      ports: getOptionalNumberArray(tunnelRaw, "ports", "tunnel.ports") ?? defaultConfig.tunnel.ports
     }
   };
 
@@ -127,7 +119,18 @@ export async function loadConfig(options: LoadConfigOptions = {}): Promise<Resol
     throw new Error("Invalid gh.config_dir: expected a non-empty path string.");
   }
 
-  validateFirecrawlPreflight(resolved, mergedEnv);
+  const seenTunnelPorts = new Set<number>();
+  for (const [index, port] of resolved.tunnel.ports.entries()) {
+    if (!Number.isInteger(port) || port < 1 || port > 65535) {
+      throw new Error(`Invalid tunnel.ports[${index}]: expected an integer between 1 and 65535.`);
+    }
+
+    if (seenTunnelPorts.has(port)) {
+      throw new Error(`Invalid tunnel.ports[${index}]: duplicate port '${port}' is not allowed.`);
+    }
+
+    seenTunnelPorts.add(port);
+  }
 
   return resolved;
 }
@@ -287,6 +290,23 @@ function getOptionalStringArray(
   if (!Array.isArray(value) || !value.every((item) => typeof item === "string")) {
     throw new Error(`Invalid ${path}: expected an array of strings.`);
   }
+  return [...value];
+}
+
+function getOptionalNumberArray(
+  parent: JsonRecord | undefined,
+  key: string,
+  path: string
+): number[] | undefined {
+  const value = parent?.[key];
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (!Array.isArray(value) || !value.every((item) => typeof item === "number" && !Number.isNaN(item))) {
+    throw new Error(`Invalid ${path}: expected an array of numbers.`);
+  }
+
   return [...value];
 }
 

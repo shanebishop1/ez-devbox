@@ -18,6 +18,7 @@ import { loadLastRunState, saveLastRunState, type LastRunState } from "../state/
 import { logger } from "../logging/logger.js";
 import { formatSandboxDisplayLabel } from "./sandbox-display-name.js";
 import { resolveHostGhToken } from "../auth/gh-host-token.js";
+import { withConfiguredTunnel } from "../tunnel/cloudflared.js";
 import {
   syncCodexAuthFile,
   syncCodexConfigDir,
@@ -89,56 +90,62 @@ export async function runConnectCommand(
   const parsed = parseConnectArgs(args);
   const config = await deps.loadConfig();
 
-  const target = await resolveSandboxTarget(parsed.sandboxId, deps, options);
-  const targetLabel = target.label ?? target.sandboxId;
-  const requestedMode = parsed.mode ?? config.startup.mode;
-  logger.info(`Resolving startup mode from '${requestedMode}'.`);
-  const mode = await deps.resolvePromptStartupMode(requestedMode);
-  if (requestedMode === "prompt") {
-    logger.info(`Startup mode selected via prompt: ${mode}.`);
-  }
-  const resolvedMode = resolveStartupMode(mode);
-
-  logger.info(`Connecting to sandbox ${targetLabel}.`);
-  const handle = await deps.connectSandbox(target.sandboxId, config);
-  logger.info(`Connected to sandbox ${targetLabel}.`);
-  const envSource = deps.resolveEnvSource ? await deps.resolveEnvSource() : await loadEnvSource();
-  const ghRuntimeEnv = await resolveGhRuntimeEnv(config, envSource, deps.resolveHostGhToken);
-
-  logger.info(`Syncing local tooling config/auth for mode '${resolvedMode}'.`);
-  const syncSummary = await deps.syncToolingToSandbox(config, handle, resolvedMode);
-
-  logger.info("Starting project bootstrap.");
-  const bootstrapResult = await (deps.bootstrapProjectWorkspace ?? bootstrapProjectWorkspace)(handle, config, {
-    isConnect: true,
-    runtimeEnv: ghRuntimeEnv,
-    onProgress: (message) => logger.info(`Bootstrap: ${message}`)
-  });
-  logger.info(`Selected repos summary: ${formatSelectedReposSummary(bootstrapResult.selectedRepoNames)}.`);
-  logger.info(`Setup outcome summary: ${formatSetupOutcomeSummary(bootstrapResult.setup)}.`);
-
-  logger.info(`Launching startup mode '${mode}'.`);
-  const launched = await deps.launchMode(handle, mode, {
-    workingDirectory: bootstrapResult.workingDirectory,
-    startupEnv: {
-      ...bootstrapResult.startupEnv,
-      ...ghRuntimeEnv
+  return withConfiguredTunnel(config, async (tunnelRuntimeEnv) => {
+    const target = await resolveSandboxTarget(parsed.sandboxId, deps, options);
+    const targetLabel = target.label ?? target.sandboxId;
+    const requestedMode = parsed.mode ?? config.startup.mode;
+    logger.verbose(`Resolving startup mode from '${requestedMode}'.`);
+    const mode = await deps.resolvePromptStartupMode(requestedMode);
+    if (requestedMode === "prompt") {
+      logger.verbose(`Startup mode selected via prompt: ${mode}.`);
     }
+    const resolvedMode = resolveStartupMode(mode);
+
+    logger.verbose(`Connecting to sandbox ${targetLabel}.`);
+    const handle = await deps.connectSandbox(target.sandboxId, config);
+    logger.verbose(`Connected to sandbox ${targetLabel}.`);
+    const envSource = deps.resolveEnvSource ? await deps.resolveEnvSource() : await loadEnvSource();
+    const ghRuntimeEnv = await resolveGhRuntimeEnv(config, envSource, deps.resolveHostGhToken);
+    const runtimeEnv = {
+      ...tunnelRuntimeEnv,
+      ...ghRuntimeEnv
+    };
+
+    logger.verbose(`Syncing local tooling config/auth for mode '${resolvedMode}'.`);
+    const syncSummary = await deps.syncToolingToSandbox(config, handle, resolvedMode);
+
+    logger.verbose("Starting project bootstrap.");
+    const bootstrapResult = await (deps.bootstrapProjectWorkspace ?? bootstrapProjectWorkspace)(handle, config, {
+      isConnect: true,
+      runtimeEnv,
+      onProgress: (message) => logger.verbose(`Bootstrap: ${message}`)
+    });
+    logger.verbose(`Selected repos summary: ${formatSelectedReposSummary(bootstrapResult.selectedRepoNames)}.`);
+    logger.verbose(`Setup outcome summary: ${formatSetupOutcomeSummary(bootstrapResult.setup)}.`);
+
+    logger.verbose(`Launching startup mode '${mode}'.`);
+    const launched = await deps.launchMode(handle, mode, {
+      workingDirectory: bootstrapResult.workingDirectory,
+      startupEnv: {
+        ...bootstrapResult.startupEnv,
+        ...runtimeEnv
+      }
+    });
+
+    const activeRepo = bootstrapResult.selectedRepoNames.length === 1 ? bootstrapResult.selectedRepoNames[0] : undefined;
+
+    await deps.saveLastRunState({
+      sandboxId: handle.sandboxId,
+      mode: launched.mode,
+      activeRepo,
+      updatedAt: deps.now()
+    });
+
+    return {
+      message: `Connected to sandbox ${targetLabel}. ${launched.message}\nTooling sync: ${formatToolingSyncSummary(syncSummary)}`,
+      exitCode: 0
+    };
   });
-
-  const activeRepo = bootstrapResult.selectedRepoNames.length === 1 ? bootstrapResult.selectedRepoNames[0] : undefined;
-
-  await deps.saveLastRunState({
-    sandboxId: handle.sandboxId,
-    mode: launched.mode,
-    activeRepo,
-    updatedAt: deps.now()
-  });
-
-  return {
-    message: `Connected to sandbox ${targetLabel}. ${launched.message}\nTooling sync: ${formatToolingSyncSummary(syncSummary)}`,
-    exitCode: 0
-  };
 }
 
 async function resolveGhRuntimeEnv(
@@ -150,15 +157,15 @@ async function resolveGhRuntimeEnv(
     return {};
   }
 
-  logger.info("GitHub auth: resolving token.");
+  logger.verbose("GitHub auth: resolving token.");
   const resolver = resolveToken ?? resolveHostGhToken;
   const token = await resolver(envSource);
   if (!token) {
-    logger.info("GitHub auth: token not found; continuing without GH_TOKEN/GITHUB_TOKEN.");
+    logger.verbose("GitHub auth: token not found; continuing without GH_TOKEN/GITHUB_TOKEN.");
     return {};
   }
 
-  logger.info("GitHub auth: token found; injecting GH_TOKEN/GITHUB_TOKEN.");
+  logger.verbose("GitHub auth: token found; injecting GH_TOKEN/GITHUB_TOKEN.");
   return {
     GH_TOKEN: token,
     GITHUB_TOKEN: token
@@ -259,12 +266,12 @@ async function runSyncUnit(
     }
 
     lastLoggedCount = progress.filesWritten;
-    logger.info(`Tooling sync progress: ${label} ${progress.filesWritten}/${progress.filesDiscovered}`);
+    logger.verbose(`Tooling sync progress: ${label} ${progress.filesWritten}/${progress.filesDiscovered}`);
   };
 
-  logger.info(`Tooling sync start: ${label}.`);
+  logger.verbose(`Tooling sync start: ${label}.`);
   const summary = await syncUnit(onProgress);
-  logger.info(
+  logger.verbose(
     `Tooling sync done: ${label} discovered=${summary.filesDiscovered}, written=${summary.filesWritten}, skippedMissing=${summary.skippedMissing}.`
   );
   return summary;
@@ -320,7 +327,7 @@ async function resolveSandboxTarget(
   if (sandboxes.length === 1) {
     const fallbackLabel = formatSandboxDisplayLabel(firstSandbox.sandboxId, firstSandbox.metadata);
     if (fallbackLabel !== firstSandbox.sandboxId) {
-      logger.info(`Selected fallback sandbox: ${fallbackLabel}.`);
+      logger.verbose(`Selected fallback sandbox: ${fallbackLabel}.`);
     }
 
     return {
@@ -341,7 +348,7 @@ async function resolveSandboxTarget(
     if (matchedSandbox) {
       const fallbackLabel = formatSandboxDisplayLabel(matchedSandbox.sandboxId, matchedSandbox.metadata);
       if (fallbackLabel !== matchedSandbox.sandboxId) {
-        logger.info(`Selected fallback sandbox: ${fallbackLabel}.`);
+        logger.verbose(`Selected fallback sandbox: ${fallbackLabel}.`);
       }
 
       return {

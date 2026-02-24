@@ -39,14 +39,12 @@ describe("sandbox env resolution", () => {
       enabled: false,
       config_dir: "~/.config/gh"
     },
-    mcp: {
-      mode: "remote_url",
-      firecrawl_api_url: "https://firecrawl.example.com",
-      allow_localhost_override: false
+    tunnel: {
+      ports: []
     }
   };
 
-  it("includes pass-through allowlist, built-ins, and firecrawl env", () => {
+  it("includes pass-through allowlist and built-ins", () => {
     const resolved = resolveSandboxCreateEnv(baseConfig, {
       CUSTOM_TOKEN: "abc",
       OPENAI_API_KEY: "openai-key",
@@ -61,31 +59,16 @@ describe("sandbox env resolution", () => {
       OPENAI_API_KEY: "openai-key",
       GITHUB_TOKEN: "ghp_123",
       OPENCODE_SERVER_PASSWORD: "pw",
-      FIRECRAWL_API_URL: "https://firecrawl.example.com",
       FIRECRAWL_API_KEY: "fc-key"
     });
-    expect(resolved.warnings).toEqual([]);
   });
 
-  it("surfaces mcp warnings without leaking empty env entries", () => {
-    const resolved = resolveSandboxCreateEnv(
-      {
-        ...baseConfig,
-        mcp: {
-          mode: "in_sandbox",
-          firecrawl_api_url: "",
-          allow_localhost_override: false
-        }
-      },
-      {
-        CUSTOM_TOKEN: "",
-        OPENAI_API_KEY: "   "
-      }
-    );
+  it("skips empty values from env source", () => {
+    const resolved = resolveSandboxCreateEnv(baseConfig, {
+      CUSTOM_TOKEN: "",
+      OPENAI_API_KEY: "   "
+    });
 
     expect(resolved.envs).toEqual({});
-    expect(resolved.warnings).toEqual([
-      "mcp.mode='in_sandbox' is advanced and not fully implemented yet. Provide mcp.firecrawl_api_url or FIRECRAWL_API_URL to use a known remote endpoint."
-    ]);
   });
 });
