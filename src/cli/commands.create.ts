@@ -100,7 +100,7 @@ export async function runCreateCommand(args: string[], deps: CreateCommandDeps =
       ...ghRuntimeEnv
     };
     const createEnvs = { ...runtimeEnv };
-    logger.verbose(`Creating sandbox with envs: ${JSON.stringify(createEnvs)}`);
+    logger.verbose(`Creating sandbox with envs: ${formatEnvVarNames(createEnvs)}`);
 
     logger.verbose(`Creating sandbox '${displayName}' with template '${createConfig.sandbox.template}'.`);
     const handle = await deps.createSandbox(createConfig, {
@@ -323,6 +323,14 @@ function formatToolingSyncSummary(summary: ToolingSyncSummary): string {
   const codexSynced = summary.codexConfigSynced || summary.codexAuthSynced;
   const ghSynced = summary.ghEnabled && summary.ghConfigSynced;
   return `discovered=${summary.totalDiscovered}, written=${summary.totalWritten}, missingPaths=${summary.skippedMissingPaths}, opencodeSynced=${opencodeSynced}, codexSynced=${codexSynced}, ghSynced=${ghSynced}`;
+}
+
+function formatEnvVarNames(envs: Record<string, string>): string {
+  const names = Object.keys(envs);
+  if (names.length === 0) {
+    return "(none)";
+  }
+  return names.join(", ");
 }
 
 function resolveTemplateForMode(
