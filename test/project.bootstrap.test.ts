@@ -16,6 +16,10 @@ function createRepo(name: string): ResolvedProjectRepoConfig {
   };
 }
 
+function isSetupCommand(command: string, setupCommand: string): boolean {
+  return command === setupCommand || command.endsWith(` ${setupCommand}`);
+}
+
 function createConfig(overrides?: Partial<ResolvedLauncherConfig["project"]>): ResolvedLauncherConfig {
   return {
     sandbox: {
@@ -54,10 +58,8 @@ function createConfig(overrides?: Partial<ResolvedLauncherConfig["project"]>): R
       enabled: false,
       config_dir: ""
     },
-    mcp: {
-      mode: "disabled",
-      firecrawl_api_url: "",
-      allow_localhost_override: false
+    tunnel: {
+      ports: []
     }
   };
 }
@@ -300,7 +302,7 @@ describe("project bootstrap", () => {
       if (command.includes("rev-parse --abbrev-ref HEAD")) {
         return { stdout: "main\n", stderr: "", exitCode: 0 };
       }
-      if (command === "npm ci") {
+      if (isSetupCommand(command, "npm ci")) {
         return { stdout: "done\n", stderr: "", exitCode: 0 };
       }
 
@@ -339,7 +341,7 @@ describe("project bootstrap", () => {
       if (command.includes("rev-parse --abbrev-ref HEAD")) {
         return { stdout: "main\n", stderr: "", exitCode: 0 };
       }
-      if (command === "npm ci") {
+      if (isSetupCommand(command, "npm ci")) {
         return { stdout: "done\n", stderr: "", exitCode: 0 };
       }
 
@@ -388,7 +390,7 @@ describe("project bootstrap", () => {
       if (command.includes("rev-parse --abbrev-ref HEAD")) {
         return { stdout: "main\n", stderr: "", exitCode: 0 };
       }
-      if (command === "npm ci") {
+      if (isSetupCommand(command, "npm ci")) {
         return { stdout: "done\n", stderr: "", exitCode: 0 };
       }
 
@@ -411,6 +413,160 @@ describe("project bootstrap", () => {
         timeoutMs: 1000,
         envs: {
           NODE_ENV: "test"
+        }
+      })
+    );
+  });
+
+  it("injects sandbox PATH into setup env when runtime env omits PATH", async () => {
+    const config = createConfig({ repos: [createRepo("alpha")] });
+    const run = vi.fn().mockImplementation(async (command: string) => {
+      if (command === 'printf %s "$PATH"') {
+        return { stdout: "/usr/local/bin:/usr/bin:/bin", stderr: "", exitCode: 0 };
+      }
+      if (command.startsWith("mkdir -p")) {
+        return { stdout: "", stderr: "", exitCode: 0 };
+      }
+      if (command.includes("if [ -e '/workspace/alpha' ]")) {
+        return { stdout: "EZBOX_FALSE", stderr: "", exitCode: 0 };
+      }
+      if (command.startsWith("git clone ")) {
+        return { stdout: "", stderr: "", exitCode: 0 };
+      }
+      if (command.includes("rev-parse --abbrev-ref HEAD")) {
+        return { stdout: "main\n", stderr: "", exitCode: 0 };
+      }
+      if (isSetupCommand(command, "npm ci")) {
+        return { stdout: "done\n", stderr: "", exitCode: 0 };
+      }
+
+      return { stdout: "", stderr: "", exitCode: 0 };
+    });
+
+    const handle = {
+      ...createHandle(),
+      run
+    };
+
+    await bootstrapProjectWorkspace(handle, config);
+
+    expect(run).toHaveBeenCalledWith('printf %s "$PATH"', expect.objectContaining({ timeoutMs: 1000 }));
+    expect(run).toHaveBeenCalledWith(
+      expect.stringContaining("npm ci"),
+      expect.objectContaining({
+        timeoutMs: 1000,
+        cwd: "/workspace/alpha",
+        envs: {
+          PATH: "/usr/local/bin:/usr/bin:/bin",
+          GIT_AUTHOR_NAME: "E2B Launcher",
+          GIT_AUTHOR_EMAIL: "launcher@example.local",
+          GIT_COMMITTER_NAME: "E2B Launcher",
+          GIT_COMMITTER_EMAIL: "launcher@example.local"
+        }
+      })
+    );
+  });
+
+  it("keeps caller PATH and skips sandbox PATH lookup when PATH is provided", async () => {
+    const config = createConfig({ repos: [createRepo("alpha")] });
+    const run = vi.fn().mockImplementation(async (command: string) => {
+      if (command.startsWith("mkdir -p")) {
+        return { stdout: "", stderr: "", exitCode: 0 };
+      }
+      if (command.includes("if [ -e '/workspace/alpha' ]")) {
+        return { stdout: "EZBOX_FALSE", stderr: "", exitCode: 0 };
+      }
+      if (command.startsWith("git clone ")) {
+        return { stdout: "", stderr: "", exitCode: 0 };
+      }
+      if (command.includes("rev-parse --abbrev-ref HEAD")) {
+        return { stdout: "main\n", stderr: "", exitCode: 0 };
+      }
+      if (isSetupCommand(command, "npm ci")) {
+        return { stdout: "done\n", stderr: "", exitCode: 0 };
+      }
+
+      return { stdout: "", stderr: "", exitCode: 0 };
+    });
+
+    const handle = {
+      ...createHandle(),
+      run
+    };
+
+    await bootstrapProjectWorkspace(handle, config, {
+      runtimeEnv: {
+        PATH: "/custom/bin",
+        NODE_ENV: "test"
+      }
+    });
+
+    expect(run).not.toHaveBeenCalledWith('printf %s "$PATH"', expect.anything());
+    expect(run).toHaveBeenCalledWith(
+      expect.stringContaining("npm ci"),
+      expect.objectContaining({
+        timeoutMs: 1000,
+        cwd: "/workspace/alpha",
+        envs: {
+          PATH: "/custom/bin",
+          NODE_ENV: "test",
+          GIT_AUTHOR_NAME: "E2B Launcher",
+          GIT_AUTHOR_EMAIL: "launcher@example.local",
+          GIT_COMMITTER_NAME: "E2B Launcher",
+          GIT_COMMITTER_EMAIL: "launcher@example.local"
+        }
+      })
+    );
+  });
+
+  it("keeps explicit git identity values from runtime env", async () => {
+    const config = createConfig({ repos: [createRepo("alpha")] });
+    const run = vi.fn().mockImplementation(async (command: string) => {
+      if (command === 'printf %s "$PATH"') {
+        return { stdout: "/usr/local/bin:/usr/bin:/bin", stderr: "", exitCode: 0 };
+      }
+      if (command.startsWith("mkdir -p")) {
+        return { stdout: "", stderr: "", exitCode: 0 };
+      }
+      if (command.includes("if [ -e '/workspace/alpha' ]")) {
+        return { stdout: "EZBOX_FALSE", stderr: "", exitCode: 0 };
+      }
+      if (command.startsWith("git clone ")) {
+        return { stdout: "", stderr: "", exitCode: 0 };
+      }
+      if (command.includes("rev-parse --abbrev-ref HEAD")) {
+        return { stdout: "main\n", stderr: "", exitCode: 0 };
+      }
+      if (isSetupCommand(command, "npm ci")) {
+        return { stdout: "done\n", stderr: "", exitCode: 0 };
+      }
+
+      return { stdout: "", stderr: "", exitCode: 0 };
+    });
+
+    const handle = {
+      ...createHandle(),
+      run
+    };
+
+    await bootstrapProjectWorkspace(handle, config, {
+      runtimeEnv: {
+        GIT_AUTHOR_NAME: "Repo Bot",
+        GIT_AUTHOR_EMAIL: "repo-bot@example.com"
+      }
+    });
+
+    expect(run).toHaveBeenCalledWith(
+      expect.stringContaining("npm ci"),
+      expect.objectContaining({
+        timeoutMs: 1000,
+        cwd: "/workspace/alpha",
+        envs: {
+          PATH: expect.any(String),
+          GIT_AUTHOR_NAME: "Repo Bot",
+          GIT_AUTHOR_EMAIL: "repo-bot@example.com",
+          GIT_COMMITTER_NAME: "Repo Bot",
+          GIT_COMMITTER_EMAIL: "repo-bot@example.com"
         }
       })
     );
