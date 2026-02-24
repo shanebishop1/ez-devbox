@@ -113,7 +113,7 @@ describe("startup modes orchestrator", () => {
       privateKeyPath: "/tmp/session/id_ed25519",
       wsUrl: "wss://8081-sbx.e2b.app"
       },
-      "bash -lc 'export PATH=\"$HOME/.local/bin:$HOME/.local/share/mise/shims:$PATH\" && exec opencode'"
+      "bash -lc 'exec opencode'"
     );
     expect(cleanupSession).toHaveBeenCalledTimes(1);
     expect(result.mode).toBe("ssh-opencode");
@@ -242,7 +242,7 @@ describe("startup modes orchestrator", () => {
         knownHostsPath: "/tmp/session/known_hosts",
         wsUrl: "wss://8081-sbx.e2b.app"
       },
-      "bash -lc 'export PATH=\"$HOME/.local/bin:$HOME/.local/share/mise/shims:$PATH\" && exec codex'"
+      "bash -lc 'exec codex'"
     );
     expect(cleanupSession).toHaveBeenCalledTimes(1);
     expect(result.mode).toBe("ssh-codex");
@@ -321,7 +321,7 @@ describe("startup modes orchestrator", () => {
         knownHostsPath: "/tmp/session/known_hosts",
         wsUrl: "wss://8081-sbx.e2b.app"
       },
-      "bash -lc 'export PATH=\"$HOME/.local/bin:$HOME/.local/share/mise/shims:$PATH\" && exec bash -i'"
+      "bash -lc 'exec bash -i'"
     );
     expect(cleanupSession).toHaveBeenCalledTimes(1);
     expect(result.mode).toBe("ssh-shell");

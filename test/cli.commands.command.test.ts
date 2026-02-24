@@ -184,4 +184,24 @@ describe("runCommandCommand", () => {
     expect(result.message).toContain("stdout:\n(empty)");
     expect(result.message).toContain("stderr:\nboom");
   });
+
+  it("injects passthrough envs when running command", async () => {
+    const run = vi.fn().mockResolvedValue({ stdout: "ok", stderr: "", exitCode: 0 });
+
+    await runCommandCommand(["--sandbox-id", "sbx-1", "env"], {
+      loadConfig: vi.fn().mockResolvedValue(baseConfig),
+      listSandboxes: vi.fn().mockResolvedValue([]),
+      connectSandbox: vi.fn().mockResolvedValue({ sandboxId: "sbx-1", run }),
+      resolveEnvSource: vi.fn().mockResolvedValue({ FIRECRAWL_API_KEY: "fc-test" }),
+      resolveSandboxCreateEnv: vi.fn().mockReturnValue({ envs: { FIRECRAWL_API_KEY: "fc-test" } }),
+      loadLastRunState: vi.fn().mockResolvedValue(null)
+    });
+
+    expect(run).toHaveBeenCalledWith("env", {
+      cwd: "/workspace",
+      envs: {
+        FIRECRAWL_API_KEY: "fc-test"
+      }
+    });
+  });
 });

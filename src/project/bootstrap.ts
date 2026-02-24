@@ -3,6 +3,7 @@ import { isAbsolute, join, resolve as resolvePath } from "node:path";
 import type { ResolvedLauncherConfig, ResolvedProjectRepoConfig } from "../config/schema.js";
 import type { SandboxHandle } from "../e2b/lifecycle.js";
 import { normalizePromptCancelledError } from "../cli/prompt-cancelled.js";
+import { resolveGitIdentity } from "../auth/gitIdentity.js";
 import { provisionRepos, type GitAdapter, type ProvisionedRepoSummary, type RepoExecutor } from "../repo/manager.js";
 import {
   runSetupPipeline,
@@ -11,9 +12,7 @@ import {
   type SetupPipelineResult,
   type SetupRunnerEvent
 } from "../setup/runner.js";
-
-const REQUIRED_TOOL_PATHS = ["/home/user/.local/bin", "/home/user/.local/share/mise/shims"];
-const DEFAULT_BASE_PATH = "/usr/local/bin:/usr/bin:/bin:/usr/local/games:/usr/games";
+import { formatPromptChoice } from "../cli/prompt-style.js";
 
 export interface BootstrapProjectWorkspaceResult {
   selectedRepoNames: string[];
@@ -66,6 +65,7 @@ export async function bootstrapProjectWorkspace(
 
   const timeoutMs = config.sandbox.timeout_ms;
   const runtimeEnv = options.runtimeEnv ?? {};
+  const setupRuntimeEnv = await resolveSetupRuntimeEnv(handle, runtimeEnv, timeoutMs);
   await deps.ensureProjectDirectory(handle, config.project.dir, { timeoutMs });
 
   const selectedRepos = await selectRepos(config.project.repos, config.project.mode, config.project.active, {
@@ -91,7 +91,7 @@ export async function bootstrapProjectWorkspace(
     config,
     options.isConnect ?? false,
     deps,
-    runtimeEnv,
+    setupRuntimeEnv,
     options.onProgress
   );
 
@@ -173,7 +173,7 @@ async function selectRepos(
   const prompt = options.promptInput ?? promptInput;
   const question = [
     "Multiple repos available. Select one:",
-    ...repos.map((repo, index) => `${index + 1}) ${repo.name}`),
+    ...repos.map((repo, index) => formatPromptChoice(index + 1, repo.name)),
     `Enter choice [1-${repos.length}]: `
   ].join("\n");
   const selectedIndex = Number.parseInt((await prompt(question)).trim(), 10);
@@ -363,10 +363,10 @@ async function runSetupForRepos(
     async run(command, runOptions) {
       const result = await runCommand(handle, command, {
         cwd: runOptions.cwd,
-        envs: withRequiredToolPath({
+        envs: {
           ...(options.runtimeEnv ?? {}),
           ...runOptions.env
-        }),
+        },
         timeoutMs: runOptions.timeoutMs,
         commandLabel: `setup command '${command}'`
       });
@@ -465,6 +465,8 @@ function formatSetupProgressEvent(event: SetupRunnerEvent): string | null {
       return `Setup success: repo=${event.repo} step=${event.step} attempts=${event.attempts}`;
     case "step:failure":
       return `Setup failure: repo=${event.repo} step=${event.step} attempts=${event.attempts} error=${event.error}`;
+    case "step:stderr":
+      return `Setup stderr: repo=${event.repo} step=${event.step} line=${truncateForLog(event.line)}`;
     default:
       return null;
   }
@@ -492,6 +494,52 @@ function emitLines(output: string, onLine?: (line: string) => void): void {
 
 function quoteShellArg(value: string): string {
   return `'${value.replace(/'/g, `'"'"'`)}'`;
+}
+
+async function resolveSetupRuntimeEnv(
+  handle: SandboxHandle,
+  runtimeEnv: Record<string, string>,
+  timeoutMs: number
+): Promise<Record<string, string>> {
+  const envWithGitIdentity = await resolveGitIdentityEnv(runtimeEnv);
+
+  if (Object.hasOwn(runtimeEnv, "PATH")) {
+    return envWithGitIdentity;
+  }
+
+  const pathResult = await runCommand(handle, 'printf %s "$PATH"', {
+    timeoutMs,
+    commandLabel: "resolve sandbox PATH"
+  });
+  if (pathResult.exitCode !== 0) {
+    throw new Error(`Failed to resolve sandbox PATH: ${pathResult.stderr || pathResult.stdout || "unknown error"}`);
+  }
+
+  const sandboxPath = pathResult.stdout.trim();
+  if (sandboxPath === "") {
+    return envWithGitIdentity;
+  }
+
+  return {
+    ...envWithGitIdentity,
+    PATH: sandboxPath
+  };
+}
+
+async function resolveGitIdentityEnv(runtimeEnv: Record<string, string>): Promise<Record<string, string>> {
+  const identity = await resolveGitIdentity(runtimeEnv);
+  const authorName = normalizeOptionalValue(runtimeEnv.GIT_AUTHOR_NAME) ?? identity.name;
+  const authorEmail = normalizeOptionalValue(runtimeEnv.GIT_AUTHOR_EMAIL) ?? identity.email;
+  const committerName = normalizeOptionalValue(runtimeEnv.GIT_COMMITTER_NAME) ?? authorName;
+  const committerEmail = normalizeOptionalValue(runtimeEnv.GIT_COMMITTER_EMAIL) ?? authorEmail;
+
+  return {
+    ...runtimeEnv,
+    GIT_AUTHOR_NAME: authorName,
+    GIT_AUTHOR_EMAIL: authorEmail,
+    GIT_COMMITTER_NAME: committerName,
+    GIT_COMMITTER_EMAIL: committerEmail
+  };
 }
 
 function resolveCloneUrlShellArg(url: string, runtimeEnv?: Record<string, string>): string {
@@ -522,25 +570,11 @@ function quoteShellDoubleArg(value: string): string {
   return `"${value.replace(/["\\`]/g, "\\$&")}"`;
 }
 
-function withRequiredToolPath(envs?: Record<string, string>): Record<string, string> {
-  const merged = {
-    ...(envs ?? {})
-  };
-  merged.PATH = ensureRequiredPaths(merged.PATH);
-  return merged;
+function truncateForLog(value: string, maxLength = 240): string {
+  return value.length <= maxLength ? value : `${value.slice(0, maxLength)}...`;
 }
 
-function ensureRequiredPaths(pathValue?: string): string {
-  const segments = (pathValue ?? DEFAULT_BASE_PATH)
-    .split(":")
-    .map((segment) => segment.trim())
-    .filter((segment) => segment !== "");
-
-  for (const requiredPath of [...REQUIRED_TOOL_PATHS].reverse()) {
-    if (!segments.includes(requiredPath)) {
-      segments.unshift(requiredPath);
-    }
-  }
-
-  return segments.join(":");
+function normalizeOptionalValue(value: string | undefined): string | undefined {
+  const normalized = value?.trim();
+  return normalized ? normalized : undefined;
 }

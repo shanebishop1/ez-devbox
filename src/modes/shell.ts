@@ -31,14 +31,14 @@ export async function startShellMode(
     return runSmokeCheck(handle, commandContext);
   }
 
-  logger.info("Preparing secure SSH bridge (first run may install packages).");
+  logger.verbose("Preparing secure SSH bridge (first run may install packages).");
   const session = await deps.prepareSession(handle);
 
   try {
-    logger.info("Opening interactive SSH session.");
+    logger.verbose("Opening interactive SSH session.");
     await deps.runInteractiveSession(session, buildInteractiveCommand(commandContext.cwd, commandContext.envs));
   } finally {
-    logger.info("Cleaning up interactive SSH session.");
+    logger.verbose("Cleaning up interactive SSH session.");
     await deps.cleanupSession(handle, session);
   }
 
@@ -79,7 +79,6 @@ async function runSmokeCheck(
 
 function buildInteractiveCommand(cwd?: string, envs: Record<string, string> = {}): string {
   const steps: string[] = [];
-  steps.push('export PATH="$HOME/.local/bin:$HOME/.local/share/mise/shims:$PATH"');
   if (cwd) {
     steps.push(`cd ${quoteShellArg(cwd)}`);
   }

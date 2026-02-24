@@ -19,6 +19,7 @@ import { logger } from "../logging/logger.js";
 import { formatSandboxDisplayLabel } from "./sandbox-display-name.js";
 import { resolveHostGhToken } from "../auth/gh-host-token.js";
 import { withConfiguredTunnel } from "../tunnel/cloudflared.js";
+import { formatPromptChoice } from "./prompt-style.js";
 import {
   syncCodexAuthFile,
   syncCodexConfigDir,
@@ -31,6 +32,7 @@ import {
 } from "../tooling/host-sandbox-sync.js";
 import { resolvePromptStartupMode } from "./startup-mode-prompt.js";
 import { bootstrapProjectWorkspace, type BootstrapProjectWorkspaceResult } from "../project/bootstrap.js";
+import { resolveSandboxCreateEnv, type SandboxCreateEnvResolution } from "../e2b/env.js";
 
 const TOOLING_SYNC_PROGRESS_LOG_INTERVAL = 50;
 
@@ -46,6 +48,10 @@ export interface ConnectCommandDeps {
   resolvePromptStartupMode: (requestedMode: StartupMode) => Promise<StartupMode>;
   launchMode: (handle: SandboxHandle, mode: StartupMode, options?: { workingDirectory?: string; startupEnv?: Record<string, string> }) => Promise<ModeLaunchResult>;
   resolveEnvSource?: () => Promise<Record<string, string | undefined>>;
+  resolveSandboxCreateEnv?: (
+    config: Awaited<ReturnType<typeof loadConfig>>,
+    envSource?: Record<string, string | undefined>
+  ) => SandboxCreateEnvResolution;
   resolveHostGhToken?: (env: NodeJS.ProcessEnv) => Promise<string | undefined>;
   bootstrapProjectWorkspace?: (
     handle: SandboxHandle,
@@ -71,6 +77,7 @@ const defaultDeps: ConnectCommandDeps = {
   resolvePromptStartupMode,
   launchMode,
   resolveEnvSource: loadEnvSource,
+  resolveSandboxCreateEnv,
   syncToolingToSandbox: syncToolingForMode,
   saveLastRunState,
   isInteractiveTerminal: () => Boolean(process.stdin.isTTY && process.stdout.isTTY),
@@ -105,46 +112,58 @@ export async function runConnectCommand(
     const handle = await deps.connectSandbox(target.sandboxId, config);
     logger.verbose(`Connected to sandbox ${targetLabel}.`);
     const envSource = deps.resolveEnvSource ? await deps.resolveEnvSource() : await loadEnvSource();
+    const envResolution = deps.resolveSandboxCreateEnv
+      ? deps.resolveSandboxCreateEnv(config, envSource)
+      : {
+          envs: {}
+        };
     const ghRuntimeEnv = await resolveGhRuntimeEnv(config, envSource, deps.resolveHostGhToken);
     const runtimeEnv = {
+      ...envResolution.envs,
       ...tunnelRuntimeEnv,
       ...ghRuntimeEnv
     };
 
-    logger.verbose(`Syncing local tooling config/auth for mode '${resolvedMode}'.`);
-    const syncSummary = await deps.syncToolingToSandbox(config, handle, resolvedMode);
+    const stopLoading = logger.startLoading("Bootstrapping...");
+    try {
+      logger.verbose(`Syncing local tooling config/auth for mode '${resolvedMode}'.`);
+      const syncSummary = await deps.syncToolingToSandbox(config, handle, resolvedMode);
 
-    logger.verbose("Starting project bootstrap.");
-    const bootstrapResult = await (deps.bootstrapProjectWorkspace ?? bootstrapProjectWorkspace)(handle, config, {
-      isConnect: true,
-      runtimeEnv,
-      onProgress: (message) => logger.verbose(`Bootstrap: ${message}`)
-    });
-    logger.verbose(`Selected repos summary: ${formatSelectedReposSummary(bootstrapResult.selectedRepoNames)}.`);
-    logger.verbose(`Setup outcome summary: ${formatSetupOutcomeSummary(bootstrapResult.setup)}.`);
+      const bootstrapResult = await (deps.bootstrapProjectWorkspace ?? bootstrapProjectWorkspace)(handle, config, {
+        isConnect: true,
+        runtimeEnv,
+        onProgress: (message) => logger.verbose(`Bootstrap: ${message}`)
+      });
+      stopLoading();
+      logger.verbose(`Selected repos summary: ${formatSelectedReposSummary(bootstrapResult.selectedRepoNames)}.`);
+      logger.verbose(`Setup outcome summary: ${formatSetupOutcomeSummary(bootstrapResult.setup)}.`);
 
-    logger.verbose(`Launching startup mode '${mode}'.`);
-    const launched = await deps.launchMode(handle, mode, {
-      workingDirectory: bootstrapResult.workingDirectory,
-      startupEnv: {
-        ...bootstrapResult.startupEnv,
-        ...runtimeEnv
-      }
-    });
+      logger.verbose(`Launching startup mode '${mode}'.`);
+      const launched = await deps.launchMode(handle, mode, {
+        workingDirectory: bootstrapResult.workingDirectory,
+        startupEnv: {
+          ...bootstrapResult.startupEnv,
+          ...runtimeEnv
+        }
+      });
 
-    const activeRepo = bootstrapResult.selectedRepoNames.length === 1 ? bootstrapResult.selectedRepoNames[0] : undefined;
+      const activeRepo = bootstrapResult.selectedRepoNames.length === 1 ? bootstrapResult.selectedRepoNames[0] : undefined;
 
-    await deps.saveLastRunState({
-      sandboxId: handle.sandboxId,
-      mode: launched.mode,
-      activeRepo,
-      updatedAt: deps.now()
-    });
+      await deps.saveLastRunState({
+        sandboxId: handle.sandboxId,
+        mode: launched.mode,
+        activeRepo,
+        updatedAt: deps.now()
+      });
 
-    return {
-      message: `Connected to sandbox ${targetLabel}. ${launched.message}\nTooling sync: ${formatToolingSyncSummary(syncSummary)}`,
-      exitCode: 0
-    };
+      return {
+        message: `Connected to sandbox ${targetLabel}. ${launched.message}\nTooling sync: ${formatToolingSyncSummary(syncSummary)}`,
+        exitCode: 0
+      };
+    } catch (error) {
+      stopLoading();
+      throw error;
+    }
   });
 }
 
@@ -379,7 +398,7 @@ async function promptForSandboxTargetSelection(
 
   const question = [
     "Multiple sandboxes available. Select one:",
-    ...options.map((option) => `${option.index}) ${option.label}`),
+    ...options.map((option) => formatPromptChoice(option.index, option.label)),
     `Enter choice [1-${options.length}]: `
   ].join("\n");
   const selectedIndex = Number.parseInt((await prompt(question)).trim(), 10);

@@ -35,14 +35,14 @@ export async function startCodexMode(
     return runSmokeCheck(handle, commandContext);
   }
 
-  logger.info("Preparing secure SSH bridge (first run may install packages).");
+  logger.verbose("Preparing secure SSH bridge (first run may install packages).");
   const session = await deps.prepareSession(handle);
 
   try {
-    logger.info("Opening interactive SSH session.");
+    logger.verbose("Opening interactive SSH session.");
     await deps.runInteractiveSession(session, buildInteractiveCommand("codex", commandContext.cwd, commandContext.envs));
   } finally {
-    logger.info("Cleaning up interactive SSH session.");
+    logger.verbose("Cleaning up interactive SSH session.");
     await deps.cleanupSession(handle, session);
   }
 
@@ -61,7 +61,7 @@ async function ensureCodexCliAvailable(
   handle: SandboxHandle,
   commandContext: { cwd?: string; envs: Record<string, string> }
 ): Promise<void> {
-  logger.info("Checking Codex CLI availability in sandbox.");
+  logger.verbose("Checking Codex CLI availability in sandbox.");
   const checkResult = await handle.run(CODEX_AVAILABILITY_CHECK_COMMAND, {
     ...(commandContext.cwd ? { cwd: commandContext.cwd } : {}),
     ...(Object.keys(commandContext.envs).length > 0 ? { envs: commandContext.envs } : {}),
@@ -69,11 +69,11 @@ async function ensureCodexCliAvailable(
   });
 
   if (checkResult.stdout.trim() === "PRESENT") {
-    logger.info("Codex CLI is available in sandbox.");
+    logger.verbose("Codex CLI is available in sandbox.");
     return;
   }
 
-  logger.info("Codex CLI missing; installing @openai/codex globally.");
+  logger.verbose("Codex CLI missing; installing @openai/codex globally.");
   const installResult = await handle.run(CODEX_INSTALL_COMMAND, {
     ...(commandContext.cwd ? { cwd: commandContext.cwd } : {}),
     ...(Object.keys(commandContext.envs).length > 0 ? { envs: commandContext.envs } : {}),
@@ -86,7 +86,7 @@ async function ensureCodexCliAvailable(
     );
   }
 
-  logger.info("Codex CLI install completed; verifying availability.");
+  logger.verbose("Codex CLI install completed; verifying availability.");
   const verifyResult = await handle.run(CODEX_AVAILABILITY_CHECK_COMMAND, {
     ...(commandContext.cwd ? { cwd: commandContext.cwd } : {}),
     ...(Object.keys(commandContext.envs).length > 0 ? { envs: commandContext.envs } : {}),
@@ -99,7 +99,7 @@ async function ensureCodexCliAvailable(
     );
   }
 
-  logger.info("Codex CLI is available in sandbox.");
+  logger.verbose("Codex CLI is available in sandbox.");
 }
 
 async function runSmokeCheck(
@@ -128,7 +128,6 @@ async function runSmokeCheck(
 
 function buildInteractiveCommand(command: string, cwd?: string, envs: Record<string, string> = {}): string {
   const steps: string[] = [];
-  steps.push('export PATH="$HOME/.local/bin:$HOME/.local/share/mise/shims:$PATH"');
   if (cwd) {
     steps.push(`cd ${quoteShellArg(cwd)}`);
   }

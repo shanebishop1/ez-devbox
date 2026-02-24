@@ -309,6 +309,7 @@ describe("CLI command integration", () => {
       workingDirectory: undefined,
       startupEnv: {
         NEXT_PUBLIC_APP_ENV: "preview",
+        OPENAI_API_KEY: "existing",
         GH_TOKEN: "ghp_token",
         GITHUB_TOKEN: "ghp_token"
       }
@@ -351,6 +352,8 @@ describe("CLI command integration", () => {
   it("create wipes newly created sandbox when setup selection is cancelled", async () => {
     setVerboseLoggingEnabled(true);
     const loggerVerbose = vi.spyOn(logger, "verbose").mockImplementation(() => undefined);
+    const stopLoading = vi.fn();
+    const startLoading = vi.spyOn(logger, "startLoading").mockReturnValue(stopLoading);
     const kill = vi.fn().mockResolvedValue(undefined);
     const createSandbox = vi.fn().mockResolvedValue({ sandboxId: "sbx-created", kill });
 
@@ -371,6 +374,9 @@ describe("CLI command integration", () => {
 
     expect(createSandbox).toHaveBeenCalledTimes(1);
     expect(kill).toHaveBeenCalledTimes(1);
+    expect(startLoading).toHaveBeenCalledWith("Bootstrapping...");
+    expect(stopLoading).toHaveBeenCalledTimes(1);
+    startLoading.mockRestore();
     expect(loggerVerbose).toHaveBeenCalledWith("Setup selection cancelled; wiping newly created sandbox.");
     loggerVerbose.mockRestore();
   });
@@ -397,6 +403,8 @@ describe("CLI command integration", () => {
   });
 
   it("create does not auto-wipe on non-cancellation bootstrap errors", async () => {
+    const stopLoading = vi.fn();
+    const startLoading = vi.spyOn(logger, "startLoading").mockReturnValue(stopLoading);
     const kill = vi.fn().mockResolvedValue(undefined);
 
     await expect(
@@ -414,6 +422,9 @@ describe("CLI command integration", () => {
       })
     ).rejects.toThrow("bootstrap failed");
 
+    expect(startLoading).toHaveBeenCalledWith("Bootstrapping...");
+    expect(stopLoading).toHaveBeenCalledTimes(1);
+    startLoading.mockRestore();
     expect(kill).not.toHaveBeenCalled();
   });
 
@@ -568,6 +579,47 @@ describe("CLI command integration", () => {
         NEXT_PUBLIC_APP_ENV: "preview",
         GH_TOKEN: "ghp_token",
         GITHUB_TOKEN: "ghp_token"
+      }
+    });
+  });
+
+  it("connect injects passthrough envs into launch startupEnv", async () => {
+    const launchMode = vi.fn().mockResolvedValue({ mode: "ssh-shell", command: "bash", message: "launched" });
+    const resolveSandboxCreateEnv = vi.fn().mockReturnValue({
+      envs: {
+        FIRECRAWL_API_KEY: "fc-test",
+        OPENAI_API_KEY: "openai-test"
+      }
+    });
+
+    await runConnectCommand(["--sandbox-id", "sbx-arg", "--mode", "ssh-shell"], {
+      loadConfig: vi.fn().mockResolvedValue(config),
+      connectSandbox: vi.fn().mockResolvedValue({ sandboxId: "sbx-arg" }),
+      loadLastRunState: vi.fn().mockResolvedValue(null),
+      listSandboxes: vi.fn().mockResolvedValue([]),
+      resolvePromptStartupMode: vi.fn().mockResolvedValue("ssh-shell"),
+      resolveEnvSource: vi.fn().mockResolvedValue({ FIRECRAWL_API_KEY: "fc-test", OPENAI_API_KEY: "openai-test" }),
+      resolveSandboxCreateEnv,
+      launchMode,
+      bootstrapProjectWorkspace: vi.fn().mockResolvedValue({
+        ...bootstrapResult,
+        startupEnv: { NEXT_PUBLIC_APP_ENV: "preview" }
+      }),
+      syncToolingToSandbox: vi.fn().mockResolvedValue(syncSummary),
+      saveLastRunState: vi.fn().mockResolvedValue(undefined),
+      now: () => "2026-02-01T00:00:00.000Z"
+    });
+
+    expect(resolveSandboxCreateEnv).toHaveBeenCalledWith(config, {
+      FIRECRAWL_API_KEY: "fc-test",
+      OPENAI_API_KEY: "openai-test"
+    });
+    expect(launchMode).toHaveBeenCalledWith({ sandboxId: "sbx-arg" }, "ssh-shell", {
+      workingDirectory: undefined,
+      startupEnv: {
+        NEXT_PUBLIC_APP_ENV: "preview",
+        FIRECRAWL_API_KEY: "fc-test",
+        OPENAI_API_KEY: "openai-test"
       }
     });
   });

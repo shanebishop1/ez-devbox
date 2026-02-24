@@ -1,6 +1,7 @@
 import { createInterface } from "node:readline/promises";
 import type { StartupMode } from "../types/index.js";
 import { normalizePromptCancelledError } from "./prompt-cancelled.js";
+import { formatPromptChoice, formatPromptHeader } from "./prompt-style.js";
 
 const PROMPT_FALLBACK_MODE: Exclude<StartupMode, "prompt"> = "ssh-opencode";
 const PROMPT_CHOICE_NUMBERS: Record<string, Exclude<StartupMode, "prompt">> = {
@@ -33,11 +34,12 @@ export async function resolvePromptStartupMode(
   }
 
   const question = [
+    formatPromptHeader("ez-box"),
     "Select startup mode:",
-    "1) ssh-opencode",
-    "2) ssh-codex",
-    "3) web",
-    "4) ssh-shell",
+    formatPromptChoice(1, "ssh-opencode"),
+    formatPromptChoice(2, "ssh-codex"),
+    formatPromptChoice(3, "web"),
+    formatPromptChoice(4, "ssh-shell"),
     `Enter choice [1/${PROMPT_FALLBACK_MODE}]: `
   ].join("\n");
   const answer = (await deps.promptInput(question)).trim().toLowerCase();

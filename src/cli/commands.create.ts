@@ -95,13 +95,12 @@ export async function runCreateCommand(args: string[], deps: CreateCommandDeps =
     const envResolution = deps.resolveSandboxCreateEnv(config, envSource);
     const ghRuntimeEnv = await resolveGhRuntimeEnv(config, envSource, deps.resolveHostGhToken);
     const runtimeEnv = {
+      ...envResolution.envs,
       ...tunnelRuntimeEnv,
       ...ghRuntimeEnv
     };
-    const createEnvs = {
-      ...envResolution.envs,
-      ...runtimeEnv
-    };
+    const createEnvs = { ...runtimeEnv };
+    logger.verbose(`Creating sandbox with envs: ${JSON.stringify(createEnvs)}`);
 
     logger.verbose(`Creating sandbox '${displayName}' with template '${createConfig.sandbox.template}'.`);
     const handle = await deps.createSandbox(createConfig, {
@@ -113,11 +112,12 @@ export async function runCreateCommand(args: string[], deps: CreateCommandDeps =
     const sandboxLabel = formatSandboxDisplayLabel(handle.sandboxId, { "launcher.name": displayName });
     logger.verbose(`Sandbox ready: ${sandboxLabel}.`);
 
+    let stopLoading: (() => void) | undefined;
     try {
       logger.verbose(`Syncing local tooling config/auth for mode '${resolvedMode}'.`);
       const syncSummary = await deps.syncToolingToSandbox(config, handle, resolvedMode);
 
-      logger.verbose("Starting project bootstrap.");
+      stopLoading = logger.startLoading("Bootstrapping...");
       const bootstrapResult = await (deps.bootstrapProjectWorkspace ?? bootstrapProjectWorkspace)(handle, config, {
         isConnect: false,
         runtimeEnv,
@@ -172,6 +172,8 @@ export async function runCreateCommand(args: string[], deps: CreateCommandDeps =
       throw new PromptCancelledError(`Setup selection cancelled; sandbox '${sandboxLabel}' was wiped.`, {
         cause: error
       });
+    } finally {
+      stopLoading?.();
     }
   });
 }

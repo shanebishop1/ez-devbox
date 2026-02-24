@@ -40,7 +40,7 @@ export interface SshModeDeps {
 }
 
 export async function prepareSshBridgeSession(handle: SandboxHandle): Promise<SshBridgeSession> {
-  logger.info("SSH bridge: checking/installing dependencies.");
+  logger.verbose("SSH bridge: checking/installing dependencies.");
   await handle.run(
     "bash -lc 'command -v sshd >/dev/null 2>&1 && command -v websockify >/dev/null 2>&1 && command -v ssh-keygen >/dev/null 2>&1 || (sudo apt-get update && sudo apt-get install -y openssh-server websockify)'",
     { timeoutMs: SSH_SETUP_TIMEOUT_MS }
@@ -49,7 +49,7 @@ export async function prepareSshBridgeSession(handle: SandboxHandle): Promise<Ss
   const tempDir = await mkdtemp(join(tmpdir(), "ez-box-ssh-"));
   const privateKeyPath = join(tempDir, "id_ed25519");
 
-  logger.info("SSH bridge: generating local key pair.");
+  logger.verbose("SSH bridge: generating local key pair.");
   await runLocalCommand("ssh-keygen", ["-t", "ed25519", "-N", "", "-f", privateKeyPath, "-q"], SSH_SHORT_TIMEOUT_MS);
 
   const publicKey = (await readFile(`${privateKeyPath}.pub`, "utf8")).trim();
@@ -77,7 +77,7 @@ export async function prepareSshBridgeSession(handle: SandboxHandle): Promise<Ss
     websockifyLogPath: `${sessionDir}/websockify.log`
   } satisfies SshBridgeSessionArtifacts;
 
-  logger.info("SSH bridge: configuring remote sshd/websockify.");
+  logger.verbose("SSH bridge: configuring remote sshd/websockify.");
   await handle.run(
     `bash -lc 'mkdir -p ${quoteShellArg(`${remoteHome}/.ez-box-ssh`)} && chmod 700 ${quoteShellArg(
       `${remoteHome}/.ez-box-ssh`
@@ -129,7 +129,7 @@ export async function prepareSshBridgeSession(handle: SandboxHandle): Promise<Ss
   );
 
   const wsUrl = toWsUrl(await handle.getHost(WEBSOCKIFY_PORT));
-  logger.info(`SSH bridge ready: ${wsUrl}`);
+  logger.verbose(`SSH bridge ready: ${wsUrl}`);
 
   return {
     tempDir,

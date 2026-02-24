@@ -1,6 +1,8 @@
 type LogLevel = "info" | "warn" | "error";
 
 let verboseEnabled = false;
+let loadingFrame = 0;
+let loadingIntervalId: NodeJS.Timeout | null = null;
 
 const levelPrefix: Record<LogLevel, string> = {
   info: "INFO",
@@ -69,5 +71,27 @@ export const logger = {
   },
   error(message: string): void {
     write("error", message);
+  },
+  startLoading(message: string): () => void {
+    if (verboseEnabled || !process.stdout.isTTY) {
+      write("info", message);
+      return () => {};
+    }
+
+    const frames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+
+    loadingIntervalId = setInterval(() => {
+      const frame = frames[loadingFrame % frames.length];
+      process.stdout.write(`\r${frame} ${message}`);
+      loadingFrame++;
+    }, 80);
+
+    return () => {
+      if (loadingIntervalId) {
+        clearInterval(loadingIntervalId);
+        loadingIntervalId = null;
+        process.stdout.write("\r");
+      }
+    };
   }
 };

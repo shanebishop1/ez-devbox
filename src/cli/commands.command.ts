@@ -1,11 +1,15 @@
-import { posix } from "node:path";
+import { readFile } from "node:fs/promises";
+import { posix, resolve } from "node:path";
 import { createInterface } from "node:readline/promises";
+import { parse as parseDotEnv } from "dotenv";
 import { loadConfig, type LoadConfigOptions } from "../config/load.js";
 import { connectSandbox, listSandboxes, type LifecycleOperationOptions, type ListSandboxesOptions, type SandboxHandle, type SandboxListItem } from "../e2b/lifecycle.js";
+import { resolveSandboxCreateEnv, type SandboxCreateEnvResolution } from "../e2b/env.js";
 import { loadLastRunState, type LastRunState } from "../state/lastRun.js";
 import type { CommandResult } from "../types/index.js";
 import { formatSandboxDisplayLabel } from "./sandbox-display-name.js";
 import { withConfiguredTunnel } from "../tunnel/cloudflared.js";
+import { formatPromptChoice } from "./prompt-style.js";
 
 export interface CommandCommandDeps {
   loadConfig: (options?: LoadConfigOptions) => ReturnType<typeof loadConfig>;
@@ -15,6 +19,11 @@ export interface CommandCommandDeps {
     config: Awaited<ReturnType<typeof loadConfig>>,
     options?: LifecycleOperationOptions
   ) => Promise<SandboxHandle>;
+  resolveEnvSource?: () => Promise<Record<string, string | undefined>>;
+  resolveSandboxCreateEnv?: (
+    config: Awaited<ReturnType<typeof loadConfig>>,
+    envSource?: Record<string, string | undefined>
+  ) => SandboxCreateEnvResolution;
   loadLastRunState: () => Promise<LastRunState | null>;
   isInteractiveTerminal?: () => boolean;
   promptInput?: (question: string) => Promise<string>;
@@ -24,6 +33,8 @@ const defaultDeps: CommandCommandDeps = {
   loadConfig,
   listSandboxes,
   connectSandbox,
+  resolveEnvSource: loadEnvSource,
+  resolveSandboxCreateEnv,
   loadLastRunState,
   isInteractiveTerminal: () => Boolean(process.stdin.isTTY && process.stdout.isTTY),
   promptInput
@@ -36,7 +47,16 @@ export async function runCommandCommand(args: string[], deps: CommandCommandDeps
     const sandboxTarget = await resolveSandboxTarget(parsed.sandboxId, deps);
     const selectedRepos = await resolveSelectedRepos(config.project.repos, config.project.mode, config.project.active, deps);
     const cwd = resolveCommandWorkingDirectory(config.project.dir, selectedRepos);
-    const runtimeEnv = { ...tunnelRuntimeEnv };
+    const envSource = deps.resolveEnvSource ? await deps.resolveEnvSource() : {};
+    const envResolution = deps.resolveSandboxCreateEnv
+      ? deps.resolveSandboxCreateEnv(config, envSource)
+      : {
+          envs: {}
+        };
+    const runtimeEnv = {
+      ...envResolution.envs,
+      ...tunnelRuntimeEnv
+    };
 
     const handle = await deps.connectSandbox(sandboxTarget.sandboxId, config);
     const result = await handle.run(parsed.command, {
@@ -100,6 +120,27 @@ function parseCommandArgs(args: string[]): { sandboxId?: string; command: string
   };
 }
 
+async function loadEnvSource(): Promise<Record<string, string | undefined>> {
+  const mergedEnv: Record<string, string | undefined> = {
+    ...process.env
+  };
+
+  try {
+    const envPath = resolve(process.cwd(), ".env");
+    const envRaw = await readFile(envPath, "utf8");
+    const parsed = parseDotEnv(envRaw);
+    for (const [key, value] of Object.entries(parsed)) {
+      if (mergedEnv[key] === undefined) {
+        mergedEnv[key] = value;
+      }
+    }
+  } catch {
+    // .env is optional.
+  }
+
+  return mergedEnv;
+}
+
 async function resolveSandboxTarget(
   sandboxIdArg: string | undefined,
   deps: CommandCommandDeps
@@ -159,7 +200,7 @@ async function promptForSandboxSelection(
 
   const question = [
     "Multiple sandboxes available. Select one:",
-    ...options.map((option) => `${option.index}) ${option.label}`),
+    ...options.map((option) => formatPromptChoice(option.index, option.label)),
     `Enter choice [1-${options.length}]: `
   ].join("\n");
   const selectedIndex = Number.parseInt((await prompt(question)).trim(), 10);
@@ -199,7 +240,7 @@ async function resolveSelectedRepos(
     const prompt = deps.promptInput ?? promptInput;
     const question = [
       "Multiple repos available. Select one:",
-      ...repos.map((repo, index) => `${index + 1}) ${repo.name}`),
+      ...repos.map((repo, index) => formatPromptChoice(index + 1, repo.name)),
       `Enter choice [1-${repos.length}]: `
     ].join("\n");
     const selectedIndex = Number.parseInt((await prompt(question)).trim(), 10);
