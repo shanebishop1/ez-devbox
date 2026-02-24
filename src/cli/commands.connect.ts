@@ -124,7 +124,6 @@ export async function runConnectCommand(
       ...ghRuntimeEnv
     };
 
-    const stopLoading = logger.startLoading("Bootstrapping...");
     try {
       logger.verbose(`Syncing local tooling config/auth for mode '${resolvedMode}'.`);
       const syncSummary = await deps.syncToolingToSandbox(config, handle, resolvedMode);
@@ -134,7 +133,6 @@ export async function runConnectCommand(
         runtimeEnv,
         onProgress: (message) => logger.verbose(`Bootstrap: ${message}`)
       });
-      stopLoading();
       logger.verbose(`Selected repos summary: ${formatSelectedReposSummary(bootstrapResult.selectedRepoNames)}.`);
       logger.verbose(`Setup outcome summary: ${formatSetupOutcomeSummary(bootstrapResult.setup)}.`);
 
@@ -161,7 +159,6 @@ export async function runConnectCommand(
         exitCode: 0
       };
     } catch (error) {
-      stopLoading();
       throw error;
     }
   });

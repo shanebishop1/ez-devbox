@@ -80,17 +80,31 @@ export const logger = {
 
     const frames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
 
-    loadingIntervalId = setInterval(() => {
+    if (loadingIntervalId) {
+      clearInterval(loadingIntervalId);
+      loadingIntervalId = null;
+      process.stdout.write("\r\u001b[2K");
+    }
+
+    loadingFrame = 0;
+    const intervalId = setInterval(() => {
       const frame = frames[loadingFrame % frames.length];
       process.stdout.write(`\r${frame} ${message}`);
       loadingFrame++;
     }, 80);
+    loadingIntervalId = intervalId;
+    let stopped = false;
 
     return () => {
-      if (loadingIntervalId) {
-        clearInterval(loadingIntervalId);
+      if (stopped) {
+        return;
+      }
+
+      stopped = true;
+      clearInterval(intervalId);
+      if (loadingIntervalId === intervalId) {
         loadingIntervalId = null;
-        process.stdout.write("\r");
+        process.stdout.write("\r\u001b[2K");
       }
     };
   }

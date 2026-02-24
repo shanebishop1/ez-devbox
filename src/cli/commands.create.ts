@@ -113,15 +113,22 @@ export async function runCreateCommand(args: string[], deps: CreateCommandDeps =
     logger.verbose(`Sandbox ready: ${sandboxLabel}.`);
 
     let stopLoading: (() => void) | undefined;
+    const ensureLoading = (): void => {
+      if (!stopLoading) {
+        stopLoading = logger.startLoading("Bootstrapping...");
+      }
+    };
     try {
       logger.verbose(`Syncing local tooling config/auth for mode '${resolvedMode}'.`);
       const syncSummary = await deps.syncToolingToSandbox(config, handle, resolvedMode);
 
-      stopLoading = logger.startLoading("Bootstrapping...");
       const bootstrapResult = await (deps.bootstrapProjectWorkspace ?? bootstrapProjectWorkspace)(handle, config, {
         isConnect: false,
         runtimeEnv,
-        onProgress: (message) => logger.verbose(`Bootstrap: ${message}`)
+        onProgress: (message) => {
+          ensureLoading();
+          logger.verbose(`Bootstrap: ${message}`);
+        }
       });
       logger.verbose(`Selected repos summary: ${formatSelectedReposSummary(bootstrapResult.selectedRepoNames)}.`);
       logger.verbose(`Setup outcome summary: ${formatSetupOutcomeSummary(bootstrapResult.setup)}.`);
