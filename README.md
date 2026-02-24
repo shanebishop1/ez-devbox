@@ -74,10 +74,16 @@ ez-box start
 - Start without last-run reuse:
   - `ez-box start -- --no-reuse`
   - `npm run start -- --no-reuse`
+- Wipe one sandbox (interactive picker):
+  - `ez-box wipe`
+  - `npm run wipe`
+- Wipe all sandboxes:
+  - `ez-box wipe-all -- --yes`
+  - `npm run wipe-all -- --yes`
 
 ## Config files
 
-- `launcher.config.toml`: ez-box behavior (sandbox, startup, project, env pass-through, mcp)
+- `launcher.config.toml`: ez-box behavior (sandbox, startup, project, env pass-through, tooling auth sync, mcp)
 - `.env`: secrets and local env values
 - `.ez-box-last-run.json`: auto-generated local state for reconnects (legacy `.agent-box-last-run.json` is still read as a fallback)
 
@@ -94,7 +100,7 @@ ez-box start
 ### `[startup]`
 
 - `mode` (enum): default startup mode. Allowed values: `prompt|ssh-opencode|ssh-codex|web|ssh-shell`.
-- `prompt` behavior: prompts in interactive terminals; non-interactive fallback is `ssh-opencode`.
+- `prompt` behavior: prompts in interactive terminals (accepts `1-4` or mode name); non-interactive fallback is `ssh-opencode`.
 
 ### `[project]`
 
@@ -119,6 +125,8 @@ ez-box start
 
 Setup for each selected repo runs `setup_command`.
 
+If `create` is cancelled during interactive repo selection, ez-box automatically wipes the newly created sandbox.
+
 When `project.working_dir = "auto"`, working directory behavior after repo selection/provisioning is:
 
 - one selected repo: launch in that repo directory (`project.dir/<repo-name>`)
@@ -138,6 +146,11 @@ When `project.working_dir = "auto"`, working directory behavior after repo selec
 
 - `config_dir` (string): host Codex config directory to sync into `/home/user/.codex` in sandbox.
 - `auth_path` (string): host Codex auth file to sync into `/home/user/.codex/auth.json` in sandbox.
+
+### `[gh]`
+
+- `enabled` (boolean): enables GitHub CLI config sync into the sandbox and GitHub auth token injection for bootstrap/launch runtime (`GH_TOKEN` -> `GITHUB_TOKEN` -> `gh auth token`). Default: `false` (off).
+- `config_dir` (string): host GitHub CLI config directory to sync into `/home/user/.config/gh` in sandbox when enabled.
 
 ### `[mcp]`
 

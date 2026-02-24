@@ -1,12 +1,29 @@
-import { describe, expect, it, vi } from "vitest";
-import { runConnectCommand } from "../src/cli/commands.connect.js";
-import { runCreateCommand } from "../src/cli/commands.create.js";
+import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { runConnectCommand, syncToolingForMode as syncToolingForConnectMode } from "../src/cli/commands.connect.js";
+import { runCreateCommand, syncToolingForMode as syncToolingForCreateMode } from "../src/cli/commands.create.js";
 import { runStartCommand } from "../src/cli/commands.start.js";
+import { PromptCancelledError } from "../src/cli/prompt-cancelled.js";
 import { buildSandboxDisplayName } from "../src/cli/sandbox-display-name.js";
 import type { ResolvedLauncherConfig } from "../src/config/schema.js";
 import { logger } from "../src/logging/logger.js";
 
 describe("CLI command integration", () => {
+  const tempRoots: string[] = [];
+
+  async function createTempRoot(prefix: string): Promise<string> {
+    const root = await mkdtemp(join(tmpdir(), `agent-box-cli-${prefix}-`));
+    tempRoots.push(root);
+    return root;
+  }
+
+  afterEach(async () => {
+    await Promise.all(tempRoots.map((dir) => rm(dir, { recursive: true, force: true })));
+    tempRoots.length = 0;
+  });
+
   const syncSummary = {
     totalDiscovered: 2,
     totalWritten: 2,
@@ -14,7 +31,9 @@ describe("CLI command integration", () => {
     opencodeConfigSynced: true,
     opencodeAuthSynced: true,
     codexConfigSynced: false,
-    codexAuthSynced: false
+    codexAuthSynced: false,
+    ghEnabled: false,
+    ghConfigSynced: false
   };
   const bootstrapResult = {
     selectedRepoNames: [],
@@ -55,6 +74,10 @@ describe("CLI command integration", () => {
     codex: {
       config_dir: "~/.codex",
       auth_path: "~/.codex/auth.json"
+    },
+    gh: {
+      enabled: false,
+      config_dir: "~/.config/gh"
     },
     mcp: {
       mode: "disabled",
@@ -254,7 +277,239 @@ describe("CLI command integration", () => {
 
     expect(result.message).toContain("MCP warnings:");
     expect(result.message).toContain("mcp.mode='in_sandbox' is advanced and not fully implemented yet");
-    expect(result.message).toContain("Tooling sync: discovered=2, written=2, missingPaths=0, opencodeSynced=true, codexSynced=false");
+    expect(result.message).toContain(
+      "Tooling sync: discovered=2, written=2, missingPaths=0, opencodeSynced=true, codexSynced=false, ghSynced=false"
+    );
+  });
+
+  it("create injects GH token into sandbox create envs and launch startupEnv when gh is enabled", async () => {
+    const ghEnabledConfig: ResolvedLauncherConfig = {
+      ...config,
+      gh: {
+        ...config.gh,
+        enabled: true
+      }
+    };
+    const createSandbox = vi.fn().mockResolvedValue({ sandboxId: "sbx-created" });
+    const launchMode = vi.fn().mockResolvedValue({ mode: "ssh-opencode", command: "opencode", message: "launched" });
+    const resolveHostGhToken = vi.fn().mockResolvedValue("ghp_token");
+    const bootstrapProjectWorkspace = vi.fn().mockResolvedValue({
+      ...bootstrapResult,
+      startupEnv: { NEXT_PUBLIC_APP_ENV: "preview" }
+    });
+
+    await runCreateCommand(["--mode", "ssh-opencode"], {
+      loadConfig: vi.fn().mockResolvedValue(ghEnabledConfig),
+      createSandbox,
+      resolveEnvSource: vi.fn().mockResolvedValue({}),
+      resolveSandboxCreateEnv: vi.fn().mockReturnValue({ envs: { OPENAI_API_KEY: "existing" }, warnings: [] }),
+      resolvePromptStartupMode: vi.fn().mockResolvedValue("ssh-opencode"),
+      resolveHostGhToken,
+      launchMode,
+      bootstrapProjectWorkspace,
+      syncToolingToSandbox: vi.fn().mockResolvedValue({ ...syncSummary, ghEnabled: true }),
+      saveLastRunState: vi.fn().mockResolvedValue(undefined),
+      now: () => "2026-02-01T00:00:00.000Z"
+    });
+
+    expect(resolveHostGhToken).toHaveBeenCalledTimes(1);
+    expect(createSandbox).toHaveBeenCalledWith(
+      expect.any(Object),
+      expect.objectContaining({
+        envs: {
+          OPENAI_API_KEY: "existing",
+          GH_TOKEN: "ghp_token",
+          GITHUB_TOKEN: "ghp_token"
+        }
+      })
+    );
+    expect(launchMode).toHaveBeenCalledWith({ sandboxId: "sbx-created" }, "ssh-opencode", {
+      workingDirectory: undefined,
+      startupEnv: {
+        NEXT_PUBLIC_APP_ENV: "preview",
+        GH_TOKEN: "ghp_token",
+        GITHUB_TOKEN: "ghp_token"
+      }
+    });
+  });
+
+  it("create continues when gh is enabled but token is missing", async () => {
+    const ghEnabledConfig: ResolvedLauncherConfig = {
+      ...config,
+      gh: {
+        ...config.gh,
+        enabled: true
+      }
+    };
+    const createSandbox = vi.fn().mockResolvedValue({ sandboxId: "sbx-created" });
+    const launchMode = vi.fn().mockResolvedValue({ mode: "ssh-opencode", command: "opencode", message: "launched" });
+
+    const result = await runCreateCommand(["--mode", "ssh-opencode"], {
+      loadConfig: vi.fn().mockResolvedValue(ghEnabledConfig),
+      createSandbox,
+      resolveEnvSource: vi.fn().mockResolvedValue({}),
+      resolveSandboxCreateEnv: vi.fn().mockReturnValue({ envs: {}, warnings: [] }),
+      resolvePromptStartupMode: vi.fn().mockResolvedValue("ssh-opencode"),
+      resolveHostGhToken: vi.fn().mockResolvedValue(undefined),
+      launchMode,
+      bootstrapProjectWorkspace: vi.fn().mockResolvedValue(bootstrapResult),
+      syncToolingToSandbox: vi.fn().mockResolvedValue({ ...syncSummary, ghEnabled: true }),
+      saveLastRunState: vi.fn().mockResolvedValue(undefined),
+      now: () => "2026-02-01T00:00:00.000Z"
+    });
+
+    expect(result.exitCode).toBe(0);
+    expect(createSandbox).toHaveBeenCalledWith(expect.any(Object), expect.objectContaining({ envs: {} }));
+    expect(launchMode).toHaveBeenCalledWith({ sandboxId: "sbx-created" }, "ssh-opencode", {
+      workingDirectory: undefined,
+      startupEnv: {}
+    });
+  });
+
+  it("create wipes newly created sandbox when setup selection is cancelled", async () => {
+    const loggerInfo = vi.spyOn(logger, "info").mockImplementation(() => undefined);
+    const kill = vi.fn().mockResolvedValue(undefined);
+    const createSandbox = vi.fn().mockResolvedValue({ sandboxId: "sbx-created", kill });
+
+    await expect(
+      runCreateCommand(["--mode", "ssh-opencode"], {
+        loadConfig: vi.fn().mockResolvedValue(config),
+        createSandbox,
+        resolveEnvSource: vi.fn().mockResolvedValue({}),
+        resolveSandboxCreateEnv: vi.fn().mockReturnValue({ envs: {}, warnings: [] }),
+        resolvePromptStartupMode: vi.fn().mockResolvedValue("ssh-opencode"),
+        launchMode: vi.fn(),
+        bootstrapProjectWorkspace: vi.fn().mockRejectedValue(new PromptCancelledError("Repository selection cancelled.")),
+        syncToolingToSandbox: vi.fn().mockResolvedValue(syncSummary),
+        saveLastRunState: vi.fn().mockResolvedValue(undefined),
+        now: () => "2026-02-01T00:00:00.000Z"
+      })
+    ).rejects.toThrow("was wiped");
+
+    expect(createSandbox).toHaveBeenCalledTimes(1);
+    expect(kill).toHaveBeenCalledTimes(1);
+    expect(loggerInfo).toHaveBeenCalledWith("Setup selection cancelled; wiping newly created sandbox.");
+    loggerInfo.mockRestore();
+  });
+
+  it("create does not wipe sandbox when cancellation happens before sandbox creation", async () => {
+    const createSandbox = vi.fn();
+
+    await expect(
+      runCreateCommand([], {
+        loadConfig: vi.fn().mockResolvedValue(config),
+        createSandbox,
+        resolveEnvSource: vi.fn().mockResolvedValue({}),
+        resolveSandboxCreateEnv: vi.fn().mockReturnValue({ envs: {}, warnings: [] }),
+        resolvePromptStartupMode: vi.fn().mockRejectedValue(new PromptCancelledError("Startup mode selection cancelled.")),
+        launchMode: vi.fn(),
+        bootstrapProjectWorkspace: vi.fn().mockResolvedValue(bootstrapResult),
+        syncToolingToSandbox: vi.fn().mockResolvedValue(syncSummary),
+        saveLastRunState: vi.fn().mockResolvedValue(undefined),
+        now: () => "2026-02-01T00:00:00.000Z"
+      })
+    ).rejects.toThrow("Startup mode selection cancelled.");
+
+    expect(createSandbox).not.toHaveBeenCalled();
+  });
+
+  it("create does not auto-wipe on non-cancellation bootstrap errors", async () => {
+    const kill = vi.fn().mockResolvedValue(undefined);
+
+    await expect(
+      runCreateCommand(["--mode", "ssh-opencode"], {
+        loadConfig: vi.fn().mockResolvedValue(config),
+        createSandbox: vi.fn().mockResolvedValue({ sandboxId: "sbx-created", kill }),
+        resolveEnvSource: vi.fn().mockResolvedValue({}),
+        resolveSandboxCreateEnv: vi.fn().mockReturnValue({ envs: {}, warnings: [] }),
+        resolvePromptStartupMode: vi.fn().mockResolvedValue("ssh-opencode"),
+        launchMode: vi.fn(),
+        bootstrapProjectWorkspace: vi.fn().mockRejectedValue(new Error("bootstrap failed")),
+        syncToolingToSandbox: vi.fn().mockResolvedValue(syncSummary),
+        saveLastRunState: vi.fn().mockResolvedValue(undefined),
+        now: () => "2026-02-01T00:00:00.000Z"
+      })
+    ).rejects.toThrow("bootstrap failed");
+
+    expect(kill).not.toHaveBeenCalled();
+  });
+
+  it("create tooling sync includes gh only when enabled", async () => {
+    const root = await createTempRoot("create-gh");
+    const opencodeConfigDir = join(root, "opencode-config");
+    const opencodeAuthPath = join(root, "opencode-auth.json");
+    const ghConfigDir = join(root, "gh-config");
+
+    await mkdir(opencodeConfigDir, { recursive: true });
+    await mkdir(ghConfigDir, { recursive: true });
+    await writeFile(join(opencodeConfigDir, "settings.toml"), "x=1", "utf8");
+    await writeFile(opencodeAuthPath, "{}", "utf8");
+    await writeFile(join(ghConfigDir, "hosts.yml"), "github.com:\n  user: test\n", "utf8");
+
+    const writeFileInSandbox = vi.fn().mockResolvedValue(undefined);
+    const summaryDisabled = await syncToolingForCreateMode(
+      {
+        ...config,
+        opencode: { config_dir: opencodeConfigDir, auth_path: opencodeAuthPath },
+        gh: { enabled: false, config_dir: ghConfigDir }
+      },
+      { writeFile: writeFileInSandbox },
+      "ssh-opencode"
+    );
+    const summaryEnabled = await syncToolingForCreateMode(
+      {
+        ...config,
+        opencode: { config_dir: opencodeConfigDir, auth_path: opencodeAuthPath },
+        gh: { enabled: true, config_dir: ghConfigDir }
+      },
+      { writeFile: writeFileInSandbox },
+      "ssh-opencode"
+    );
+
+    expect(summaryDisabled.ghEnabled).toBe(false);
+    expect(summaryDisabled.ghConfigSynced).toBe(false);
+    expect(summaryEnabled.ghEnabled).toBe(true);
+    expect(summaryEnabled.ghConfigSynced).toBe(true);
+    expect(writeFileInSandbox).toHaveBeenCalledWith("/home/user/.config/gh/hosts.yml", expect.any(ArrayBuffer));
+  });
+
+  it("connect tooling sync includes gh only when enabled", async () => {
+    const root = await createTempRoot("connect-gh");
+    const codexConfigDir = join(root, "codex-config");
+    const codexAuthPath = join(root, "codex-auth.json");
+    const ghConfigDir = join(root, "gh-config");
+
+    await mkdir(codexConfigDir, { recursive: true });
+    await mkdir(ghConfigDir, { recursive: true });
+    await writeFile(join(codexConfigDir, "config.toml"), "model='gpt-5'", "utf8");
+    await writeFile(codexAuthPath, "{}", "utf8");
+    await writeFile(join(ghConfigDir, "hosts.yml"), "github.com:\n  user: test\n", "utf8");
+
+    const writeFileInSandbox = vi.fn().mockResolvedValue(undefined);
+    const summaryDisabled = await syncToolingForConnectMode(
+      {
+        ...config,
+        codex: { config_dir: codexConfigDir, auth_path: codexAuthPath },
+        gh: { enabled: false, config_dir: ghConfigDir }
+      },
+      { writeFile: writeFileInSandbox },
+      "ssh-codex"
+    );
+    const summaryEnabled = await syncToolingForConnectMode(
+      {
+        ...config,
+        codex: { config_dir: codexConfigDir, auth_path: codexAuthPath },
+        gh: { enabled: true, config_dir: ghConfigDir }
+      },
+      { writeFile: writeFileInSandbox },
+      "ssh-codex"
+    );
+
+    expect(summaryDisabled.ghEnabled).toBe(false);
+    expect(summaryDisabled.ghConfigSynced).toBe(false);
+    expect(summaryEnabled.ghEnabled).toBe(true);
+    expect(summaryEnabled.ghConfigSynced).toBe(true);
+    expect(writeFileInSandbox).toHaveBeenCalledWith("/home/user/.config/gh/hosts.yml", expect.any(ArrayBuffer));
   });
 
   it("connect uses --sandbox-id when provided", async () => {
@@ -292,6 +547,45 @@ describe("CLI command integration", () => {
     });
     expect(loggerInfo).toHaveBeenCalledWith("Startup mode selected via prompt: ssh-opencode.");
     loggerInfo.mockRestore();
+  });
+
+  it("connect injects GH token into launch startupEnv when gh is enabled", async () => {
+    const ghEnabledConfig: ResolvedLauncherConfig = {
+      ...config,
+      gh: {
+        ...config.gh,
+        enabled: true
+      }
+    };
+    const launchMode = vi.fn().mockResolvedValue({ mode: "ssh-opencode", command: "opencode", message: "launched" });
+    const resolveHostGhToken = vi.fn().mockResolvedValue("ghp_token");
+
+    await runConnectCommand(["--sandbox-id", "sbx-arg"], {
+      loadConfig: vi.fn().mockResolvedValue(ghEnabledConfig),
+      connectSandbox: vi.fn().mockResolvedValue({ sandboxId: "sbx-arg" }),
+      loadLastRunState: vi.fn().mockResolvedValue(null),
+      listSandboxes: vi.fn().mockResolvedValue([]),
+      resolvePromptStartupMode: vi.fn().mockResolvedValue("ssh-opencode"),
+      resolveHostGhToken,
+      launchMode,
+      bootstrapProjectWorkspace: vi.fn().mockResolvedValue({
+        ...bootstrapResult,
+        startupEnv: { NEXT_PUBLIC_APP_ENV: "preview" }
+      }),
+      syncToolingToSandbox: vi.fn().mockResolvedValue({ ...syncSummary, ghEnabled: true }),
+      saveLastRunState: vi.fn().mockResolvedValue(undefined),
+      now: () => "2026-02-01T00:00:00.000Z"
+    });
+
+    expect(resolveHostGhToken).toHaveBeenCalledTimes(1);
+    expect(launchMode).toHaveBeenCalledWith({ sandboxId: "sbx-arg" }, "ssh-opencode", {
+      workingDirectory: undefined,
+      startupEnv: {
+        NEXT_PUBLIC_APP_ENV: "preview",
+        GH_TOKEN: "ghp_token",
+        GITHUB_TOKEN: "ghp_token"
+      }
+    });
   });
 
   it("connect uses the only listed sandbox when exactly one exists", async () => {

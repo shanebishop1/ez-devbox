@@ -12,9 +12,12 @@ import { buildSandboxDisplayName, formatSandboxDisplayLabel } from "./sandbox-di
 import { saveLastRunState, type LastRunState } from "../state/lastRun.js";
 import { logger } from "../logging/logger.js";
 import { bootstrapProjectWorkspace, type BootstrapProjectWorkspaceResult } from "../project/bootstrap.js";
+import { resolveHostGhToken } from "../auth/gh-host-token.js";
+import { PromptCancelledError, isPromptCancelledError } from "./prompt-cancelled.js";
 import {
   syncCodexAuthFile,
   syncCodexConfigDir,
+  syncGhConfigDir,
   syncOpenCodeAuthFile,
   syncOpenCodeConfigDir,
   type DirectorySyncProgress,
@@ -35,6 +38,7 @@ export interface CreateCommandDeps {
     config: Awaited<ReturnType<typeof loadConfig>>,
     envSource?: Record<string, string | undefined>
   ) => SandboxCreateEnvResolution;
+  resolveHostGhToken?: (env: NodeJS.ProcessEnv) => Promise<string | undefined>;
   resolvePromptStartupMode: (requestedMode: StartupMode) => Promise<StartupMode>;
   launchMode: (handle: SandboxHandle, mode: StartupMode, options?: { workingDirectory?: string; startupEnv?: Record<string, string> }) => Promise<ModeLaunchResult>;
   bootstrapProjectWorkspace?: (
@@ -87,10 +91,15 @@ export async function runCreateCommand(args: string[], deps: CreateCommandDeps =
         };
   const envSource = await deps.resolveEnvSource();
   const envResolution = deps.resolveSandboxCreateEnv(config, envSource);
+  const ghRuntimeEnv = await resolveGhRuntimeEnv(config, envSource, deps.resolveHostGhToken);
+  const createEnvs = {
+    ...envResolution.envs,
+    ...ghRuntimeEnv
+  };
 
   logger.info(`Creating sandbox '${displayName}' with template '${createConfig.sandbox.template}'.`);
   const handle = await deps.createSandbox(createConfig, {
-    envs: envResolution.envs,
+    envs: createEnvs,
     metadata: {
       "launcher.name": displayName
     }
@@ -98,43 +107,91 @@ export async function runCreateCommand(args: string[], deps: CreateCommandDeps =
   const sandboxLabel = formatSandboxDisplayLabel(handle.sandboxId, { "launcher.name": displayName });
   logger.info(`Sandbox ready: ${sandboxLabel}.`);
 
-  logger.info(`Syncing local tooling config/auth for mode '${resolvedMode}'.`);
-  const syncSummary = await deps.syncToolingToSandbox(config, handle, resolvedMode);
+  try {
+    logger.info(`Syncing local tooling config/auth for mode '${resolvedMode}'.`);
+    const syncSummary = await deps.syncToolingToSandbox(config, handle, resolvedMode);
 
-  logger.info("Starting project bootstrap.");
-  const bootstrapResult = await (deps.bootstrapProjectWorkspace ?? bootstrapProjectWorkspace)(handle, config, {
-    isConnect: false,
-    onProgress: (message) => logger.info(`Bootstrap: ${message}`)
-  });
-  logger.info(`Selected repos summary: ${formatSelectedReposSummary(bootstrapResult.selectedRepoNames)}.`);
-  logger.info(`Setup outcome summary: ${formatSetupOutcomeSummary(bootstrapResult.setup)}.`);
+    logger.info("Starting project bootstrap.");
+    const bootstrapResult = await (deps.bootstrapProjectWorkspace ?? bootstrapProjectWorkspace)(handle, config, {
+      isConnect: false,
+      runtimeEnv: ghRuntimeEnv,
+      onProgress: (message) => logger.info(`Bootstrap: ${message}`)
+    });
+    logger.info(`Selected repos summary: ${formatSelectedReposSummary(bootstrapResult.selectedRepoNames)}.`);
+    logger.info(`Setup outcome summary: ${formatSetupOutcomeSummary(bootstrapResult.setup)}.`);
 
-  logger.info(`Launching startup mode '${mode}'.`);
-  const launched = await deps.launchMode(handle, mode, {
-    workingDirectory: bootstrapResult.workingDirectory,
-    startupEnv: bootstrapResult.startupEnv
-  });
+    logger.info(`Launching startup mode '${mode}'.`);
+    const launched = await deps.launchMode(handle, mode, {
+      workingDirectory: bootstrapResult.workingDirectory,
+      startupEnv: {
+        ...bootstrapResult.startupEnv,
+        ...ghRuntimeEnv
+      }
+    });
 
-  const activeRepo = bootstrapResult.selectedRepoNames.length === 1 ? bootstrapResult.selectedRepoNames[0] : undefined;
+    const activeRepo = bootstrapResult.selectedRepoNames.length === 1 ? bootstrapResult.selectedRepoNames[0] : undefined;
 
-  await deps.saveLastRunState({
-    sandboxId: handle.sandboxId,
-    mode: launched.mode,
-    activeRepo,
-    updatedAt: deps.now()
-  });
+    await deps.saveLastRunState({
+      sandboxId: handle.sandboxId,
+      mode: launched.mode,
+      activeRepo,
+      updatedAt: deps.now()
+    });
 
-  const warningSuffix =
-    envResolution.warnings.length === 0 ? "" : `\nMCP warnings:\n- ${envResolution.warnings.join("\n- ")}`;
-  const templateSuffix =
-    templateResolution.autoSelected
-      ? `\nTemplate auto-selected for ${resolvedMode}: ${templateResolution.template}`
-      : "";
-  const syncSuffix = `\nTooling sync: ${formatToolingSyncSummary(syncSummary)}`;
+    const warningSuffix =
+      envResolution.warnings.length === 0 ? "" : `\nMCP warnings:\n- ${envResolution.warnings.join("\n- ")}`;
+    const templateSuffix =
+      templateResolution.autoSelected
+        ? `\nTemplate auto-selected for ${resolvedMode}: ${templateResolution.template}`
+        : "";
+    const syncSuffix = `\nTooling sync: ${formatToolingSyncSummary(syncSummary)}`;
 
+    return {
+      message: `Created sandbox ${sandboxLabel}. ${launched.message}${templateSuffix}${syncSuffix}${warningSuffix}`,
+      exitCode: 0
+    };
+  } catch (error) {
+    if (!isPromptCancelledError(error)) {
+      throw error;
+    }
+
+    logger.info("Setup selection cancelled; wiping newly created sandbox.");
+    try {
+      await handle.kill();
+    } catch (wipeError) {
+      throw new PromptCancelledError(
+        `Setup selection cancelled and sandbox '${sandboxLabel}' could not be wiped: ${toErrorMessage(wipeError)}`,
+        { cause: error }
+      );
+    }
+
+    throw new PromptCancelledError(`Setup selection cancelled; sandbox '${sandboxLabel}' was wiped.`, {
+      cause: error
+    });
+  }
+}
+
+async function resolveGhRuntimeEnv(
+  config: Awaited<ReturnType<typeof loadConfig>>,
+  envSource: Record<string, string | undefined>,
+  resolveToken?: (env: NodeJS.ProcessEnv) => Promise<string | undefined>
+): Promise<Record<string, string>> {
+  if (!config.gh.enabled) {
+    return {};
+  }
+
+  logger.info("GitHub auth: resolving token.");
+  const resolver = resolveToken ?? resolveHostGhToken;
+  const token = await resolver(envSource);
+  if (!token) {
+    logger.info("GitHub auth: token not found; continuing without GH_TOKEN/GITHUB_TOKEN.");
+    return {};
+  }
+
+  logger.info("GitHub auth: token found; injecting GH_TOKEN/GITHUB_TOKEN.");
   return {
-    message: `Created sandbox ${sandboxLabel}. ${launched.message}${templateSuffix}${syncSuffix}${warningSuffix}`,
-    exitCode: 0
+    GH_TOKEN: token,
+    GITHUB_TOKEN: token
   };
 }
 
@@ -153,23 +210,25 @@ function formatSetupOutcomeSummary(setup: BootstrapProjectWorkspaceResult["setup
   return `ran success=${setup.success} repos=${setup.repos.length}`;
 }
 
-async function syncToolingForMode(
+export async function syncToolingForMode(
   config: Awaited<ReturnType<typeof loadConfig>>,
   sandbox: Pick<SandboxHandle, "writeFile">,
   mode: ConcreteStartupMode
 ): Promise<ToolingSyncSummary> {
+  const ghConfig = await maybeSyncGhConfig(config, sandbox);
+
   if (mode === "ssh-opencode" || mode === "web") {
     const opencodeConfig = await runSyncUnit("OpenCode config", (onProgress) =>
       syncOpenCodeConfigDir(config, sandbox, { onProgress })
     );
     const opencodeAuth = await runSyncUnit("OpenCode auth", () => syncOpenCodeAuthFile(config, sandbox));
-    return summarizeToolingSync(opencodeConfig, opencodeAuth, null, null);
+    return summarizeToolingSync(opencodeConfig, opencodeAuth, null, null, ghConfig, config.gh.enabled);
   }
 
   if (mode === "ssh-codex") {
     const codexConfig = await runSyncUnit("Codex config", (onProgress) => syncCodexConfigDir(config, sandbox, { onProgress }));
     const codexAuth = await runSyncUnit("Codex auth", () => syncCodexAuthFile(config, sandbox));
-    return summarizeToolingSync(null, null, codexConfig, codexAuth);
+    return summarizeToolingSync(null, null, codexConfig, codexAuth, ghConfig, config.gh.enabled);
   }
 
   const opencodeConfig = await runSyncUnit("OpenCode config", (onProgress) =>
@@ -178,7 +237,18 @@ async function syncToolingForMode(
   const opencodeAuth = await runSyncUnit("OpenCode auth", () => syncOpenCodeAuthFile(config, sandbox));
   const codexConfig = await runSyncUnit("Codex config", (onProgress) => syncCodexConfigDir(config, sandbox, { onProgress }));
   const codexAuth = await runSyncUnit("Codex auth", () => syncCodexAuthFile(config, sandbox));
-  return summarizeToolingSync(opencodeConfig, opencodeAuth, codexConfig, codexAuth);
+  return summarizeToolingSync(opencodeConfig, opencodeAuth, codexConfig, codexAuth, ghConfig, config.gh.enabled);
+}
+
+async function maybeSyncGhConfig(
+  config: Awaited<ReturnType<typeof loadConfig>>,
+  sandbox: Pick<SandboxHandle, "writeFile">
+): Promise<PathSyncSummary | null> {
+  if (!config.gh.enabled) {
+    return null;
+  }
+
+  return runSyncUnit("GitHub CLI config", (onProgress) => syncGhConfigDir(config, sandbox, { onProgress }));
 }
 
 async function runSyncUnit(
@@ -213,9 +283,13 @@ function summarizeToolingSync(
   opencodeConfig: PathSyncSummary | null,
   opencodeAuth: PathSyncSummary | null,
   codexConfig: PathSyncSummary | null,
-  codexAuth: PathSyncSummary | null
+  codexAuth: PathSyncSummary | null,
+  ghConfig: PathSyncSummary | null,
+  ghEnabled: boolean
 ): ToolingSyncSummary {
-  const summaries = [opencodeConfig, opencodeAuth, codexConfig, codexAuth].filter((item): item is PathSyncSummary => item !== null);
+  const summaries = [opencodeConfig, opencodeAuth, codexConfig, codexAuth, ghConfig].filter(
+    (item): item is PathSyncSummary => item !== null
+  );
 
   return {
     totalDiscovered: summaries.reduce((total, item) => total + item.filesDiscovered, 0),
@@ -224,14 +298,17 @@ function summarizeToolingSync(
     opencodeConfigSynced: opencodeConfig !== null && !opencodeConfig.skippedMissing,
     opencodeAuthSynced: opencodeAuth !== null && !opencodeAuth.skippedMissing,
     codexConfigSynced: codexConfig !== null && !codexConfig.skippedMissing,
-    codexAuthSynced: codexAuth !== null && !codexAuth.skippedMissing
+    codexAuthSynced: codexAuth !== null && !codexAuth.skippedMissing,
+    ghEnabled,
+    ghConfigSynced: ghConfig !== null && !ghConfig.skippedMissing
   };
 }
 
 function formatToolingSyncSummary(summary: ToolingSyncSummary): string {
   const opencodeSynced = summary.opencodeConfigSynced || summary.opencodeAuthSynced;
   const codexSynced = summary.codexConfigSynced || summary.codexAuthSynced;
-  return `discovered=${summary.totalDiscovered}, written=${summary.totalWritten}, missingPaths=${summary.skippedMissingPaths}, opencodeSynced=${opencodeSynced}, codexSynced=${codexSynced}`;
+  const ghSynced = summary.ghEnabled && summary.ghConfigSynced;
+  return `discovered=${summary.totalDiscovered}, written=${summary.totalWritten}, missingPaths=${summary.skippedMissingPaths}, opencodeSynced=${opencodeSynced}, codexSynced=${codexSynced}, ghSynced=${ghSynced}`;
 }
 
 function resolveTemplateForMode(
@@ -280,6 +357,13 @@ async function loadEnvSource(): Promise<Record<string, string | undefined>> {
 
 function isErrnoException(error: unknown): error is NodeJS.ErrnoException {
   return typeof error === "object" && error !== null && "code" in error;
+}
+
+function toErrorMessage(error: unknown): string {
+  if (error instanceof Error && error.message.trim() !== "") {
+    return error.message;
+  }
+  return "unknown error";
 }
 
 function parseCreateArgs(args: string[]): { mode?: StartupMode } {

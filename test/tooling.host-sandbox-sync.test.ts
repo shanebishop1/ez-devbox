@@ -86,6 +86,10 @@ describe("host to sandbox tooling sync", () => {
       codex: {
         config_dir: join(root, "missing-codex-config"),
         auth_path: join(root, "missing-codex-auth.json")
+      },
+      gh: {
+        enabled: false,
+        config_dir: join(root, "missing-gh-config")
       }
     };
     const writeFileInSandbox = vi.fn().mockResolvedValue(undefined);
@@ -100,7 +104,9 @@ describe("host to sandbox tooling sync", () => {
       opencodeConfigSynced: false,
       opencodeAuthSynced: false,
       codexConfigSynced: false,
-      codexAuthSynced: false
+      codexAuthSynced: false,
+      ghEnabled: false,
+      ghConfigSynced: false
     });
   });
 
@@ -130,6 +136,10 @@ describe("host to sandbox tooling sync", () => {
       codex: {
         config_dir: codexConfigDir,
         auth_path: codexAuthPath
+      },
+      gh: {
+        enabled: false,
+        config_dir: join(root, "unused-gh")
       }
     };
     const writeFileInSandbox = vi.fn().mockResolvedValue(undefined);
@@ -183,6 +193,10 @@ describe("host to sandbox tooling sync", () => {
       codex: {
         config_dir: codexConfigDir,
         auth_path: codexAuthPath
+      },
+      gh: {
+        enabled: false,
+        config_dir: join(root, "unused-gh")
       }
     };
     const writeFileInSandbox = vi.fn().mockResolvedValue(undefined);
@@ -228,6 +242,10 @@ describe("host to sandbox tooling sync", () => {
       codex: {
         config_dir: codexConfigDir,
         auth_path: join(root, "unused-codex-auth.json")
+      },
+      gh: {
+        enabled: false,
+        config_dir: join(root, "unused-gh")
       }
     };
     const writeFileInSandbox = vi.fn().mockResolvedValue(undefined);
@@ -280,6 +298,50 @@ describe("host to sandbox tooling sync", () => {
       "/home/user/.codex/state.sqlite",
       expect.any(ArrayBuffer)
     );
+  });
+
+  it("includes gh config in summary only when enabled", async () => {
+    const root = await createTempRoot("gh-enabled");
+    const ghConfigDir = join(root, "gh-config");
+    const codexConfigDir = join(root, "codex-config");
+    const codexAuthPath = join(root, "codex-auth.json");
+
+    await mkdir(ghConfigDir, { recursive: true });
+    await mkdir(codexConfigDir, { recursive: true });
+    await writeFile(join(ghConfigDir, "hosts.yml"), "github.com:\n  user: test\n", "utf8");
+    await writeFile(join(codexConfigDir, "config.toml"), "model='gpt-5'", "utf8");
+    await writeFile(codexAuthPath, "{}", "utf8");
+
+    const config = {
+      opencode: {
+        config_dir: join(root, "missing-opencode-config"),
+        auth_path: join(root, "missing-opencode-auth.json")
+      },
+      codex: {
+        config_dir: codexConfigDir,
+        auth_path: codexAuthPath
+      },
+      gh: {
+        enabled: true,
+        config_dir: ghConfigDir
+      }
+    };
+    const writeFileInSandbox = vi.fn().mockResolvedValue(undefined);
+
+    const summary = await syncToolingToSandbox(config, { writeFile: writeFileInSandbox });
+
+    expect(summary).toEqual({
+      totalDiscovered: 3,
+      totalWritten: 3,
+      skippedMissingPaths: 2,
+      opencodeConfigSynced: false,
+      opencodeAuthSynced: false,
+      codexConfigSynced: true,
+      codexAuthSynced: true,
+      ghEnabled: true,
+      ghConfigSynced: true
+    });
+    expect(writeFileInSandbox).toHaveBeenCalledWith("/home/user/.config/gh/hosts.yml", expect.any(ArrayBuffer));
   });
 });
 

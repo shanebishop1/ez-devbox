@@ -1,5 +1,6 @@
 import { createInterface } from "node:readline/promises";
 import type { StartupMode } from "../types/index.js";
+import { normalizePromptCancelledError } from "./prompt-cancelled.js";
 
 const PROMPT_FALLBACK_MODE: Exclude<StartupMode, "prompt"> = "ssh-opencode";
 const PROMPT_CHOICE_NUMBERS: Record<string, Exclude<StartupMode, "prompt">> = {
@@ -69,6 +70,12 @@ async function promptInput(question: string): Promise<string> {
 
   try {
     return await readline.question(question);
+  } catch (error) {
+    const cancelledError = normalizePromptCancelledError(error, "Startup mode selection cancelled.");
+    if (cancelledError) {
+      throw cancelledError;
+    }
+    throw error;
   } finally {
     readline.close();
   }

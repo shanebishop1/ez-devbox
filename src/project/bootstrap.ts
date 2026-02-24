@@ -2,6 +2,7 @@ import { createInterface } from "node:readline/promises";
 import { isAbsolute, join, resolve as resolvePath } from "node:path";
 import type { ResolvedLauncherConfig, ResolvedProjectRepoConfig } from "../config/schema.js";
 import type { SandboxHandle } from "../e2b/lifecycle.js";
+import { normalizePromptCancelledError } from "../cli/prompt-cancelled.js";
 import { provisionRepos, type GitAdapter, type ProvisionedRepoSummary, type RepoExecutor } from "../repo/manager.js";
 import {
   runSetupPipeline,
@@ -10,6 +11,9 @@ import {
   type SetupPipelineResult,
   type SetupRunnerEvent
 } from "../setup/runner.js";
+
+const REQUIRED_TOOL_PATHS = ["/home/user/.local/bin", "/home/user/.local/share/mise/shims"];
+const DEFAULT_BASE_PATH = "/usr/local/bin:/usr/bin:/bin:/usr/local/games:/usr/games";
 
 export interface BootstrapProjectWorkspaceResult {
   selectedRepoNames: string[];
@@ -25,13 +29,13 @@ export interface BootstrapProjectWorkspaceDeps {
     handle: SandboxHandle,
     projectDir: string,
     repos: ResolvedProjectRepoConfig[],
-    options: { timeoutMs: number; onProgress?: (message: string) => void }
+    options: { timeoutMs: number; runtimeEnv?: Record<string, string>; onProgress?: (message: string) => void }
   ) => Promise<ProvisionedRepoSummary[]>;
   runSetupForRepos: (
     handle: SandboxHandle,
     repos: ResolvedProjectRepoConfig[],
     provisionedRepos: ProvisionedRepoSummary[],
-    options: RunSetupPipelineOptions
+    options: RunSetupPipelineOptions & { runtimeEnv?: Record<string, string> }
   ) => Promise<SetupPipelineResult>;
 }
 
@@ -39,6 +43,7 @@ export interface BootstrapProjectWorkspaceOptions {
   isConnect?: boolean;
   isInteractiveTerminal?: () => boolean;
   promptInput?: (question: string) => Promise<string>;
+  runtimeEnv?: Record<string, string>;
   onProgress?: (message: string) => void;
   deps?: Partial<BootstrapProjectWorkspaceDeps>;
 }
@@ -60,6 +65,7 @@ export async function bootstrapProjectWorkspace(
   };
 
   const timeoutMs = config.sandbox.timeout_ms;
+  const runtimeEnv = options.runtimeEnv ?? {};
   await deps.ensureProjectDirectory(handle, config.project.dir, { timeoutMs });
 
   const selectedRepos = await selectRepos(config.project.repos, config.project.mode, config.project.active, {
@@ -74,10 +80,20 @@ export async function bootstrapProjectWorkspace(
 
   const provisionedRepos = await deps.provisionSelectedRepos(handle, config.project.dir, selectedRepos, {
     timeoutMs,
+    runtimeEnv,
     onProgress: options.onProgress
   });
   const selectedRepoNames = selectedRepos.map((repo) => repo.name);
-  const setup = await maybeRunSetup(handle, selectedRepos, provisionedRepos, config, options.isConnect ?? false, deps, options.onProgress);
+  const setup = await maybeRunSetup(
+    handle,
+    selectedRepos,
+    provisionedRepos,
+    config,
+    options.isConnect ?? false,
+    deps,
+    runtimeEnv,
+    options.onProgress
+  );
 
   return {
     selectedRepoNames,
@@ -95,6 +111,7 @@ async function maybeRunSetup(
   config: ResolvedLauncherConfig,
   isConnect: boolean,
   deps: BootstrapProjectWorkspaceDeps,
+  runtimeEnv: Record<string, string>,
   onProgress?: (message: string) => void
 ): Promise<SetupPipelineResult | null> {
   if (selectedRepos.length === 0) {
@@ -111,6 +128,7 @@ async function maybeRunSetup(
   }
 
   return deps.runSetupForRepos(handle, reposForSetup, provisionedRepos, {
+    runtimeEnv,
     retryPolicy: {
       attempts: config.project.setup_retries + 1
     },
@@ -175,6 +193,12 @@ async function promptInput(question: string): Promise<string> {
 
   try {
     return await readline.question(question);
+  } catch (error) {
+    const cancelledError = normalizePromptCancelledError(error, "Repository selection cancelled.");
+    if (cancelledError) {
+      throw cancelledError;
+    }
+    throw error;
   } finally {
     readline.close();
   }
@@ -216,7 +240,7 @@ async function ensureProjectDirectory(handle: SandboxHandle, projectDir: string,
     commandLabel: `ensure project directory '${projectDir}'`
   });
   if (result.exitCode !== 0) {
-    throw new Error(`Failed to create project directory '${projectDir}': ${result.stderr || "unknown error"}`);
+    throw new Error(`Failed to create project directory '${projectDir}': ${result.stderr || result.stdout || "unknown error"}`);
   }
 }
 
@@ -224,7 +248,7 @@ async function provisionSelectedRepos(
   handle: SandboxHandle,
   projectDir: string,
   repos: ResolvedProjectRepoConfig[],
-  options: { timeoutMs: number; onProgress?: (message: string) => void }
+  options: { timeoutMs: number; runtimeEnv?: Record<string, string>; onProgress?: (message: string) => void }
 ): Promise<ProvisionedRepoSummary[]> {
   const git: GitAdapter = {
     async exists(path) {
@@ -250,7 +274,9 @@ async function provisionSelectedRepos(
   const executor: RepoExecutor = {
     async clone(url, targetPath) {
       options.onProgress?.(`Repo clone: ${targetPath}`);
-      await runRequiredCommand(handle, `git clone ${quoteShellArg(url)} ${quoteShellArg(targetPath)}`, {
+      const cloneUrlArg = resolveCloneUrlShellArg(url, options.runtimeEnv);
+      await runRequiredCommand(handle, `git clone ${cloneUrlArg} ${quoteShellArg(targetPath)}`, {
+        envs: options.runtimeEnv,
         timeoutMs: options.timeoutMs,
         commandLabel: `clone repo '${targetPath}'`
       });
@@ -265,10 +291,50 @@ async function provisionSelectedRepos(
     },
     async checkoutBranch(repoPath, branch) {
       options.onProgress?.(`Repo branch switch: ${repoPath} -> ${branch}`);
-      await runRequiredCommand(handle, `git -C ${quoteShellArg(repoPath)} checkout ${quoteShellArg(branch)}`, {
+      const localCheckout = await runCommand(handle, `git -C ${quoteShellArg(repoPath)} checkout ${quoteShellArg(branch)}`, {
         timeoutMs: options.timeoutMs,
         commandLabel: `checkout branch '${branch}' in '${repoPath}'`
       });
+      if (localCheckout.exitCode === 0) {
+        return;
+      }
+
+      options.onProgress?.(`Repo branch switch fallback: ${repoPath} -> origin/${branch}`);
+      const fetchResult = await runCommand(
+        handle,
+        `git -C ${quoteShellArg(repoPath)} fetch origin ${quoteShellArg(branch)}`,
+        {
+          timeoutMs: options.timeoutMs,
+          commandLabel: `fetch branch '${branch}' from origin in '${repoPath}'`
+        }
+      );
+      if (fetchResult.exitCode === 0) {
+        const remoteCheckout = await runCommand(
+          handle,
+          `git -C ${quoteShellArg(repoPath)} checkout -B ${quoteShellArg(branch)} --track ${quoteShellArg(`origin/${branch}`)}`,
+          {
+            timeoutMs: options.timeoutMs,
+            commandLabel: `checkout tracking branch '${branch}' in '${repoPath}'`
+          }
+        );
+        if (remoteCheckout.exitCode === 0) {
+          return;
+        }
+
+        throw new Error(
+          `Failed to checkout branch '${branch}' in repo '${repoPath}'. ` +
+            `Try updating project.repos[].branch. ` +
+            `Local checkout error: ${localCheckout.stderr || localCheckout.stdout || "unknown error"}. ` +
+            `Remote-tracking checkout error: ${remoteCheckout.stderr || remoteCheckout.stdout || "unknown error"}`
+        );
+      }
+
+      throw new Error(
+        `Failed to checkout branch '${branch}' in repo '${repoPath}'. ` +
+          `Try updating project.repos[].branch. ` +
+          `Local checkout error: ${localCheckout.stderr || localCheckout.stdout || "unknown error"}. ` +
+          `Fetch error: ${fetchResult.stderr || fetchResult.stdout || "unknown error"}`
+      );
     }
   };
 
@@ -290,14 +356,17 @@ async function runSetupForRepos(
   handle: SandboxHandle,
   repos: ResolvedProjectRepoConfig[],
   provisionedRepos: ProvisionedRepoSummary[],
-  options: RunSetupPipelineOptions
+  options: RunSetupPipelineOptions & { runtimeEnv?: Record<string, string> }
 ): Promise<SetupPipelineResult> {
   const pathByName = new Map(provisionedRepos.map((repo) => [repo.repo, repo.path]));
   const executor: SetupCommandExecutor = {
     async run(command, runOptions) {
       const result = await runCommand(handle, command, {
         cwd: runOptions.cwd,
-        envs: runOptions.env,
+        envs: withRequiredToolPath({
+          ...(options.runtimeEnv ?? {}),
+          ...runOptions.env
+        }),
         timeoutMs: runOptions.timeoutMs,
         commandLabel: `setup command '${command}'`
       });
@@ -340,7 +409,7 @@ async function runBoolCheck(
     commandLabel: options.commandLabel
   });
   if (result.exitCode !== 0) {
-    throw new Error(`Command failed: ${command}: ${result.stderr || "unknown error"}`);
+    throw new Error(`Command failed: ${command}: ${result.stderr || result.stdout || "unknown error"}`);
   }
 
   const marker = result.stdout.trim();
@@ -357,14 +426,15 @@ async function runBoolCheck(
 async function runRequiredCommand(
   handle: SandboxHandle,
   command: string,
-  options: { timeoutMs: number; commandLabel: string }
+  options: { timeoutMs: number; commandLabel: string; envs?: Record<string, string> }
 ): Promise<{ stdout: string; stderr: string; exitCode: number }> {
   const result = await runCommand(handle, command, {
     timeoutMs: options.timeoutMs,
+    envs: options.envs,
     commandLabel: options.commandLabel
   });
   if (result.exitCode !== 0) {
-    throw new Error(`Command failed: ${command}: ${result.stderr || "unknown error"}`);
+    throw new Error(`Command failed: ${command}: ${result.stderr || result.stdout || "unknown error"}`);
   }
   return result;
 }
@@ -421,5 +491,56 @@ function emitLines(output: string, onLine?: (line: string) => void): void {
 }
 
 function quoteShellArg(value: string): string {
-  return `'${value.replace(/'/g, `"'\"'\"'`)}'`;
+  return `'${value.replace(/'/g, `'"'"'`)}'`;
+}
+
+function resolveCloneUrlShellArg(url: string, runtimeEnv?: Record<string, string>): string {
+  const tokenVar = resolveGithubTokenVar(runtimeEnv);
+  if (!tokenVar || !isGithubHttpsUrl(url)) {
+    return quoteShellArg(url);
+  }
+
+  const urlWithoutProtocol = url.slice("https://".length);
+  return quoteShellDoubleArg(`https://x-access-token:$${tokenVar}@${urlWithoutProtocol}`);
+}
+
+function resolveGithubTokenVar(runtimeEnv?: Record<string, string>): "GH_TOKEN" | "GITHUB_TOKEN" | null {
+  if (runtimeEnv?.GH_TOKEN) {
+    return "GH_TOKEN";
+  }
+  if (runtimeEnv?.GITHUB_TOKEN) {
+    return "GITHUB_TOKEN";
+  }
+  return null;
+}
+
+function isGithubHttpsUrl(url: string): boolean {
+  return /^https:\/\/github\.com\//.test(url);
+}
+
+function quoteShellDoubleArg(value: string): string {
+  return `"${value.replace(/["\\`]/g, "\\$&")}"`;
+}
+
+function withRequiredToolPath(envs?: Record<string, string>): Record<string, string> {
+  const merged = {
+    ...(envs ?? {})
+  };
+  merged.PATH = ensureRequiredPaths(merged.PATH);
+  return merged;
+}
+
+function ensureRequiredPaths(pathValue?: string): string {
+  const segments = (pathValue ?? DEFAULT_BASE_PATH)
+    .split(":")
+    .map((segment) => segment.trim())
+    .filter((segment) => segment !== "");
+
+  for (const requiredPath of [...REQUIRED_TOOL_PATHS].reverse()) {
+    if (!segments.includes(requiredPath)) {
+      segments.unshift(requiredPath);
+    }
+  }
+
+  return segments.join(":");
 }

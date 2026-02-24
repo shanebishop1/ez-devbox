@@ -8,6 +8,7 @@ const OPEN_CODE_CONFIG_DEST = "/home/user/.config/opencode";
 const OPEN_CODE_AUTH_DEST = "/home/user/.local/share/opencode/auth.json";
 const CODEX_CONFIG_DEST = "/home/user/.codex";
 const CODEX_AUTH_DEST = "/home/user/.codex/auth.json";
+const GH_CONFIG_DEST = "/home/user/.config/gh";
 
 const SKIPPED_DIRECTORY_NAMES = new Set([
   "archived_sessions",
@@ -58,9 +59,11 @@ export interface ToolingSyncSummary {
   opencodeAuthSynced: boolean;
   codexConfigSynced: boolean;
   codexAuthSynced: boolean;
+  ghEnabled: boolean;
+  ghConfigSynced: boolean;
 }
 
-type ToolingSyncConfig = Pick<ResolvedLauncherConfig, "opencode" | "codex">;
+type ToolingSyncConfig = Pick<ResolvedLauncherConfig, "opencode" | "codex" | "gh">;
 
 export function resolveHostPath(inputPath: string, options: HostPathResolveOptions = {}): string {
   const homeDir = options.homeDir ?? process.env.HOME ?? homedir();
@@ -115,6 +118,14 @@ export async function syncCodexAuthFile(
   return syncFile(config.codex.auth_path, CODEX_AUTH_DEST, sandbox, options);
 }
 
+export async function syncGhConfigDir(
+  config: ToolingSyncConfig,
+  sandbox: Pick<SandboxHandle, "writeFile">,
+  options?: HostToSandboxSyncOptions
+): Promise<PathSyncSummary> {
+  return syncDirectory(config.gh.config_dir, GH_CONFIG_DEST, sandbox, options);
+}
+
 export async function syncToolingToSandbox(
   config: ToolingSyncConfig,
   sandbox: Pick<SandboxHandle, "writeFile">,
@@ -124,8 +135,11 @@ export async function syncToolingToSandbox(
   const opencodeAuth = await syncOpenCodeAuthFile(config, sandbox, options);
   const codexConfig = await syncCodexConfigDir(config, sandbox, options);
   const codexAuth = await syncCodexAuthFile(config, sandbox, options);
+  const ghConfig = config.gh.enabled ? await syncGhConfigDir(config, sandbox, options) : null;
 
-  const summaries = [opencodeConfig, opencodeAuth, codexConfig, codexAuth];
+  const summaries = [opencodeConfig, opencodeAuth, codexConfig, codexAuth, ghConfig].filter(
+    (item): item is PathSyncSummary => item !== null
+  );
   return {
     totalDiscovered: summaries.reduce((total, item) => total + item.filesDiscovered, 0),
     totalWritten: summaries.reduce((total, item) => total + item.filesWritten, 0),
@@ -133,7 +147,9 @@ export async function syncToolingToSandbox(
     opencodeConfigSynced: !opencodeConfig.skippedMissing,
     opencodeAuthSynced: !opencodeAuth.skippedMissing,
     codexConfigSynced: !codexConfig.skippedMissing,
-    codexAuthSynced: !codexAuth.skippedMissing
+    codexAuthSynced: !codexAuth.skippedMissing,
+    ghEnabled: config.gh.enabled,
+    ghConfigSynced: ghConfig !== null && !ghConfig.skippedMissing
   };
 }
 
