@@ -202,9 +202,52 @@ async function withLifecycleError<T>(message: string, operation: () => Promise<T
 }
 
 function formatLifecycleError(message: string, cause: unknown): string {
+  const commandLike = getCommandLikeError(cause);
+  if (commandLike) {
+    const parts = [message];
+    if (commandLike.message) {
+      parts.push(commandLike.message);
+    }
+    if (typeof commandLike.exitCode === "number") {
+      parts.push(`exitCode=${commandLike.exitCode}`);
+    }
+    if (commandLike.stderr) {
+      parts.push(`stderr=${commandLike.stderr}`);
+    } else if (commandLike.stdout) {
+      parts.push(`stdout=${commandLike.stdout}`);
+    }
+
+    return parts.join(": ");
+  }
+
   if (cause instanceof Error && cause.message.trim() !== "") {
     return `${message}: ${cause.message}`;
   }
 
   return message;
+}
+
+function getCommandLikeError(
+  cause: unknown
+): { message?: string; exitCode?: number; stdout?: string; stderr?: string } | null {
+  if (typeof cause !== "object" || cause === null) {
+    return null;
+  }
+
+  const record = cause as Record<string, unknown>;
+  const message = typeof record.message === "string" && record.message.trim() !== "" ? record.message.trim() : undefined;
+  const exitCode = typeof record.exitCode === "number" ? record.exitCode : undefined;
+  const stdout = typeof record.stdout === "string" && record.stdout.trim() !== "" ? record.stdout.trim() : undefined;
+  const stderr = typeof record.stderr === "string" && record.stderr.trim() !== "" ? record.stderr.trim() : undefined;
+
+  if (message === undefined && exitCode === undefined && stdout === undefined && stderr === undefined) {
+    return null;
+  }
+
+  return {
+    message,
+    exitCode,
+    stdout,
+    stderr
+  };
 }

@@ -42,6 +42,10 @@ describe("e2b lifecycle adapter", () => {
       config_dir: "~/.codex",
       auth_path: "~/.codex/auth.json"
     },
+    gh: {
+      enabled: false,
+      config_dir: "~/.config/gh"
+    },
     mcp: {
       mode: "disabled",
       firecrawl_api_url: "",
@@ -162,6 +166,24 @@ describe("e2b lifecycle adapter", () => {
 
     await expect(handle.run("false")).rejects.toThrow(
       "Failed to run command in sandbox 'sbx-error': command crashed"
+    );
+  });
+
+  it("includes stderr details for command exit errors", async () => {
+    const commandExitError = Object.assign(new Error("exit status 128"), {
+      exitCode: 128,
+      stdout: "",
+      stderr: "fatal: repository 'https://github.com/org/private.git/' not found"
+    });
+    const sdkSandbox = createMockSandbox("sbx-exit", vi.fn().mockRejectedValue(commandExitError));
+    const client = createMockClient({
+      connect: vi.fn().mockResolvedValue(sdkSandbox)
+    });
+
+    const handle = await connectSandbox("sbx-exit", baseConfig, { client });
+
+    await expect(handle.run("git clone https://github.com/org/private.git")).rejects.toThrow(
+      "stderr=fatal: repository 'https://github.com/org/private.git/' not found"
     );
   });
 });

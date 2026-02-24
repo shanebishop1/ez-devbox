@@ -42,6 +42,7 @@ export async function loadConfig(options: LoadConfigOptions = {}): Promise<Resol
   const envRaw = getOptionalTable(rawConfig, "env", "env");
   const opencodeRaw = getOptionalTable(rawConfig, "opencode", "opencode");
   const codexRaw = getOptionalTable(rawConfig, "codex", "codex");
+  const ghRaw = getOptionalTable(rawConfig, "gh", "gh");
   const mcpRaw = getOptionalTable(rawConfig, "mcp", "mcp");
 
   const projectReposRaw =
@@ -95,6 +96,10 @@ export async function loadConfig(options: LoadConfigOptions = {}): Promise<Resol
       config_dir: getOptionalString(codexRaw, "config_dir", "codex.config_dir") ?? defaultConfig.codex.config_dir,
       auth_path: getOptionalString(codexRaw, "auth_path", "codex.auth_path") ?? defaultConfig.codex.auth_path
     },
+    gh: {
+      enabled: getOptionalBoolean(ghRaw, "enabled", "gh.enabled") ?? defaultConfig.gh.enabled,
+      config_dir: getOptionalString(ghRaw, "config_dir", "gh.config_dir") ?? defaultConfig.gh.config_dir
+    },
     mcp: {
       mode: getOptionalEnum(mcpRaw, "mode", "mcp.mode", MCP_MODES) ?? defaultConfig.mcp.mode,
       firecrawl_api_url:
@@ -116,6 +121,10 @@ export async function loadConfig(options: LoadConfigOptions = {}): Promise<Resol
 
   if (resolved.project.working_dir !== "auto" && resolved.project.working_dir.trim() === "") {
     throw new Error("Invalid project.working_dir: expected 'auto' or a non-empty path string.");
+  }
+
+  if (resolved.gh.config_dir.trim() === "") {
+    throw new Error("Invalid gh.config_dir: expected a non-empty path string.");
   }
 
   validateFirecrawlPreflight(resolved, mergedEnv);

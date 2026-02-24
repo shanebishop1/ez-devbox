@@ -87,6 +87,10 @@ describe("loadConfig", () => {
       config_dir: "~/.codex",
       auth_path: "~/.codex/auth.json"
     });
+    expect(resolved.gh).toEqual({
+      enabled: false,
+      config_dir: "~/.config/gh"
+    });
     expect(resolved.mcp.mode).toBe("disabled");
     expect(resolved.mcp.allow_localhost_override).toBe(false);
   });
@@ -119,6 +123,34 @@ describe("loadConfig", () => {
       config_dir: "/tmp/codex-config",
       auth_path: "/tmp/codex-auth.json"
     });
+  });
+
+  it("supports gh sync config overrides", async () => {
+    const configPath = join(tempDir, "launcher.config.toml");
+    const envPath = join(tempDir, ".env");
+
+    await writeFile(
+      configPath,
+      ["[gh]", "enabled = true", 'config_dir = "/tmp/gh-config"'].join("\n")
+    );
+    await writeFile(envPath, "E2B_API_KEY=test-e2b-key\n");
+
+    const resolved = await loadConfig({ configPath, envPath });
+
+    expect(resolved.gh).toEqual({
+      enabled: true,
+      config_dir: "/tmp/gh-config"
+    });
+  });
+
+  it("rejects empty gh.config_dir", async () => {
+    const configPath = join(tempDir, "launcher.config.toml");
+    const envPath = join(tempDir, ".env");
+
+    await writeFile(configPath, ["[gh]", 'config_dir = ""'].join("\n"));
+    await writeFile(envPath, "E2B_API_KEY=test-e2b-key\n");
+
+    await expect(loadConfig({ configPath, envPath })).rejects.toThrow("gh.config_dir");
   });
 
   it("rejects invalid startup mode", async () => {

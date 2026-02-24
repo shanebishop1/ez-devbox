@@ -36,9 +36,9 @@ setup_continue_on_error = false
 [[project.repos]]
 # Repo entry used for clone, optional checkout, setup, and startup environment.
 # Repo directory name under project.dir (also used as display label).
-name = "opencode"
+name = "sample-repo"
 # Git remote URL to clone.
-url = "https://github.com/sst/opencode.git"
+url = "https://github.com/bukatea/sample-repo.git"
 # Branch checked out after clone/connect (defaults to main when omitted).
 branch = "main"
 # Primary setup command run in repo directory.
@@ -96,6 +96,13 @@ auth_path = "~/.local/share/opencode/auth.json"
 config_dir = "~/.codex"
 # Local Codex auth file synced to /home/user/.codex/auth.json in the sandbox.
 auth_path = "~/.codex/auth.json"
+
+[gh]
+# Enable to sync host GitHub CLI config into /home/user/.config/gh in the sandbox,
+# and source auth token from GH_TOKEN, GITHUB_TOKEN, or `gh auth token`.
+enabled = true
+# Local GitHub CLI config directory synced when enabled.
+config_dir = "~/.config/gh"
 
 [mcp]
 # Firecrawl/MCP wiring passed into sandbox environment.

@@ -1,4 +1,7 @@
 import { createInterface } from "node:readline/promises";
+import { readFile } from "node:fs/promises";
+import { resolve } from "node:path";
+import { parse as parseDotEnv } from "dotenv";
 import type { CommandResult } from "../types/index.js";
 import type { StartupMode } from "../types/index.js";
 import { loadConfig, type LoadConfigOptions } from "../config/load.js";
@@ -14,9 +17,11 @@ import { launchMode, resolveStartupMode, type ConcreteStartupMode, type ModeLaun
 import { loadLastRunState, saveLastRunState, type LastRunState } from "../state/lastRun.js";
 import { logger } from "../logging/logger.js";
 import { formatSandboxDisplayLabel } from "./sandbox-display-name.js";
+import { resolveHostGhToken } from "../auth/gh-host-token.js";
 import {
   syncCodexAuthFile,
   syncCodexConfigDir,
+  syncGhConfigDir,
   syncOpenCodeAuthFile,
   syncOpenCodeConfigDir,
   type DirectorySyncProgress,
@@ -39,10 +44,12 @@ export interface ConnectCommandDeps {
   listSandboxes: (options?: ListSandboxesOptions) => Promise<SandboxListItem[]>;
   resolvePromptStartupMode: (requestedMode: StartupMode) => Promise<StartupMode>;
   launchMode: (handle: SandboxHandle, mode: StartupMode, options?: { workingDirectory?: string; startupEnv?: Record<string, string> }) => Promise<ModeLaunchResult>;
+  resolveEnvSource?: () => Promise<Record<string, string | undefined>>;
+  resolveHostGhToken?: (env: NodeJS.ProcessEnv) => Promise<string | undefined>;
   bootstrapProjectWorkspace?: (
     handle: SandboxHandle,
     config: Awaited<ReturnType<typeof loadConfig>>,
-    options?: { isConnect?: boolean; onProgress?: (message: string) => void }
+    options?: { isConnect?: boolean; runtimeEnv?: Record<string, string>; onProgress?: (message: string) => void }
   ) => Promise<BootstrapProjectWorkspaceResult>;
   syncToolingToSandbox: (
     config: Awaited<ReturnType<typeof loadConfig>>,
@@ -62,6 +69,7 @@ const defaultDeps: ConnectCommandDeps = {
   listSandboxes,
   resolvePromptStartupMode,
   launchMode,
+  resolveEnvSource: loadEnvSource,
   syncToolingToSandbox: syncToolingForMode,
   saveLastRunState,
   isInteractiveTerminal: () => Boolean(process.stdin.isTTY && process.stdout.isTTY),
@@ -94,6 +102,8 @@ export async function runConnectCommand(
   logger.info(`Connecting to sandbox ${targetLabel}.`);
   const handle = await deps.connectSandbox(target.sandboxId, config);
   logger.info(`Connected to sandbox ${targetLabel}.`);
+  const envSource = deps.resolveEnvSource ? await deps.resolveEnvSource() : await loadEnvSource();
+  const ghRuntimeEnv = await resolveGhRuntimeEnv(config, envSource, deps.resolveHostGhToken);
 
   logger.info(`Syncing local tooling config/auth for mode '${resolvedMode}'.`);
   const syncSummary = await deps.syncToolingToSandbox(config, handle, resolvedMode);
@@ -101,6 +111,7 @@ export async function runConnectCommand(
   logger.info("Starting project bootstrap.");
   const bootstrapResult = await (deps.bootstrapProjectWorkspace ?? bootstrapProjectWorkspace)(handle, config, {
     isConnect: true,
+    runtimeEnv: ghRuntimeEnv,
     onProgress: (message) => logger.info(`Bootstrap: ${message}`)
   });
   logger.info(`Selected repos summary: ${formatSelectedReposSummary(bootstrapResult.selectedRepoNames)}.`);
@@ -109,7 +120,10 @@ export async function runConnectCommand(
   logger.info(`Launching startup mode '${mode}'.`);
   const launched = await deps.launchMode(handle, mode, {
     workingDirectory: bootstrapResult.workingDirectory,
-    startupEnv: bootstrapResult.startupEnv
+    startupEnv: {
+      ...bootstrapResult.startupEnv,
+      ...ghRuntimeEnv
+    }
   });
 
   const activeRepo = bootstrapResult.selectedRepoNames.length === 1 ? bootstrapResult.selectedRepoNames[0] : undefined;
@@ -127,6 +141,51 @@ export async function runConnectCommand(
   };
 }
 
+async function resolveGhRuntimeEnv(
+  config: Awaited<ReturnType<typeof loadConfig>>,
+  envSource: Record<string, string | undefined>,
+  resolveToken?: (env: NodeJS.ProcessEnv) => Promise<string | undefined>
+): Promise<Record<string, string>> {
+  if (!config.gh.enabled) {
+    return {};
+  }
+
+  logger.info("GitHub auth: resolving token.");
+  const resolver = resolveToken ?? resolveHostGhToken;
+  const token = await resolver(envSource);
+  if (!token) {
+    logger.info("GitHub auth: token not found; continuing without GH_TOKEN/GITHUB_TOKEN.");
+    return {};
+  }
+
+  logger.info("GitHub auth: token found; injecting GH_TOKEN/GITHUB_TOKEN.");
+  return {
+    GH_TOKEN: token,
+    GITHUB_TOKEN: token
+  };
+}
+
+async function loadEnvSource(): Promise<Record<string, string | undefined>> {
+  const mergedEnv: Record<string, string | undefined> = {
+    ...process.env
+  };
+
+  try {
+    const envPath = resolve(process.cwd(), ".env");
+    const envRaw = await readFile(envPath, "utf8");
+    const parsed = parseDotEnv(envRaw);
+    for (const [key, value] of Object.entries(parsed)) {
+      if (mergedEnv[key] === undefined) {
+        mergedEnv[key] = value;
+      }
+    }
+  } catch {
+    // .env is optional.
+  }
+
+  return mergedEnv;
+}
+
 function formatSelectedReposSummary(selectedRepoNames: string[]): string {
   if (selectedRepoNames.length === 0) {
     return "none";
@@ -142,23 +201,25 @@ function formatSetupOutcomeSummary(setup: BootstrapProjectWorkspaceResult["setup
   return `ran success=${setup.success} repos=${setup.repos.length}`;
 }
 
-async function syncToolingForMode(
+export async function syncToolingForMode(
   config: Awaited<ReturnType<typeof loadConfig>>,
   sandbox: Pick<SandboxHandle, "writeFile">,
   mode: ConcreteStartupMode
 ): Promise<ToolingSyncSummary> {
+  const ghConfig = await maybeSyncGhConfig(config, sandbox);
+
   if (mode === "ssh-opencode" || mode === "web") {
     const opencodeConfig = await runSyncUnit("OpenCode config", (onProgress) =>
       syncOpenCodeConfigDir(config, sandbox, { onProgress })
     );
     const opencodeAuth = await runSyncUnit("OpenCode auth", () => syncOpenCodeAuthFile(config, sandbox));
-    return summarizeToolingSync(opencodeConfig, opencodeAuth, null, null);
+    return summarizeToolingSync(opencodeConfig, opencodeAuth, null, null, ghConfig, config.gh.enabled);
   }
 
   if (mode === "ssh-codex") {
     const codexConfig = await runSyncUnit("Codex config", (onProgress) => syncCodexConfigDir(config, sandbox, { onProgress }));
     const codexAuth = await runSyncUnit("Codex auth", () => syncCodexAuthFile(config, sandbox));
-    return summarizeToolingSync(null, null, codexConfig, codexAuth);
+    return summarizeToolingSync(null, null, codexConfig, codexAuth, ghConfig, config.gh.enabled);
   }
 
   const opencodeConfig = await runSyncUnit("OpenCode config", (onProgress) =>
@@ -167,7 +228,18 @@ async function syncToolingForMode(
   const opencodeAuth = await runSyncUnit("OpenCode auth", () => syncOpenCodeAuthFile(config, sandbox));
   const codexConfig = await runSyncUnit("Codex config", (onProgress) => syncCodexConfigDir(config, sandbox, { onProgress }));
   const codexAuth = await runSyncUnit("Codex auth", () => syncCodexAuthFile(config, sandbox));
-  return summarizeToolingSync(opencodeConfig, opencodeAuth, codexConfig, codexAuth);
+  return summarizeToolingSync(opencodeConfig, opencodeAuth, codexConfig, codexAuth, ghConfig, config.gh.enabled);
+}
+
+async function maybeSyncGhConfig(
+  config: Awaited<ReturnType<typeof loadConfig>>,
+  sandbox: Pick<SandboxHandle, "writeFile">
+): Promise<PathSyncSummary | null> {
+  if (!config.gh.enabled) {
+    return null;
+  }
+
+  return runSyncUnit("GitHub CLI config", (onProgress) => syncGhConfigDir(config, sandbox, { onProgress }));
 }
 
 async function runSyncUnit(
@@ -202,9 +274,13 @@ function summarizeToolingSync(
   opencodeConfig: PathSyncSummary | null,
   opencodeAuth: PathSyncSummary | null,
   codexConfig: PathSyncSummary | null,
-  codexAuth: PathSyncSummary | null
+  codexAuth: PathSyncSummary | null,
+  ghConfig: PathSyncSummary | null,
+  ghEnabled: boolean
 ): ToolingSyncSummary {
-  const summaries = [opencodeConfig, opencodeAuth, codexConfig, codexAuth].filter((item): item is PathSyncSummary => item !== null);
+  const summaries = [opencodeConfig, opencodeAuth, codexConfig, codexAuth, ghConfig].filter(
+    (item): item is PathSyncSummary => item !== null
+  );
 
   return {
     totalDiscovered: summaries.reduce((total, item) => total + item.filesDiscovered, 0),
@@ -213,14 +289,17 @@ function summarizeToolingSync(
     opencodeConfigSynced: opencodeConfig !== null && !opencodeConfig.skippedMissing,
     opencodeAuthSynced: opencodeAuth !== null && !opencodeAuth.skippedMissing,
     codexConfigSynced: codexConfig !== null && !codexConfig.skippedMissing,
-    codexAuthSynced: codexAuth !== null && !codexAuth.skippedMissing
+    codexAuthSynced: codexAuth !== null && !codexAuth.skippedMissing,
+    ghEnabled,
+    ghConfigSynced: ghConfig !== null && !ghConfig.skippedMissing
   };
 }
 
 function formatToolingSyncSummary(summary: ToolingSyncSummary): string {
   const opencodeSynced = summary.opencodeConfigSynced || summary.opencodeAuthSynced;
   const codexSynced = summary.codexConfigSynced || summary.codexAuthSynced;
-  return `discovered=${summary.totalDiscovered}, written=${summary.totalWritten}, missingPaths=${summary.skippedMissingPaths}, opencodeSynced=${opencodeSynced}, codexSynced=${codexSynced}`;
+  const ghSynced = summary.ghEnabled && summary.ghConfigSynced;
+  return `discovered=${summary.totalDiscovered}, written=${summary.totalWritten}, missingPaths=${summary.skippedMissingPaths}, opencodeSynced=${opencodeSynced}, codexSynced=${codexSynced}, ghSynced=${ghSynced}`;
 }
 
 async function resolveSandboxTarget(

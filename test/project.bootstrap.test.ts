@@ -50,6 +50,10 @@ function createConfig(overrides?: Partial<ResolvedLauncherConfig["project"]>): R
       config_dir: "",
       auth_path: ""
     },
+    gh: {
+      enabled: false,
+      config_dir: ""
+    },
     mcp: {
       mode: "disabled",
       firecrawl_api_url: "",
@@ -316,6 +320,102 @@ describe("project bootstrap", () => {
     );
   });
 
+  it("uses GH_TOKEN variable in github clone URL when runtime token exists", async () => {
+    const repo: ResolvedProjectRepoConfig = {
+      ...createRepo("alpha"),
+      url: "https://github.com/acme/private.git"
+    };
+    const config = createConfig({ repos: [repo] });
+    const run = vi.fn().mockImplementation(async (command: string) => {
+      if (command.startsWith("mkdir -p")) {
+        return { stdout: "", stderr: "", exitCode: 0 };
+      }
+      if (command.includes("if [ -e '/workspace/alpha' ]")) {
+        return { stdout: "EZBOX_FALSE", stderr: "", exitCode: 0 };
+      }
+      if (command.startsWith("git clone ")) {
+        return { stdout: "", stderr: "", exitCode: 0 };
+      }
+      if (command.includes("rev-parse --abbrev-ref HEAD")) {
+        return { stdout: "main\n", stderr: "", exitCode: 0 };
+      }
+      if (command === "npm ci") {
+        return { stdout: "done\n", stderr: "", exitCode: 0 };
+      }
+
+      return { stdout: "", stderr: "", exitCode: 0 };
+    });
+    const handle = {
+      ...createHandle(),
+      run
+    };
+
+    await bootstrapProjectWorkspace(handle, config, {
+      runtimeEnv: {
+        GH_TOKEN: "gh-secret",
+        GITHUB_TOKEN: "github-secret"
+      }
+    });
+
+    expect(run).toHaveBeenCalledWith(
+      "git clone \"https://x-access-token:$GH_TOKEN@github.com/acme/private.git\" '/workspace/alpha'",
+      expect.objectContaining({
+        timeoutMs: 1000,
+        envs: {
+          GH_TOKEN: "gh-secret",
+          GITHUB_TOKEN: "github-secret"
+        }
+      })
+    );
+  });
+
+  it("keeps plain github clone URL when runtime token is missing", async () => {
+    const repo: ResolvedProjectRepoConfig = {
+      ...createRepo("alpha"),
+      url: "https://github.com/acme/private.git"
+    };
+    const config = createConfig({ repos: [repo] });
+    const run = vi.fn().mockImplementation(async (command: string) => {
+      if (command.startsWith("mkdir -p")) {
+        return { stdout: "", stderr: "", exitCode: 0 };
+      }
+      if (command.includes("if [ -e '/workspace/alpha' ]")) {
+        return { stdout: "EZBOX_FALSE", stderr: "", exitCode: 0 };
+      }
+      if (command.startsWith("git clone ")) {
+        return { stdout: "", stderr: "", exitCode: 0 };
+      }
+      if (command.includes("rev-parse --abbrev-ref HEAD")) {
+        return { stdout: "main\n", stderr: "", exitCode: 0 };
+      }
+      if (command === "npm ci") {
+        return { stdout: "done\n", stderr: "", exitCode: 0 };
+      }
+
+      return { stdout: "", stderr: "", exitCode: 0 };
+    });
+    const handle = {
+      ...createHandle(),
+      run
+    };
+
+    await bootstrapProjectWorkspace(handle, config, {
+      runtimeEnv: {
+        NODE_ENV: "test"
+      }
+    });
+
+    expect(run).toHaveBeenCalledWith(
+      "git clone 'https://github.com/acme/private.git' '/workspace/alpha'",
+      expect.objectContaining({
+        timeoutMs: 1000,
+        envs: {
+          NODE_ENV: "test"
+        }
+      })
+    );
+  });
+
   it("maps setup runner events to progress callback", async () => {
     const progress = vi.fn();
     const runSetupForRepos = vi.fn().mockImplementation(async (_handle, _repos, _provisionedRepos, options) => {
@@ -349,5 +449,95 @@ describe("project bootstrap", () => {
       "Setup retry: repo=alpha step=setup_command attempt=1 next=2 error=deadline exceeded"
     );
     expect(progress).toHaveBeenCalledWith("Setup success: repo=alpha step=setup_command attempts=2");
+  });
+
+  it("falls back to origin tracking checkout when local branch checkout fails", async () => {
+    const repo: ResolvedProjectRepoConfig = {
+      ...createRepo("alpha"),
+      branch: "dev",
+      setup_command: ""
+    };
+    const config = createConfig({ repos: [repo] });
+
+    const run = vi.fn().mockImplementation(async (command: string) => {
+      if (command.startsWith("mkdir -p")) {
+        return { stdout: "", stderr: "", exitCode: 0 };
+      }
+      if (command.includes("if [ -e '/workspace/alpha' ]")) {
+        return { stdout: "EZBOX_TRUE", stderr: "", exitCode: 0 };
+      }
+      if (command.includes("if [ -d '/workspace/alpha/.git' ]")) {
+        return { stdout: "EZBOX_TRUE", stderr: "", exitCode: 0 };
+      }
+      if (command.includes("rev-parse --abbrev-ref HEAD")) {
+        return { stdout: "main\n", stderr: "", exitCode: 0 };
+      }
+      if (command === "git -C '/workspace/alpha' checkout 'dev'") {
+        return { stdout: "", stderr: "pathspec 'dev' did not match", exitCode: 1 };
+      }
+      if (command === "git -C '/workspace/alpha' fetch origin 'dev'") {
+        return { stdout: "", stderr: "", exitCode: 0 };
+      }
+      if (command === "git -C '/workspace/alpha' checkout -B 'dev' --track 'origin/dev'") {
+        return { stdout: "Switched to a new branch", stderr: "", exitCode: 0 };
+      }
+
+      return { stdout: "", stderr: "", exitCode: 0 };
+    });
+
+    const handle = {
+      ...createHandle(),
+      run
+    };
+
+    await bootstrapProjectWorkspace(handle, config);
+
+    expect(run).toHaveBeenCalledWith("git -C '/workspace/alpha' checkout 'dev'", expect.objectContaining({ timeoutMs: 1000 }));
+    expect(run).toHaveBeenCalledWith("git -C '/workspace/alpha' fetch origin 'dev'", expect.objectContaining({ timeoutMs: 1000 }));
+    expect(run).toHaveBeenCalledWith(
+      "git -C '/workspace/alpha' checkout -B 'dev' --track 'origin/dev'",
+      expect.objectContaining({ timeoutMs: 1000 })
+    );
+  });
+
+  it("throws actionable checkout error with repo path and branch when fallback fails", async () => {
+    const repo: ResolvedProjectRepoConfig = {
+      ...createRepo("alpha"),
+      branch: "dev",
+      setup_command: ""
+    };
+    const config = createConfig({ repos: [repo] });
+
+    const run = vi.fn().mockImplementation(async (command: string) => {
+      if (command.startsWith("mkdir -p")) {
+        return { stdout: "", stderr: "", exitCode: 0 };
+      }
+      if (command.includes("if [ -e '/workspace/alpha' ]")) {
+        return { stdout: "EZBOX_TRUE", stderr: "", exitCode: 0 };
+      }
+      if (command.includes("if [ -d '/workspace/alpha/.git' ]")) {
+        return { stdout: "EZBOX_TRUE", stderr: "", exitCode: 0 };
+      }
+      if (command.includes("rev-parse --abbrev-ref HEAD")) {
+        return { stdout: "main\n", stderr: "", exitCode: 0 };
+      }
+      if (command === "git -C '/workspace/alpha' checkout 'dev'") {
+        return { stdout: "", stderr: "pathspec 'dev' did not match", exitCode: 1 };
+      }
+      if (command === "git -C '/workspace/alpha' fetch origin 'dev'") {
+        return { stdout: "", stderr: "remote branch not found", exitCode: 1 };
+      }
+
+      return { stdout: "", stderr: "", exitCode: 0 };
+    });
+
+    const handle = {
+      ...createHandle(),
+      run
+    };
+
+    await expect(bootstrapProjectWorkspace(handle, config)).rejects.toThrow(
+      "Failed to checkout branch 'dev' in repo '/workspace/alpha'. Try updating project.repos[].branch."
+    );
   });
 });

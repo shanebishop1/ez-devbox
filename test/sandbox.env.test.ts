@@ -35,6 +35,10 @@ describe("sandbox env resolution", () => {
       config_dir: "~/.codex",
       auth_path: "~/.codex/auth.json"
     },
+    gh: {
+      enabled: false,
+      config_dir: "~/.config/gh"
+    },
     mcp: {
       mode: "remote_url",
       firecrawl_api_url: "https://firecrawl.example.com",

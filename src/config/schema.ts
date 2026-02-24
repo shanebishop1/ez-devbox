@@ -45,6 +45,10 @@ export interface ResolvedLauncherConfig {
     config_dir: string;
     auth_path: string;
   };
+  gh: {
+    enabled: boolean;
+    config_dir: string;
+  };
   mcp: {
     mode: McpMode;
     firecrawl_api_url: string;
