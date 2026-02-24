@@ -1,4 +1,4 @@
-# ez-box
+# ez-devbox
 
 Lightweight TypeScript CLI for creating, reconnecting, and launching E2B coding sandboxes.
 
@@ -28,13 +28,13 @@ Lightweight TypeScript CLI for creating, reconnecting, and launching E2B coding 
 ## Install
 
 ```bash
-npm install -g ez-box
+npm install -g ez-devbox
 ```
 
 Then run:
 
 ```bash
-ez-box --help
+ez-devbox --help
 ```
 
 ## Quick start
@@ -59,50 +59,50 @@ E2B_API_KEY=your_key_here
 npm run create
 npm run connect
 # or, once installed from npm:
-ez-box create
-ez-box connect
+ez-devbox create
+ez-devbox connect
 ```
 
 ## Common commands
 
 - Show CLI help:
-  - `ez-box --help`
+  - `ez-devbox --help`
   - `npm run dev -- --help`
 - Create with explicit mode:
-  - `ez-box create -- --mode web`
+  - `ez-devbox create -- --mode web`
   - `npm run create -- --mode web`
 - Connect to specific sandbox:
-  - `ez-box connect -- --sandbox-id <sandbox-id>`
+  - `ez-devbox connect -- --sandbox-id <sandbox-id>`
   - `npm run connect -- --sandbox-id <sandbox-id>`
 - Resume last saved sandbox + mode:
-  - `ez-box resume`
+  - `ez-devbox resume`
   - `npm run resume`
   - Reuses the last selected repo for that sandbox when `project.active = "prompt"` and the repo still exists.
 - Enable verbose startup/provisioning logs:
-  - `ez-box create -- --verbose`
-  - `ez-box connect -- --verbose`
+  - `ez-devbox create -- --verbose`
+  - `ez-devbox connect -- --verbose`
   - `npm run connect -- --verbose`
 - List available sandboxes:
-  - `ez-box list`
+  - `ez-devbox list`
   - `npm run list`
 - Wipe one sandbox (interactive picker or `--sandbox-id`):
-  - `ez-box wipe`
+  - `ez-devbox wipe`
   - `npm run wipe`
 - Wipe all sandboxes (use `--yes` in non-interactive terminals):
-  - `ez-box wipe-all -- --yes`
+  - `ez-devbox wipe-all -- --yes`
   - `npm run wipe-all -- --yes`
 
 ## Verbose mode
 
 - Use `--verbose` to show detailed operational logs during `create/connect` (startup mode resolution, sandbox lifecycle steps, create-time tooling sync progress, bootstrap progress, SSH/tunnel setup details).
 - Interactive pickers/prompts still show as normal.
-- Without `--verbose`, ez-box keeps output focused on prompts and final command results.
+- Without `--verbose`, ez-devbox keeps output focused on prompts and final command results.
 
 ## Config files
 
-- `launcher.config.toml`: ez-box behavior (sandbox, startup, project, env pass-through, tooling auth sync, tunnel)
+- `launcher.config.toml`: ez-devbox behavior (sandbox, startup, project, env pass-through, tooling auth sync, tunnel)
 - `.env`: secrets and local env values
-- `.ez-box-last-run.json`: auto-generated local state for reconnects (legacy `.agent-box-last-run.json` is still read as a fallback)
+- `.ez-devbox-last-run.json`: auto-generated local state for reconnects (legacy `.agent-box-last-run.json` is still read as a fallback)
 
 ## launcher.config.toml reference
 
@@ -142,7 +142,7 @@ ez-box connect
 
 Setup for each selected repo runs `setup_command`.
 
-If `create` is cancelled during interactive repo selection, ez-box automatically wipes the newly created sandbox.
+If `create` is cancelled during interactive repo selection, ez-devbox automatically wipes the newly created sandbox.
 
 When `project.working_dir = "auto"`, working directory behavior after repo selection/provisioning is:
 
@@ -175,7 +175,7 @@ When `project.working_dir = "auto"`, working directory behavior after repo selec
 - `ports` (number array): local TCP ports to expose with temporary cloudflared tunnels.
   - `[]` disables tunnel management.
   - Each value `1-65535` starts one tunnel to `http://127.0.0.1:<port>` for `create/connect/start/command`.
-  - Runtime exports generic env vars: `EZ_BOX_TUNNEL_<PORT>_URL`, `EZ_BOX_TUNNELS_JSON`, and `EZ_BOX_TUNNEL_PORTS`; `EZ_BOX_TUNNEL_URL` is set only when exactly one tunnel is active.
+  - Runtime exports generic env vars: `EZ_DEVBOX_TUNNEL_<PORT>_URL`, `EZ_DEVBOX_TUNNELS_JSON`, and `EZ_DEVBOX_TUNNEL_PORTS`; `EZ_DEVBOX_TUNNEL_URL` is set only when exactly one tunnel is active.
   - Runtime prefers local `cloudflared`; if missing, it falls back to `docker run cloudflare/cloudflared:latest`.
 
 ## Dev checks

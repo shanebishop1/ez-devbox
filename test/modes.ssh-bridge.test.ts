@@ -8,9 +8,9 @@ import { buildSshClientArgs, cleanupSshBridgeSession, type SshBridgeSession } fr
 describe("ssh bridge security behavior", () => {
   it("buildSshClientArgs enforces strict host key verification", () => {
     const session: SshBridgeSession = {
-      tempDir: "/tmp/ez-box-ssh-123",
-      privateKeyPath: "/tmp/ez-box-ssh-123/id_ed25519",
-      knownHostsPath: "/tmp/ez-box-ssh-123/known_hosts",
+      tempDir: "/tmp/ez-devbox-ssh-123",
+      privateKeyPath: "/tmp/ez-devbox-ssh-123/id_ed25519",
+      knownHostsPath: "/tmp/ez-devbox-ssh-123/known_hosts",
       wsUrl: "wss://8081-sbx.e2b.app",
       remoteUser: "sandbox-user"
     };
@@ -26,7 +26,7 @@ describe("ssh bridge security behavior", () => {
   });
 
   it("cleanupSshBridgeSession attempts remote cleanup and always cleans local temp dir", async () => {
-    const tempDir = await mkdtemp(join(tmpdir(), "ez-box-ssh-cleanup-test-"));
+    const tempDir = await mkdtemp(join(tmpdir(), "ez-devbox-ssh-cleanup-test-"));
     await writeFile(join(tempDir, "marker.txt"), "cleanup me", "utf8");
 
     const session: SshBridgeSession = {
@@ -35,14 +35,14 @@ describe("ssh bridge security behavior", () => {
       knownHostsPath: "/tmp/known_hosts",
       wsUrl: "wss://8081-sbx.e2b.app",
       artifacts: {
-        sessionDir: "/home/user/.ez-box-ssh/ssh-test",
-        authorizedKeysPath: "/home/user/.ez-box-ssh/ssh-test/authorized_keys",
-        hostPrivateKeyPath: "/home/user/.ez-box-ssh/ssh-test/host-ed25519",
-        hostPublicKeyPath: "/home/user/.ez-box-ssh/ssh-test/host-ed25519.pub",
-        sshdConfigPath: "/home/user/.ez-box-ssh/ssh-test/sshd_config",
-        sshdPidPath: "/home/user/.ez-box-ssh/ssh-test/sshd.pid",
-        websockifyPidPath: "/home/user/.ez-box-ssh/ssh-test/websockify.pid",
-        websockifyLogPath: "/home/user/.ez-box-ssh/ssh-test/websockify.log"
+        sessionDir: "/home/user/.ez-devbox-ssh/ssh-test",
+        authorizedKeysPath: "/home/user/.ez-devbox-ssh/ssh-test/authorized_keys",
+        hostPrivateKeyPath: "/home/user/.ez-devbox-ssh/ssh-test/host-ed25519",
+        hostPublicKeyPath: "/home/user/.ez-devbox-ssh/ssh-test/host-ed25519.pub",
+        sshdConfigPath: "/home/user/.ez-devbox-ssh/ssh-test/sshd_config",
+        sshdPidPath: "/home/user/.ez-devbox-ssh/ssh-test/sshd.pid",
+        websockifyPidPath: "/home/user/.ez-devbox-ssh/ssh-test/websockify.pid",
+        websockifyLogPath: "/home/user/.ez-devbox-ssh/ssh-test/websockify.log"
       }
     };
 
@@ -58,10 +58,10 @@ describe("ssh bridge security behavior", () => {
     await cleanupSshBridgeSession(handle, session);
 
     expect(run).toHaveBeenCalledTimes(3);
-    expect(run.mock.calls[0]?.[0]).toContain("/home/user/.ez-box-ssh/ssh-test/websockify.pid");
-    expect(run.mock.calls[1]?.[0]).toContain("/home/user/.ez-box-ssh/ssh-test/sshd.pid");
-    expect(run.mock.calls[2]?.[0]).toContain("/home/user/.ez-box-ssh/ssh-test/authorized_keys");
-    expect(run.mock.calls[2]?.[0]).toContain("rm -rf '/home/user/.ez-box-ssh/ssh-test'");
+    expect(run.mock.calls[0]?.[0]).toContain("/home/user/.ez-devbox-ssh/ssh-test/websockify.pid");
+    expect(run.mock.calls[1]?.[0]).toContain("/home/user/.ez-devbox-ssh/ssh-test/sshd.pid");
+    expect(run.mock.calls[2]?.[0]).toContain("/home/user/.ez-devbox-ssh/ssh-test/authorized_keys");
+    expect(run.mock.calls[2]?.[0]).toContain("rm -rf '/home/user/.ez-devbox-ssh/ssh-test'");
     await expect(access(tempDir)).rejects.toBeDefined();
   });
 });

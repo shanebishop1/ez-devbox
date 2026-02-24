@@ -5,7 +5,7 @@ template = "opencode"
 # Reserved flag for sandbox reuse policy (currently not used by runtime behavior).
 reuse = true
 # Base display name prefix used for launcher metadata.
-name = "ez-box"
+name = "ez-devbox"
 # Sandbox idle timeout in milliseconds (positive integer).
 timeout_ms = 3600000
 # Reserved flag for automatic sandbox deletion on exit (currently not used by runtime behavior).
@@ -108,8 +108,8 @@ config_dir = "~/.config/gh"
 # Optional local tunnel helper for host-only services running on local ports.
 # Empty list disables tunnel management; each listed local TCP port gets its own cloudflared tunnel.
 # Runtime env vars available in sandbox/session:
-# - EZ_BOX_TUNNEL_<PORT>_URL (one per configured port, e.g. EZ_BOX_TUNNEL_3002_URL)
-# - EZ_BOX_TUNNELS_JSON (JSON object: {"3002":"https://...", ...})
-# - EZ_BOX_TUNNEL_PORTS (comma-separated ports)
-# - EZ_BOX_TUNNEL_URL (only when exactly one port is configured)
+# - EZ_DEVBOX_TUNNEL_<PORT>_URL (one per configured port, e.g. EZ_DEVBOX_TUNNEL_3002_URL)
+# - EZ_DEVBOX_TUNNELS_JSON (JSON object: {"3002":"https://...", ...})
+# - EZ_DEVBOX_TUNNEL_PORTS (comma-separated ports)
+# - EZ_DEVBOX_TUNNEL_URL (only when exactly one port is configured)
 ports = [3002]

@@ -148,14 +148,14 @@ function buildRuntimeEnv(sessions: CloudflaredTunnelSession[]): Record<string, s
   const byPort: Record<string, string> = {};
 
   for (const session of sessions) {
-    runtimeEnv[`EZ_BOX_TUNNEL_${session.port}_URL`] = session.url;
+    runtimeEnv[`EZ_DEVBOX_TUNNEL_${session.port}_URL`] = session.url;
     byPort[String(session.port)] = session.url;
   }
 
-  runtimeEnv.EZ_BOX_TUNNELS_JSON = JSON.stringify(byPort);
-  runtimeEnv.EZ_BOX_TUNNEL_PORTS = sessions.map((session) => String(session.port)).join(",");
+  runtimeEnv.EZ_DEVBOX_TUNNELS_JSON = JSON.stringify(byPort);
+  runtimeEnv.EZ_DEVBOX_TUNNEL_PORTS = sessions.map((session) => String(session.port)).join(",");
   if (sessions.length === 1) {
-    runtimeEnv.EZ_BOX_TUNNEL_URL = sessions[0].url;
+    runtimeEnv.EZ_DEVBOX_TUNNEL_URL = sessions[0].url;
   }
 
   return runtimeEnv;
