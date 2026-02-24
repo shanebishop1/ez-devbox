@@ -11,7 +11,7 @@ export interface GlobalCliOptions {
   verbose: boolean;
 }
 
-const commands = new Set<CliCommandName>(["create", "connect", "list", "command", "wipe", "wipe-all", "help"]);
+const commands = new Set<CliCommandName>(["create", "connect", "resume", "list", "command", "wipe", "wipe-all", "help"]);
 
 export function parseGlobalCliOptions(argv: string[]): GlobalCliOptions {
   let verbose = false;
@@ -68,6 +68,7 @@ export function renderHelp(): string {
     "Commands:",
     "  create   Create a new sandbox and launch startup mode",
     "  connect  Connect to an existing sandbox and launch mode",
+    "  resume   Reconnect using the last saved sandbox/mode",
     "  list     List available sandboxes",
     "  command  Run a command in a selected sandbox",
     "  wipe     Delete a sandbox by prompt or --sandbox-id",

@@ -58,8 +58,27 @@ describe("sandbox env resolution", () => {
       CUSTOM_TOKEN: "abc",
       OPENAI_API_KEY: "openai-key",
       GITHUB_TOKEN: "ghp_123",
-      OPENCODE_SERVER_PASSWORD: "pw",
-      FIRECRAWL_API_KEY: "fc-key"
+      OPENCODE_SERVER_PASSWORD: "pw"
+    });
+  });
+
+  it("allows custom passthrough keys from config", () => {
+    const resolved = resolveSandboxCreateEnv(
+      {
+        ...baseConfig,
+        env: {
+          pass_through: [...baseConfig.env.pass_through, "FIRECRAWL_API_KEY", "FIRECRAWL_API_URL"]
+        }
+      },
+      {
+        FIRECRAWL_API_KEY: "fc-key",
+        FIRECRAWL_API_URL: "https://api.firecrawl.dev"
+      }
+    );
+
+    expect(resolved.envs).toEqual({
+      FIRECRAWL_API_KEY: "fc-key",
+      FIRECRAWL_API_URL: "https://api.firecrawl.dev"
     });
   });
 

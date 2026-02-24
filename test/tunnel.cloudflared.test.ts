@@ -104,6 +104,48 @@ describe("withConfiguredTunnel", () => {
     );
   });
 
+  it("falls back to Docker when quick tunnel is rate-limited", async () => {
+    const localChild = createMockCloudflaredProcess();
+    const dockerChild = createMockCloudflaredProcess();
+    spawnMock.mockReturnValueOnce(localChild).mockReturnValueOnce(dockerChild);
+
+    queueMicrotask(() => {
+      localChild.stderr.write(
+        'ERR Error unmarshaling QuickTunnel response: error code: 1015 status_code="429 Too Many Requests"\n'
+      );
+      localChild.emitExit(1, null);
+      dockerChild.stderr.write("INF | Tunnel URL https://docker-rate-limit.trycloudflare.com\n");
+    });
+
+    const result = await withConfiguredTunnel({ tunnel: { ports: [3002] } }, async (runtimeEnv) => {
+      expect(runtimeEnv.EZ_BOX_TUNNEL_3002_URL).toBe("https://docker-rate-limit.trycloudflare.com");
+      return "ok";
+    });
+
+    expect(result).toBe("ok");
+    expect(spawnMock).toHaveBeenNthCalledWith(
+      1,
+      "cloudflared",
+      ["tunnel", "--no-autoupdate", "--url", "http://127.0.0.1:3002"],
+      { stdio: ["ignore", "pipe", "pipe"] }
+    );
+    expect(spawnMock).toHaveBeenNthCalledWith(
+      2,
+      "docker",
+      expect.arrayContaining([
+        "run",
+        "--rm",
+        "-i",
+        "cloudflare/cloudflared:latest",
+        "tunnel",
+        "--no-autoupdate",
+        "--url",
+        "http://host.docker.internal:3002"
+      ]),
+      { stdio: ["ignore", "pipe", "pipe"] }
+    );
+  });
+
   it("supports multiple tunnel ports", async () => {
     const first = createMockCloudflaredProcess();
     const second = createMockCloudflaredProcess();
@@ -132,6 +174,7 @@ function createMockCloudflaredProcess(): {
   kill: ReturnType<typeof vi.fn>;
   exitCode: number | null;
   emitError: (error: Error) => void;
+  emitExit: (code: number | null, signal: NodeJS.Signals | null) => void;
   on: (eventName: string, listener: (...args: unknown[]) => void) => EventEmitter;
   once: (eventName: string, listener: (...args: unknown[]) => void) => EventEmitter;
   off: (eventName: string, listener: (...args: unknown[]) => void) => EventEmitter;
@@ -161,6 +204,12 @@ function createMockCloudflaredProcess(): {
     emitError(error: Error) {
       queueMicrotask(() => {
         emitter.emit("error", error);
+      });
+    },
+    emitExit(code: number | null, signal: NodeJS.Signals | null) {
+      queueMicrotask(() => {
+        exitCode = code;
+        emitter.emit("exit", code, signal);
       });
     },
     get exitCode() {

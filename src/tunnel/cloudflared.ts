@@ -8,6 +8,7 @@ const CLOUDFLARED_DOCKER_START_TIMEOUT_MS = 60_000;
 const CLOUDFLARED_STOP_TIMEOUT_MS = 5_000;
 const SIGNALS: NodeJS.Signals[] = ["SIGINT", "SIGTERM", "SIGHUP"];
 const URL_REGEX = /https:\/\/[a-z0-9.-]+/gi;
+const RATE_LIMIT_SNIPPETS = ["429 too many requests", "error code: 1015", "status_code=\"429"];
 
 interface CloudflaredTunnelSession {
   port: number;
@@ -52,11 +53,21 @@ export async function withConfiguredTunnel<T>(
   };
 
   const signalHandlers = new Map<NodeJS.Signals, () => void>();
+  const processExitHandler = (): void => {
+    for (const session of [...sessions].reverse()) {
+      void session.stop().catch(() => {
+        // Best effort during process shutdown.
+      });
+    }
+  };
+  process.once("exit", processExitHandler);
+
   const removeSignalHandlers = (): void => {
     for (const [signal, handler] of signalHandlers) {
       process.off(signal, handler);
     }
     signalHandlers.clear();
+    process.off("exit", processExitHandler);
   };
 
   for (const signal of SIGNALS) {
@@ -87,13 +98,21 @@ async function startCloudflaredTunnel(port: number): Promise<CloudflaredTunnelSe
   try {
     url = await waitForTunnelUrl(processHandle, recentLogs, CLOUDFLARED_START_TIMEOUT_MS);
   } catch (error) {
-    if (!isSpawnEnoentError(error, "cloudflared")) {
+    const shouldFallbackForMissingBinary = isSpawnEnoentError(error, "cloudflared");
+    const shouldFallbackForRateLimit = isQuickTunnelRateLimitedError(error);
+
+    if (!shouldFallbackForMissingBinary && !shouldFallbackForRateLimit) {
       throw error;
     }
 
-    logger.warn(
-      `Tunnel: local 'cloudflared' not found; trying Docker fallback. Install hint: ${installHint}`
-    );
+    if (shouldFallbackForMissingBinary) {
+      logger.warn(
+        `Tunnel: local 'cloudflared' not found; trying Docker fallback. Install hint: ${installHint}`
+      );
+    } else {
+      logger.warn("Tunnel: quick tunnel is rate-limited (HTTP 429/1015); trying Docker fallback.");
+    }
+
     processHandle = spawnDockerCloudflared(port);
     recentLogs = [];
 
@@ -117,6 +136,11 @@ async function startCloudflaredTunnel(port: number): Promise<CloudflaredTunnelSe
       await stopCloudflaredProcess(processHandle);
     }
   };
+}
+
+function isQuickTunnelRateLimitedError(error: unknown): boolean {
+  const message = toErrorMessage(error).toLowerCase();
+  return RATE_LIMIT_SNIPPETS.some((snippet) => message.includes(snippet));
 }
 
 function buildRuntimeEnv(sessions: CloudflaredTunnelSession[]): Record<string, string> {

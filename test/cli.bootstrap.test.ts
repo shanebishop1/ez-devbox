@@ -23,6 +23,13 @@ describe("CLI bootstrap routing", () => {
     expect(resolved.args).toEqual(["--yes"]);
   });
 
+  it("routes resume command", () => {
+    const resolved = resolveCliCommand(["resume"]);
+
+    expect(resolved.command).toBe("resume");
+    expect(resolved.args).toEqual([]);
+  });
+
   it("routes list command with passthrough args", () => {
     const resolved = resolveCliCommand(["list", "--verbose"]);
 
@@ -72,6 +79,10 @@ describe("CLI bootstrap routing", () => {
 
   it("includes command in help text", () => {
     expect(renderHelp()).toContain("command  Run a command in a selected sandbox");
+  });
+
+  it("includes resume in help text", () => {
+    expect(renderHelp()).toContain("resume   Reconnect using the last saved sandbox/mode");
   });
 
   it("includes verbose in help text", () => {

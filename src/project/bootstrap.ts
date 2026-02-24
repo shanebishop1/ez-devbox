@@ -42,6 +42,7 @@ export interface BootstrapProjectWorkspaceOptions {
   isConnect?: boolean;
   isInteractiveTerminal?: () => boolean;
   promptInput?: (question: string) => Promise<string>;
+  preferredActiveRepo?: string;
   runtimeEnv?: Record<string, string>;
   onProgress?: (message: string) => void;
   deps?: Partial<BootstrapProjectWorkspaceDeps>;
@@ -70,7 +71,8 @@ export async function bootstrapProjectWorkspace(
 
   const selectedRepos = await selectRepos(config.project.repos, config.project.mode, config.project.active, {
     isInteractiveTerminal: options.isInteractiveTerminal,
-    promptInput: options.promptInput
+    promptInput: options.promptInput,
+    preferredActiveRepo: options.preferredActiveRepo
   });
   options.onProgress?.(
     selectedRepos.length === 0
@@ -147,7 +149,7 @@ async function selectRepos(
   repos: ResolvedProjectRepoConfig[],
   mode: ResolvedLauncherConfig["project"]["mode"],
   active: ResolvedLauncherConfig["project"]["active"],
-  options: Pick<BootstrapProjectWorkspaceOptions, "isInteractiveTerminal" | "promptInput">
+  options: Pick<BootstrapProjectWorkspaceOptions, "isInteractiveTerminal" | "promptInput" | "preferredActiveRepo">
 ): Promise<ResolvedProjectRepoConfig[]> {
   if (repos.length === 0) {
     return [];
@@ -163,6 +165,14 @@ async function selectRepos(
 
   if (active !== "prompt") {
     return [repos[0]];
+  }
+
+  const preferredActiveRepo = options.preferredActiveRepo?.trim();
+  if (preferredActiveRepo) {
+    const preferredRepo = repos.find((repo) => repo.name === preferredActiveRepo);
+    if (preferredRepo) {
+      return [preferredRepo];
+    }
   }
 
   const isInteractiveTerminal = options.isInteractiveTerminal ?? (() => Boolean(process.stdin.isTTY && process.stdout.isTTY));

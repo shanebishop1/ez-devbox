@@ -209,6 +209,37 @@ describe("project bootstrap", () => {
     );
   });
 
+  it("reuses preferred active repo without prompting", async () => {
+    const repos = [createRepo("alpha"), createRepo("beta")];
+    const config = createConfig({ mode: "single", active: "prompt", repos });
+    const handle = createHandle();
+
+    const promptInput = vi.fn().mockResolvedValue("1");
+    const provisionSelectedRepos = vi.fn().mockResolvedValue([
+      { repo: "beta", path: "/workspace/beta", cloned: true, reused: false, branchSwitched: false }
+    ]);
+
+    const result = await bootstrapProjectWorkspace(handle, config, {
+      isInteractiveTerminal: () => true,
+      promptInput,
+      preferredActiveRepo: "beta",
+      deps: {
+        ensureProjectDirectory: vi.fn().mockResolvedValue(undefined),
+        provisionSelectedRepos,
+        runSetupForRepos: vi.fn().mockResolvedValue({ success: true, repos: [] })
+      }
+    });
+
+    expect(result.selectedRepoNames).toEqual(["beta"]);
+    expect(promptInput).not.toHaveBeenCalled();
+    expect(provisionSelectedRepos).toHaveBeenCalledWith(
+      handle,
+      "/workspace",
+      [repos[1]],
+      expect.objectContaining({ timeoutMs: 1000 })
+    );
+  });
+
   it("falls back to first repo for non-interactive prompt", async () => {
     const repos = [createRepo("alpha"), createRepo("beta")];
     const config = createConfig({ mode: "single", active: "prompt", repos });
