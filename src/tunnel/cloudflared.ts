@@ -78,6 +78,7 @@ export async function withConfiguredTunnel<T>(
 
 async function startCloudflaredTunnel(port: number): Promise<CloudflaredTunnelSession> {
   logger.verbose(`Tunnel: starting for http://127.0.0.1:${port}.`);
+  const installHint = getCloudflaredInstallHint();
 
   let processHandle = spawnLocalCloudflared(port);
   let recentLogs: string[] = [];
@@ -90,7 +91,9 @@ async function startCloudflaredTunnel(port: number): Promise<CloudflaredTunnelSe
       throw error;
     }
 
-    logger.warn("Tunnel: local 'cloudflared' not found; trying Docker fallback.");
+    logger.warn(
+      `Tunnel: local 'cloudflared' not found; trying Docker fallback. Install hint: ${installHint}`
+    );
     processHandle = spawnDockerCloudflared(port);
     recentLogs = [];
 
@@ -99,7 +102,7 @@ async function startCloudflaredTunnel(port: number): Promise<CloudflaredTunnelSe
     } catch (dockerError) {
       const detail = toErrorMessage(dockerError);
       throw new Error(
-        `Failed to start tunnel with local cloudflared or Docker fallback. Install cloudflared (for example 'brew install cloudflared') or ensure Docker is available. ${detail}`
+        `Failed to start tunnel with local cloudflared or Docker fallback. Install hint: ${installHint}. Or ensure Docker is available. ${detail}`
       );
     }
   }
@@ -352,6 +355,22 @@ function spawnDockerCloudflared(port: number): CloudflaredProcess {
 
 function isSpawnEnoentError(error: unknown, command: string): boolean {
   return error instanceof Error && error.message.includes(`spawn ${command} ENOENT`);
+}
+
+function getCloudflaredInstallHint(platform: NodeJS.Platform = process.platform): string {
+  if (platform === "darwin") {
+    return "brew install cloudflared";
+  }
+
+  if (platform === "win32") {
+    return "winget install --id Cloudflare.cloudflared -e";
+  }
+
+  if (platform === "linux") {
+    return "see Cloudflare docs for your distro: https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/";
+  }
+
+  return "install cloudflared from https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/";
 }
 
 function toErrorMessage(error: unknown): string {
