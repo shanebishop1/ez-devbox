@@ -11,14 +11,20 @@ import {
 } from "../e2b/lifecycle.js";
 import { launchMode, resolveStartupMode, type ConcreteStartupMode, type ModeLaunchResult } from "../modes/index.js";
 import { loadLastRunState, saveLastRunState, type LastRunState } from "../state/lastRun.js";
+import { logger } from "../logging/logger.js";
+import { formatSandboxDisplayLabel } from "./sandbox-display-name.js";
 import {
   syncCodexAuthFile,
   syncCodexConfigDir,
   syncOpenCodeAuthFile,
   syncOpenCodeConfigDir,
+  type DirectorySyncProgress,
   type PathSyncSummary,
   type ToolingSyncSummary
 } from "../tooling/host-sandbox-sync.js";
+import { resolvePromptStartupMode } from "./startup-mode-prompt.js";
+
+const TOOLING_SYNC_PROGRESS_LOG_INTERVAL = 50;
 
 export interface ConnectCommandDeps {
   loadConfig: (options?: LoadConfigOptions) => ReturnType<typeof loadConfig>;
@@ -29,6 +35,7 @@ export interface ConnectCommandDeps {
   ) => Promise<SandboxHandle>;
   loadLastRunState: () => Promise<LastRunState | null>;
   listSandboxes: (options?: ListSandboxesOptions) => Promise<SandboxListItem[]>;
+  resolvePromptStartupMode: (requestedMode: StartupMode) => Promise<StartupMode>;
   launchMode: (handle: SandboxHandle, mode: StartupMode) => Promise<ModeLaunchResult>;
   syncToolingToSandbox: (
     config: Awaited<ReturnType<typeof loadConfig>>,
@@ -44,6 +51,7 @@ const defaultDeps: ConnectCommandDeps = {
   connectSandbox,
   loadLastRunState,
   listSandboxes,
+  resolvePromptStartupMode,
   launchMode,
   syncToolingToSandbox: syncToolingForMode,
   saveLastRunState,
@@ -62,12 +70,24 @@ export async function runConnectCommand(
   const parsed = parseConnectArgs(args);
   const config = await deps.loadConfig();
 
-  const sandboxId = await resolveSandboxId(parsed.sandboxId, deps, options);
-  const mode = parsed.mode ?? config.startup.mode;
+  const target = await resolveSandboxTarget(parsed.sandboxId, deps, options);
+  const targetLabel = target.label ?? target.sandboxId;
+  const requestedMode = parsed.mode ?? config.startup.mode;
+  logger.info(`Resolving startup mode from '${requestedMode}'.`);
+  const mode = await deps.resolvePromptStartupMode(requestedMode);
+  if (requestedMode === "prompt") {
+    logger.info(`Startup mode selected via prompt: ${mode}.`);
+  }
   const resolvedMode = resolveStartupMode(mode);
 
-  const handle = await deps.connectSandbox(sandboxId, config);
+  logger.info(`Connecting to sandbox ${targetLabel}.`);
+  const handle = await deps.connectSandbox(target.sandboxId, config);
+  logger.info(`Connected to sandbox ${targetLabel}.`);
+
+  logger.info(`Syncing local tooling config/auth for mode '${resolvedMode}'.`);
   const syncSummary = await deps.syncToolingToSandbox(config, handle, resolvedMode);
+
+  logger.info(`Launching startup mode '${mode}'.`);
   const launched = await deps.launchMode(handle, mode);
 
   await deps.saveLastRunState({
@@ -77,7 +97,7 @@ export async function runConnectCommand(
   });
 
   return {
-    message: `Connected to sandbox ${handle.sandboxId}. ${launched.message}\nTooling sync: ${formatToolingSyncSummary(syncSummary)}`,
+    message: `Connected to sandbox ${targetLabel}. ${launched.message}\nTooling sync: ${formatToolingSyncSummary(syncSummary)}`,
     exitCode: 0
   };
 }
@@ -88,22 +108,54 @@ async function syncToolingForMode(
   mode: ConcreteStartupMode
 ): Promise<ToolingSyncSummary> {
   if (mode === "ssh-opencode" || mode === "web") {
-    const opencodeConfig = await syncOpenCodeConfigDir(config, sandbox);
-    const opencodeAuth = await syncOpenCodeAuthFile(config, sandbox);
+    const opencodeConfig = await runSyncUnit("OpenCode config", (onProgress) =>
+      syncOpenCodeConfigDir(config, sandbox, { onProgress })
+    );
+    const opencodeAuth = await runSyncUnit("OpenCode auth", () => syncOpenCodeAuthFile(config, sandbox));
     return summarizeToolingSync(opencodeConfig, opencodeAuth, null, null);
   }
 
   if (mode === "ssh-codex") {
-    const codexConfig = await syncCodexConfigDir(config, sandbox);
-    const codexAuth = await syncCodexAuthFile(config, sandbox);
+    const codexConfig = await runSyncUnit("Codex config", (onProgress) => syncCodexConfigDir(config, sandbox, { onProgress }));
+    const codexAuth = await runSyncUnit("Codex auth", () => syncCodexAuthFile(config, sandbox));
     return summarizeToolingSync(null, null, codexConfig, codexAuth);
   }
 
-  const opencodeConfig = await syncOpenCodeConfigDir(config, sandbox);
-  const opencodeAuth = await syncOpenCodeAuthFile(config, sandbox);
-  const codexConfig = await syncCodexConfigDir(config, sandbox);
-  const codexAuth = await syncCodexAuthFile(config, sandbox);
+  const opencodeConfig = await runSyncUnit("OpenCode config", (onProgress) =>
+    syncOpenCodeConfigDir(config, sandbox, { onProgress })
+  );
+  const opencodeAuth = await runSyncUnit("OpenCode auth", () => syncOpenCodeAuthFile(config, sandbox));
+  const codexConfig = await runSyncUnit("Codex config", (onProgress) => syncCodexConfigDir(config, sandbox, { onProgress }));
+  const codexAuth = await runSyncUnit("Codex auth", () => syncCodexAuthFile(config, sandbox));
   return summarizeToolingSync(opencodeConfig, opencodeAuth, codexConfig, codexAuth);
+}
+
+async function runSyncUnit(
+  label: string,
+  syncUnit: (onProgress?: (progress: DirectorySyncProgress) => void) => Promise<PathSyncSummary>
+): Promise<PathSyncSummary> {
+  let lastLoggedCount = 0;
+  const onProgress = (progress: DirectorySyncProgress): void => {
+    if (progress.filesDiscovered === 0) {
+      return;
+    }
+
+    const isCompletion = progress.filesWritten === progress.filesDiscovered;
+    const reachedInterval = progress.filesWritten - lastLoggedCount >= TOOLING_SYNC_PROGRESS_LOG_INTERVAL;
+    if (!isCompletion && !reachedInterval) {
+      return;
+    }
+
+    lastLoggedCount = progress.filesWritten;
+    logger.info(`Tooling sync progress: ${label} ${progress.filesWritten}/${progress.filesDiscovered}`);
+  };
+
+  logger.info(`Tooling sync start: ${label}.`);
+  const summary = await syncUnit(onProgress);
+  logger.info(
+    `Tooling sync done: ${label} discovered=${summary.filesDiscovered}, written=${summary.filesWritten}, skippedMissing=${summary.skippedMissing}.`
+  );
+  return summary;
 }
 
 function summarizeToolingSync(
@@ -131,19 +183,19 @@ function formatToolingSyncSummary(summary: ToolingSyncSummary): string {
   return `discovered=${summary.totalDiscovered}, written=${summary.totalWritten}, missingPaths=${summary.skippedMissingPaths}, opencodeSynced=${opencodeSynced}, codexSynced=${codexSynced}`;
 }
 
-async function resolveSandboxId(
+async function resolveSandboxTarget(
   sandboxIdArg: string | undefined,
   deps: ConnectCommandDeps,
   options: ConnectCommandOptions
-): Promise<string> {
+): Promise<{ sandboxId: string; label?: string }> {
   if (sandboxIdArg) {
-    return sandboxIdArg;
+    return { sandboxId: sandboxIdArg };
   }
 
   if (!options.skipLastRun) {
     const lastRun = await deps.loadLastRunState();
     if (lastRun?.sandboxId) {
-      return lastRun.sandboxId;
+      return { sandboxId: lastRun.sandboxId };
     }
   }
 
@@ -153,7 +205,15 @@ async function resolveSandboxId(
     throw new Error("No sandboxes are available to connect.");
   }
 
-  return firstSandbox.sandboxId;
+  const fallbackLabel = formatSandboxDisplayLabel(firstSandbox.sandboxId, firstSandbox.metadata);
+  if (fallbackLabel !== firstSandbox.sandboxId) {
+    logger.info(`Selected fallback sandbox: ${fallbackLabel}.`);
+  }
+
+  return {
+    sandboxId: firstSandbox.sandboxId,
+    label: fallbackLabel === firstSandbox.sandboxId ? undefined : fallbackLabel
+  };
 }
 
 function parseConnectArgs(args: string[]): { sandboxId?: string; mode?: StartupMode } {

@@ -1,4 +1,5 @@
 import type { SandboxHandle } from "../e2b/lifecycle.js";
+import { logger } from "../logging/logger.js";
 import type { ModeLaunchResult } from "./index.js";
 import {
   type SshModeDeps,
@@ -25,11 +26,14 @@ export async function startOpenCodeMode(handle: SandboxHandle, deps: OpenCodeMod
     return runSmokeCheck(handle);
   }
 
+  logger.info("Preparing secure SSH bridge (first run may install packages).");
   const session = await deps.prepareSession(handle);
 
   try {
+    logger.info("Opening interactive SSH session.");
     await deps.runInteractiveSession(session, OPEN_CODE_INTERACTIVE_COMMAND);
   } finally {
+    logger.info("Cleaning up interactive SSH session.");
     await deps.cleanupSession(handle, session);
   }
 

@@ -11,7 +11,8 @@ describe("ssh bridge security behavior", () => {
       tempDir: "/tmp/agent-box-ssh-123",
       privateKeyPath: "/tmp/agent-box-ssh-123/id_ed25519",
       knownHostsPath: "/tmp/agent-box-ssh-123/known_hosts",
-      wsUrl: "wss://8081-sbx.e2b.app"
+      wsUrl: "wss://8081-sbx.e2b.app",
+      remoteUser: "sandbox-user"
     };
 
     const args = buildSshClientArgs(session, "bash");
@@ -19,6 +20,7 @@ describe("ssh bridge security behavior", () => {
 
     expect(args).toContain("StrictHostKeyChecking=yes");
     expect(joined).toContain("UserKnownHostsFile=");
+    expect(args).toContain("sandbox-user@e2b-sandbox");
     expect(joined).not.toContain("StrictHostKeyChecking=no");
     expect(joined).not.toContain("UserKnownHostsFile=/dev/null");
   });
@@ -33,13 +35,14 @@ describe("ssh bridge security behavior", () => {
       knownHostsPath: "/tmp/known_hosts",
       wsUrl: "wss://8081-sbx.e2b.app",
       artifacts: {
-        authorizedKeysPath: "/tmp/ssh-test-authorized_keys",
-        hostPrivateKeyPath: "/tmp/ssh-test-host-ed25519",
-        hostPublicKeyPath: "/tmp/ssh-test-host-ed25519.pub",
-        sshdConfigPath: "/tmp/ssh-test-sshd_config",
-        sshdPidPath: "/tmp/ssh-test-sshd.pid",
-        websockifyPidPath: "/tmp/ssh-test-websockify.pid",
-        websockifyLogPath: "/tmp/ssh-test-websockify.log"
+        sessionDir: "/home/user/.agent-box-ssh/ssh-test",
+        authorizedKeysPath: "/home/user/.agent-box-ssh/ssh-test/authorized_keys",
+        hostPrivateKeyPath: "/home/user/.agent-box-ssh/ssh-test/host-ed25519",
+        hostPublicKeyPath: "/home/user/.agent-box-ssh/ssh-test/host-ed25519.pub",
+        sshdConfigPath: "/home/user/.agent-box-ssh/ssh-test/sshd_config",
+        sshdPidPath: "/home/user/.agent-box-ssh/ssh-test/sshd.pid",
+        websockifyPidPath: "/home/user/.agent-box-ssh/ssh-test/websockify.pid",
+        websockifyLogPath: "/home/user/.agent-box-ssh/ssh-test/websockify.log"
       }
     };
 
@@ -55,9 +58,10 @@ describe("ssh bridge security behavior", () => {
     await cleanupSshBridgeSession(handle, session);
 
     expect(run).toHaveBeenCalledTimes(3);
-    expect(run.mock.calls[0]?.[0]).toContain("ssh-test-websockify.pid");
-    expect(run.mock.calls[1]?.[0]).toContain("ssh-test-sshd.pid");
-    expect(run.mock.calls[2]?.[0]).toContain("ssh-test-authorized_keys");
+    expect(run.mock.calls[0]?.[0]).toContain("/home/user/.agent-box-ssh/ssh-test/websockify.pid");
+    expect(run.mock.calls[1]?.[0]).toContain("/home/user/.agent-box-ssh/ssh-test/sshd.pid");
+    expect(run.mock.calls[2]?.[0]).toContain("/home/user/.agent-box-ssh/ssh-test/authorized_keys");
+    expect(run.mock.calls[2]?.[0]).toContain("rm -rf '/home/user/.agent-box-ssh/ssh-test'");
     await expect(access(tempDir)).rejects.toBeDefined();
   });
 });

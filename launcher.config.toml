@@ -47,7 +47,7 @@ setup_env = {}
 startup_env = {}
 
 [env]
-pass_through = []
+pass_through = ["OPENROUTER_API_KEY", "CEREBRAS_API_KEY"]
 
 [opencode]
 config_dir = "~/.config/opencode"
