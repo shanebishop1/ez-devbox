@@ -79,6 +79,7 @@ async function runSmokeCheck(
 
 function buildInteractiveCommand(command: string, cwd?: string, envs: Record<string, string> = {}): string {
   const steps: string[] = [];
+  steps.push('export PATH="$HOME/.local/bin:$HOME/.local/share/mise/shims:$PATH"');
   if (cwd) {
     steps.push(`cd ${quoteShellArg(cwd)}`);
   }
@@ -102,7 +103,7 @@ function normalizeOptionalValue(value: string | undefined): string | undefined {
 }
 
 function quoteShellArg(value: string): string {
-  return `'${value.replace(/'/g, `"'\"'\"'`)}'`;
+  return `'${value.replace(/'/g, `'"'"'`)}'`;
 }
 
 function firstNonEmptyLine(stdout: string, stderr: string): string {

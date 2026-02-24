@@ -12,6 +12,9 @@ Lightweight TypeScript CLI for creating, reconnecting, and launching E2B coding 
   - `ssh-shell`
   - `prompt` (interactive chooser in TTY; non-interactive fallback to `ssh-opencode`)
 - Persists last-run state locally so reconnects are fast
+- Bootstraps configured repos on create/connect (clone, branch checkout, setup command)
+- Starts tools in the expected directory (`project.working_dir = "auto"` picks repo or workspace)
+- Optionally syncs local tool auth/config (OpenCode, Codex, GitHub CLI) into sandbox
 - Validates config and MCP/Firecrawl settings before launch
 
 ## Requirements
@@ -74,10 +77,13 @@ ez-box start
 - Start without last-run reuse:
   - `ez-box start -- --no-reuse`
   - `npm run start -- --no-reuse`
-- Wipe one sandbox (interactive picker):
+- List available sandboxes:
+  - `ez-box list`
+  - `npm run list`
+- Wipe one sandbox (interactive picker or `--sandbox-id`):
   - `ez-box wipe`
   - `npm run wipe`
-- Wipe all sandboxes:
+- Wipe all sandboxes (use `--yes` in non-interactive terminals):
   - `ez-box wipe-all -- --yes`
   - `npm run wipe-all -- --yes`
 

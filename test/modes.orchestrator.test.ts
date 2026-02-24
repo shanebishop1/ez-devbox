@@ -113,7 +113,7 @@ describe("startup modes orchestrator", () => {
       privateKeyPath: "/tmp/session/id_ed25519",
       wsUrl: "wss://8081-sbx.e2b.app"
       },
-      "bash -lc 'exec opencode'"
+      "bash -lc 'export PATH=\"$HOME/.local/bin:$HOME/.local/share/mise/shims:$PATH\" && exec opencode'"
     );
     expect(cleanupSession).toHaveBeenCalledTimes(1);
     expect(result.mode).toBe("ssh-opencode");
@@ -242,7 +242,7 @@ describe("startup modes orchestrator", () => {
         knownHostsPath: "/tmp/session/known_hosts",
         wsUrl: "wss://8081-sbx.e2b.app"
       },
-      "bash -lc 'exec codex'"
+      "bash -lc 'export PATH=\"$HOME/.local/bin:$HOME/.local/share/mise/shims:$PATH\" && exec codex'"
     );
     expect(cleanupSession).toHaveBeenCalledTimes(1);
     expect(result.mode).toBe("ssh-codex");
@@ -321,7 +321,7 @@ describe("startup modes orchestrator", () => {
         knownHostsPath: "/tmp/session/known_hosts",
         wsUrl: "wss://8081-sbx.e2b.app"
       },
-      "bash -lc 'exec bash -i'"
+      "bash -lc 'export PATH=\"$HOME/.local/bin:$HOME/.local/share/mise/shims:$PATH\" && exec bash -i'"
     );
     expect(cleanupSession).toHaveBeenCalledTimes(1);
     expect(result.mode).toBe("ssh-shell");
@@ -403,6 +403,37 @@ describe("startup modes orchestrator", () => {
     expect(shellRunInteractiveSession.mock.calls[0]?.[1]).toContain("/workspace/repo-c");
     expect(shellRunInteractiveSession.mock.calls[0]?.[1]).toContain("export PROJECT_NAME");
     expect(shellRunInteractiveSession.mock.calls[0]?.[1]).toContain("exec bash -i");
+  });
+
+  it("interactive modes safely escape single quotes in cwd/env", async () => {
+    const session = {
+      tempDir: "/tmp/session",
+      privateKeyPath: "/tmp/session/id_ed25519",
+      knownHostsPath: "/tmp/session/known_hosts",
+      wsUrl: "wss://8081-sbx.e2b.app"
+    };
+
+    const runInteractiveSession = vi.fn().mockResolvedValue(undefined);
+
+    await startShellMode(
+      createHandle({ run: vi.fn().mockResolvedValue({ stdout: "", stderr: "", exitCode: 0 }) }),
+      {
+        workingDirectory: "/workspace/team's-repo",
+        startupEnv: { PROJECT_NAME: "o'neil" }
+      },
+      {
+        isInteractiveTerminal: () => true,
+        prepareSession: vi.fn().mockResolvedValue(session),
+        runInteractiveSession,
+        cleanupSession: vi.fn().mockResolvedValue(undefined)
+      }
+    );
+
+    const remoteCommand = runInteractiveSession.mock.calls[0]?.[1] as string;
+    expect(remoteCommand).toContain("cd");
+    expect(remoteCommand).toContain("export PROJECT_NAME");
+    expect(remoteCommand).toContain("exec bash -i");
+    expect(remoteCommand).toContain("'\"'\"'");
   });
 });
 

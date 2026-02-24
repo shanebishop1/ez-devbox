@@ -281,7 +281,7 @@ function toWsUrl(host: string): string {
 }
 
 function quoteShellArg(value: string): string {
-  return `'${value.replace(/'/g, `"'\"'\"'`)}'`;
+  return `'${value.replace(/'/g, `'"'"'`)}'`;
 }
 
 async function runBestEffortLocalCleanup(tempDir: string): Promise<void> {
