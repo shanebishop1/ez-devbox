@@ -42,7 +42,7 @@ url = "https://github.com/bukatea/sample-repo.git"
 # Branch checked out after clone/connect (defaults to main when omitted).
 branch = "main"
 # Primary setup command run in repo directory.
-setup_command = ""
+setup_command = "./scripts/bootstrap-dev.sh"
 # Extra env vars injected for setup commands (string values only).
 setup_env = {}
 # Extra env vars injected only when exactly one repo is selected at launch time.
@@ -81,12 +81,12 @@ startup_env = {}
 [env]
 # Environment variable pass-through into sandbox creation.
 # Additional host env var names to forward into the sandbox at create time.
-pass_through = ["OPENROUTER_API_KEY", "CEREBRAS_API_KEY"]
+pass_through = ["OPENROUTER_API_KEY", "CEREBRAS_API_KEY", "FIRECRAWL_API_KEY", "FIRECRAWL_API_URL"]
 
 [opencode]
 # Host paths for OpenCode config/auth sync into the sandbox.
 # Local OpenCode config directory synced to /home/user/.config/opencode in the sandbox.
-config_dir = "~/.config/opencode"
+config_dir = "./.opencode"
 # Local OpenCode auth file synced to /home/user/.local/share/opencode/auth.json in the sandbox.
 auth_path = "~/.local/share/opencode/auth.json"
 
@@ -104,11 +104,12 @@ enabled = true
 # Local GitHub CLI config directory synced when enabled.
 config_dir = "~/.config/gh"
 
-[mcp]
-# Firecrawl/MCP wiring passed into sandbox environment.
-# Firecrawl integration mode. disabled sends nothing, remote_url enforces a valid reachable URL, in_sandbox is advanced and currently not fully implemented. allowed: disabled|remote_url|in_sandbox
-mode = "disabled" # allowed: disabled|remote_url|in_sandbox
-# Firecrawl base URL (takes precedence over FIRECRAWL_API_URL env when non-empty).
-firecrawl_api_url = ""
-# Allow localhost Firecrawl URLs in remote_url mode (unsafe for remote sandboxes unless tunneled).
-allow_localhost_override = false
+[tunnel]
+# Optional local tunnel helper for host-only services running on local ports.
+# Empty list disables tunnel management; each listed local TCP port gets its own cloudflared tunnel.
+# Runtime env vars available in sandbox/session:
+# - EZ_BOX_TUNNEL_<PORT>_URL (one per configured port, e.g. EZ_BOX_TUNNEL_3002_URL)
+# - EZ_BOX_TUNNELS_JSON (JSON object: {"3002":"https://...", ...})
+# - EZ_BOX_TUNNEL_PORTS (comma-separated ports)
+# - EZ_BOX_TUNNEL_URL (only when exactly one port is configured)
+ports = [3002]
