@@ -22,6 +22,7 @@
     "dev": "tsx src/cli/index.ts",
     "create": "tsx src/cli/index.ts create",
     "connect": "tsx src/cli/index.ts connect",
+    "resume": "tsx src/cli/index.ts resume",
     "list": "tsx src/cli/index.ts list",
     "command": "tsx src/cli/index.ts command",
     "wipe": "tsx src/cli/index.ts wipe",

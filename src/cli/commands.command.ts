@@ -1,7 +1,5 @@
-import { readFile } from "node:fs/promises";
-import { posix, resolve } from "node:path";
+import { posix } from "node:path";
 import { createInterface } from "node:readline/promises";
-import { parse as parseDotEnv } from "dotenv";
 import { loadConfig, type LoadConfigOptions } from "../config/load.js";
 import { connectSandbox, listSandboxes, type LifecycleOperationOptions, type ListSandboxesOptions, type SandboxHandle, type SandboxListItem } from "../e2b/lifecycle.js";
 import { resolveSandboxCreateEnv, type SandboxCreateEnvResolution } from "../e2b/env.js";
@@ -10,6 +8,7 @@ import type { CommandResult } from "../types/index.js";
 import { formatSandboxDisplayLabel } from "./sandbox-display-name.js";
 import { withConfiguredTunnel } from "../tunnel/cloudflared.js";
 import { formatPromptChoice } from "./prompt-style.js";
+import { loadCliEnvSource } from "./env-source.js";
 
 export interface CommandCommandDeps {
   loadConfig: (options?: LoadConfigOptions) => ReturnType<typeof loadConfig>;
@@ -33,7 +32,7 @@ const defaultDeps: CommandCommandDeps = {
   loadConfig,
   listSandboxes,
   connectSandbox,
-  resolveEnvSource: loadEnvSource,
+  resolveEnvSource: loadCliEnvSource,
   resolveSandboxCreateEnv,
   loadLastRunState,
   isInteractiveTerminal: () => Boolean(process.stdin.isTTY && process.stdout.isTTY),
@@ -118,27 +117,6 @@ function parseCommandArgs(args: string[]): { sandboxId?: string; command: string
     sandboxId,
     command: commandTokens.join(" ")
   };
-}
-
-async function loadEnvSource(): Promise<Record<string, string | undefined>> {
-  const mergedEnv: Record<string, string | undefined> = {
-    ...process.env
-  };
-
-  try {
-    const envPath = resolve(process.cwd(), ".env");
-    const envRaw = await readFile(envPath, "utf8");
-    const parsed = parseDotEnv(envRaw);
-    for (const [key, value] of Object.entries(parsed)) {
-      if (mergedEnv[key] === undefined) {
-        mergedEnv[key] = value;
-      }
-    }
-  } catch {
-    // .env is optional.
-  }
-
-  return mergedEnv;
 }
 
 async function resolveSandboxTarget(
