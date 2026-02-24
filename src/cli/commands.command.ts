@@ -5,6 +5,7 @@ import { connectSandbox, listSandboxes, type LifecycleOperationOptions, type Lis
 import { loadLastRunState, type LastRunState } from "../state/lastRun.js";
 import type { CommandResult } from "../types/index.js";
 import { formatSandboxDisplayLabel } from "./sandbox-display-name.js";
+import { withConfiguredTunnel } from "../tunnel/cloudflared.js";
 
 export interface CommandCommandDeps {
   loadConfig: (options?: LoadConfigOptions) => ReturnType<typeof loadConfig>;
@@ -31,29 +32,35 @@ const defaultDeps: CommandCommandDeps = {
 export async function runCommandCommand(args: string[], deps: CommandCommandDeps = defaultDeps): Promise<CommandResult> {
   const parsed = parseCommandArgs(args);
   const config = await deps.loadConfig();
-  const sandboxTarget = await resolveSandboxTarget(parsed.sandboxId, deps);
-  const selectedRepos = await resolveSelectedRepos(config.project.repos, config.project.mode, config.project.active, deps);
-  const cwd = resolveCommandWorkingDirectory(config.project.dir, selectedRepos);
+  return withConfiguredTunnel(config, async (tunnelRuntimeEnv) => {
+    const sandboxTarget = await resolveSandboxTarget(parsed.sandboxId, deps);
+    const selectedRepos = await resolveSelectedRepos(config.project.repos, config.project.mode, config.project.active, deps);
+    const cwd = resolveCommandWorkingDirectory(config.project.dir, selectedRepos);
+    const runtimeEnv = { ...tunnelRuntimeEnv };
 
-  const handle = await deps.connectSandbox(sandboxTarget.sandboxId, config);
-  const result = await handle.run(parsed.command, { cwd });
-  const stdout = result.stdout.trim() === "" ? "(empty)" : result.stdout;
-  const stderr = result.stderr.trim() === "" ? "(empty)" : result.stderr;
-  const sandboxLabel = sandboxTarget.label ?? sandboxTarget.sandboxId;
+    const handle = await deps.connectSandbox(sandboxTarget.sandboxId, config);
+    const result = await handle.run(parsed.command, {
+      cwd,
+      ...(Object.keys(runtimeEnv).length > 0 ? { envs: runtimeEnv } : {})
+    });
+    const stdout = result.stdout.trim() === "" ? "(empty)" : result.stdout;
+    const stderr = result.stderr.trim() === "" ? "(empty)" : result.stderr;
+    const sandboxLabel = sandboxTarget.label ?? sandboxTarget.sandboxId;
 
-  return {
-    message: [
-      `Ran command in sandbox ${sandboxLabel}.`,
-      `cwd: ${cwd}`,
-      "",
-      "stdout:",
-      stdout,
-      "",
-      "stderr:",
-      stderr
-    ].join("\n"),
-    exitCode: result.exitCode
-  };
+    return {
+      message: [
+        `Ran command in sandbox ${sandboxLabel}.`,
+        `cwd: ${cwd}`,
+        "",
+        "stdout:",
+        stdout,
+        "",
+        "stderr:",
+        stderr
+      ].join("\n"),
+      exitCode: result.exitCode
+    };
+  });
 }
 
 function parseCommandArgs(args: string[]): { sandboxId?: string; command: string } {

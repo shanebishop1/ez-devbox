@@ -1,5 +1,4 @@
 import type { ResolvedLauncherConfig } from "../config/schema.js";
-import { resolveFirecrawlEnv } from "../mcp/firecrawl.js";
 
 type EnvSource = Record<string, string | undefined>;
 
@@ -15,11 +14,10 @@ const BUILTIN_PASSTHROUGH_VARS = [
 
 export interface SandboxCreateEnvResolution {
   envs: Record<string, string>;
-  warnings: string[];
 }
 
 export function resolveSandboxCreateEnv(
-  config: Pick<ResolvedLauncherConfig, "env" | "mcp">,
+  config: Pick<ResolvedLauncherConfig, "env">,
   envSource: EnvSource = process.env
 ): SandboxCreateEnvResolution {
   const resolved: Record<string, string> = {};
@@ -32,14 +30,8 @@ export function resolveSandboxCreateEnv(
     }
   }
 
-  const firecrawl = resolveFirecrawlEnv(config, envSource);
-
   return {
-    envs: {
-      ...resolved,
-      ...firecrawl.envs
-    },
-    warnings: firecrawl.warnings
+    envs: resolved
   };
 }
 

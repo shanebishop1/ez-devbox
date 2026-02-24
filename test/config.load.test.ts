@@ -8,14 +8,11 @@ import { defaultConfig } from "../src/config/defaults.js";
 describe("loadConfig", () => {
   let tempDir = "";
   let originalE2bApiKey: string | undefined;
-  let originalFirecrawlApiUrl: string | undefined;
 
   beforeEach(async () => {
     tempDir = await mkdtemp(join(tmpdir(), "agent-box-config-"));
     originalE2bApiKey = process.env.E2B_API_KEY;
-    originalFirecrawlApiUrl = process.env.FIRECRAWL_API_URL;
     delete process.env.E2B_API_KEY;
-    delete process.env.FIRECRAWL_API_URL;
   });
 
   afterEach(async () => {
@@ -23,12 +20,6 @@ describe("loadConfig", () => {
       delete process.env.E2B_API_KEY;
     } else {
       process.env.E2B_API_KEY = originalE2bApiKey;
-    }
-
-    if (originalFirecrawlApiUrl === undefined) {
-      delete process.env.FIRECRAWL_API_URL;
-    } else {
-      process.env.FIRECRAWL_API_URL = originalFirecrawlApiUrl;
     }
 
     await rm(tempDir, { recursive: true, force: true });
@@ -91,8 +82,7 @@ describe("loadConfig", () => {
       enabled: false,
       config_dir: "~/.config/gh"
     });
-    expect(resolved.mcp.mode).toBe("disabled");
-    expect(resolved.mcp.allow_localhost_override).toBe(false);
+    expect(resolved.tunnel.ports).toEqual([]);
   });
 
   it("supports opencode/codex path overrides", async () => {
@@ -203,25 +193,44 @@ describe("loadConfig", () => {
     const envPath = join(tempDir, ".env");
 
     await writeFile(configPath, "[startup]\nmode = \"prompt\"\n");
-    await writeFile(envPath, "FIRECRAWL_API_URL=https://api.example.com\n");
+    await writeFile(envPath, "FIRECRAWL_API_KEY=secret\n");
 
     await expect(loadConfig({ configPath, envPath })).rejects.toThrow(
       "E2B_API_KEY"
     );
   });
 
-  it("validates mcp.remote_url requires firecrawl_api_url", async () => {
+  it("accepts tunnel.ports override", async () => {
     const configPath = join(tempDir, "launcher.config.toml");
     const envPath = join(tempDir, ".env");
 
     await writeFile(
       configPath,
-      ["[mcp]", 'mode = "remote_url"'].join("\n")
+      ["[tunnel]", "ports = [3002, 8080]"].join("\n")
     );
     await writeFile(envPath, "E2B_API_KEY=test-e2b-key\n");
 
-    await expect(loadConfig({ configPath, envPath })).rejects.toThrow(
-      "mcp.firecrawl_api_url"
-    );
+    const resolved = await loadConfig({ configPath, envPath });
+    expect(resolved.tunnel.ports).toEqual([3002, 8080]);
+  });
+
+  it("rejects invalid tunnel.ports values", async () => {
+    const configPath = join(tempDir, "launcher.config.toml");
+    const envPath = join(tempDir, ".env");
+
+    await writeFile(configPath, ["[tunnel]", "ports = [70000]"].join("\n"));
+    await writeFile(envPath, "E2B_API_KEY=test-e2b-key\n");
+
+    await expect(loadConfig({ configPath, envPath })).rejects.toThrow("tunnel.ports");
+  });
+
+  it("rejects duplicate tunnel.ports entries", async () => {
+    const configPath = join(tempDir, "launcher.config.toml");
+    const envPath = join(tempDir, ".env");
+
+    await writeFile(configPath, ["[tunnel]", "ports = [3002, 3002]"].join("\n"));
+    await writeFile(envPath, "E2B_API_KEY=test-e2b-key\n");
+
+    await expect(loadConfig({ configPath, envPath })).rejects.toThrow("duplicate port");
   });
 });

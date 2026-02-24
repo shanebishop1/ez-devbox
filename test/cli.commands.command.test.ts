@@ -38,10 +38,8 @@ const baseConfig: ResolvedLauncherConfig = {
     enabled: false,
     config_dir: "~/.config/gh"
   },
-  mcp: {
-    mode: "disabled",
-    firecrawl_api_url: "",
-    allow_localhost_override: false
+  tunnel: {
+    ports: []
   }
 };
 

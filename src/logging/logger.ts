@@ -1,5 +1,7 @@
 type LogLevel = "info" | "warn" | "error";
 
+let verboseEnabled = false;
+
 const levelPrefix: Record<LogLevel, string> = {
   info: "INFO",
   warn: "WARN",
@@ -48,8 +50,18 @@ function write(level: LogLevel, message: string): void {
   console.log(line);
 }
 
+export function setVerboseLoggingEnabled(enabled: boolean): void {
+  verboseEnabled = enabled;
+}
+
 export const logger = {
   info(message: string): void {
+    write("info", message);
+  },
+  verbose(message: string): void {
+    if (!verboseEnabled) {
+      return;
+    }
     write("info", message);
   },
   warn(message: string): void {
