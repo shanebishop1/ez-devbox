@@ -365,7 +365,10 @@ describe("CLI command integration", () => {
         resolveSandboxCreateEnv: vi.fn().mockReturnValue({ envs: {} }),
         resolvePromptStartupMode: vi.fn().mockResolvedValue("ssh-opencode"),
         launchMode: vi.fn(),
-        bootstrapProjectWorkspace: vi.fn().mockRejectedValue(new PromptCancelledError("Repository selection cancelled.")),
+        bootstrapProjectWorkspace: vi.fn().mockImplementation(async (_handle, _config, options) => {
+          options?.onProgress?.("Repo clone: /workspace/alpha");
+          throw new PromptCancelledError("Repository selection cancelled.");
+        }),
         syncToolingToSandbox: vi.fn().mockResolvedValue(syncSummary),
         saveLastRunState: vi.fn().mockResolvedValue(undefined),
         now: () => "2026-02-01T00:00:00.000Z"
@@ -415,7 +418,10 @@ describe("CLI command integration", () => {
         resolveSandboxCreateEnv: vi.fn().mockReturnValue({ envs: {} }),
         resolvePromptStartupMode: vi.fn().mockResolvedValue("ssh-opencode"),
         launchMode: vi.fn(),
-        bootstrapProjectWorkspace: vi.fn().mockRejectedValue(new Error("bootstrap failed")),
+        bootstrapProjectWorkspace: vi.fn().mockImplementation(async (_handle, _config, options) => {
+          options?.onProgress?.("Repo clone: /workspace/alpha");
+          throw new Error("bootstrap failed");
+        }),
         syncToolingToSandbox: vi.fn().mockResolvedValue(syncSummary),
         saveLastRunState: vi.fn().mockResolvedValue(undefined),
         now: () => "2026-02-01T00:00:00.000Z"
@@ -798,6 +804,35 @@ describe("CLI command integration", () => {
       activeRepo: "alpha",
       updatedAt: "2026-02-01T00:00:00.000Z"
     });
+  });
+
+  it("create starts loading only after bootstrap progress begins", async () => {
+    const stopLoading = vi.fn();
+    const startLoading = vi.spyOn(logger, "startLoading").mockReturnValue(stopLoading);
+
+    const bootstrapProjectWorkspace = vi.fn().mockImplementation(async (_handle, _config, options) => {
+      expect(startLoading).not.toHaveBeenCalled();
+      options?.onProgress?.("Repo clone: /workspace/alpha");
+      expect(startLoading).toHaveBeenCalledWith("Bootstrapping...");
+      return bootstrapResult;
+    });
+
+    await runCreateCommand(["--mode", "ssh-opencode"], {
+      loadConfig: vi.fn().mockResolvedValue(config),
+      createSandbox: vi.fn().mockResolvedValue({ sandboxId: "sbx-created" }),
+      resolveEnvSource: vi.fn().mockResolvedValue({}),
+      resolveSandboxCreateEnv: vi.fn().mockReturnValue({ envs: {} }),
+      resolvePromptStartupMode: vi.fn().mockResolvedValue("ssh-opencode"),
+      launchMode: vi.fn().mockResolvedValue({ mode: "ssh-opencode", command: "opencode", message: "launched" }),
+      bootstrapProjectWorkspace,
+      syncToolingToSandbox: vi.fn().mockResolvedValue(syncSummary),
+      saveLastRunState: vi.fn().mockResolvedValue(undefined),
+      now: () => "2026-02-01T00:00:00.000Z"
+    });
+
+    expect(startLoading).toHaveBeenCalledTimes(1);
+    expect(stopLoading).toHaveBeenCalledTimes(1);
+    startLoading.mockRestore();
   });
 
   it("connect bootstraps project workspace and tracks active repo", async () => {
