@@ -1,6 +1,6 @@
 import { readdir, readFile, stat } from "node:fs/promises";
 import { homedir } from "node:os";
-import { isAbsolute, join, posix, relative, resolve, sep } from "node:path";
+import { basename, isAbsolute, join, posix, relative, resolve, sep } from "node:path";
 import type { ResolvedLauncherConfig } from "../config/schema.js";
 import type { SandboxHandle } from "../e2b/lifecycle.js";
 
@@ -30,6 +30,7 @@ const SKIPPED_DIRECTORY_NAMES = new Set([
 
 const SKIPPED_FILE_EXTENSIONS = new Set([".jsonl", ".log", ".tmp", ".swp", ".db", ".sqlite"]);
 const SKIPPED_FILE_NAMES = new Set([".DS_Store", ".codex-global-state.json", "models_cache.json"]);
+const GH_SKIPPED_SYNC_FILE_NAMES = new Set(["hosts.yml"]);
 
 export interface HostPathResolveOptions {
   homeDir?: string;
@@ -49,6 +50,10 @@ export interface DirectorySyncProgress {
 
 export interface HostToSandboxSyncOptions extends HostPathResolveOptions {
   onProgress?: (progress: DirectorySyncProgress) => void | Promise<void>;
+}
+
+interface DirectorySyncOptions extends HostToSandboxSyncOptions {
+  skipFileNames?: ReadonlySet<string>;
 }
 
 export interface ToolingSyncSummary {
@@ -123,7 +128,10 @@ export async function syncGhConfigDir(
   sandbox: Pick<SandboxHandle, "writeFile">,
   options?: HostToSandboxSyncOptions
 ): Promise<PathSyncSummary> {
-  return syncDirectory(config.gh.config_dir, GH_CONFIG_DEST, sandbox, options);
+  return syncDirectory(config.gh.config_dir, GH_CONFIG_DEST, sandbox, {
+    ...options,
+    skipFileNames: GH_SKIPPED_SYNC_FILE_NAMES
+  });
 }
 
 export async function syncToolingToSandbox(
@@ -157,7 +165,7 @@ async function syncDirectory(
   localDirectoryPath: string,
   sandboxDirectoryPath: string,
   sandbox: Pick<SandboxHandle, "writeFile">,
-  options?: HostToSandboxSyncOptions
+  options?: DirectorySyncOptions
 ): Promise<PathSyncSummary> {
   const resolvedLocalDirectoryPath = resolveHostPath(localDirectoryPath, options);
   if (!(await pathExists(resolvedLocalDirectoryPath))) {
@@ -168,7 +176,8 @@ async function syncDirectory(
     };
   }
 
-  const files = await discoverDirectoryFiles(resolvedLocalDirectoryPath);
+  const discoveredFiles = await discoverDirectoryFiles(resolvedLocalDirectoryPath);
+  const files = discoveredFiles.filter((filePath) => !shouldSkipSyncFile(filePath, options));
   let filesWritten = 0;
   for (const absoluteFilePath of files) {
     const fileContent = await readFile(absoluteFilePath);
@@ -190,6 +199,14 @@ async function syncDirectory(
     filesDiscovered: files.length,
     filesWritten
   };
+}
+
+function shouldSkipSyncFile(filePath: string, options?: DirectorySyncOptions): boolean {
+  if (!options?.skipFileNames) {
+    return false;
+  }
+
+  return options.skipFileNames.has(basename(filePath).toLowerCase());
 }
 
 async function syncFile(

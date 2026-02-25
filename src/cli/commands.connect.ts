@@ -96,6 +96,14 @@ export async function runConnectCommand(
     logger.verbose(`Connecting to sandbox ${targetLabel}.`);
     const handle = await deps.connectSandbox(target.sandboxId, config);
     logger.verbose(`Connected to sandbox ${targetLabel}.`);
+
+    await deps.saveLastRunState({
+      sandboxId: handle.sandboxId,
+      mode,
+      activeRepo: undefined,
+      updatedAt: deps.now()
+    });
+
     const envSource = deps.resolveEnvSource ? await deps.resolveEnvSource() : await loadCliEnvSource();
     const envResolution = deps.resolveSandboxCreateEnv
       ? deps.resolveSandboxCreateEnv(config, envSource)
