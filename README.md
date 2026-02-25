@@ -13,7 +13,7 @@ Lightweight TypeScript CLI for running OpenCode/Codex agents with E2B sandboxes.
   - `ssh-shell`
 - Sets up configured repo(s) during sandbox creation process (clone, branch/checkout, custom bootstrap command)
 - Starts tools in the expected directory (`project.working_dir = "auto"` picks repo or workspace)
-- Optionally syncs local tool auth/config (OpenCode, Codex, GitHub CLI) into sandbox during `create`
+- Syncs local tool auth/config (OpenCode, Codex, GitHub CLI) into sandbox during `create`
 - Supports optional auto-managed local port tunneling for sandbox access of MCP servers, Docker containers, etc.
 
 ## Requirements
@@ -116,9 +116,6 @@ ez-devbox connect
 - Create with explicit mode:
   - `ez-devbox create -- --mode web`
   - `npm run create -- --mode web`
-- Create and skip interactive tooling-sync confirmation:
-  - `ez-devbox create -- --yes-sync`
-  - `npm run create -- --yes-sync`
 - Connect to specific sandbox:
   - `ez-devbox connect -- --sandbox-id <sandbox-id>`
   - `npm run connect -- --sandbox-id <sandbox-id>`

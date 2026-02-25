@@ -308,6 +308,7 @@ describe("host to sandbox tooling sync", () => {
 
     await mkdir(ghConfigDir, { recursive: true });
     await mkdir(codexConfigDir, { recursive: true });
+    await writeFile(join(ghConfigDir, "config.yml"), "git_protocol: https\n", "utf8");
     await writeFile(join(ghConfigDir, "hosts.yml"), "github.com:\n  user: test\n", "utf8");
     await writeFile(join(codexConfigDir, "config.toml"), "model='gpt-5'", "utf8");
     await writeFile(codexAuthPath, "{}", "utf8");
@@ -341,7 +342,8 @@ describe("host to sandbox tooling sync", () => {
       ghEnabled: true,
       ghConfigSynced: true
     });
-    expect(writeFileInSandbox).toHaveBeenCalledWith("/home/user/.config/gh/hosts.yml", expect.any(ArrayBuffer));
+    expect(writeFileInSandbox).toHaveBeenCalledWith("/home/user/.config/gh/config.yml", expect.any(ArrayBuffer));
+    expect(writeFileInSandbox).not.toHaveBeenCalledWith("/home/user/.config/gh/hosts.yml", expect.any(ArrayBuffer));
   });
 });
 
