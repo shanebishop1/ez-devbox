@@ -6,8 +6,7 @@ const BUILTIN_PASSTHROUGH_VARS = [
   "OPENAI_API_KEY",
   "ANTHROPIC_API_KEY",
   "GITHUB_TOKEN",
-  "GH_TOKEN",
-  "OPENCODE_SERVER_PASSWORD"
+  "GH_TOKEN"
 ] as const;
 
 export interface SandboxCreateEnvResolution {

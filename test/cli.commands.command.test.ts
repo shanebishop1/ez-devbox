@@ -193,8 +193,10 @@ describe("runCommandCommand", () => {
       loadConfig: vi.fn().mockResolvedValue(baseConfig),
       listSandboxes: vi.fn().mockResolvedValue([]),
       connectSandbox: vi.fn().mockResolvedValue({ sandboxId: "sbx-1", run }),
-      resolveEnvSource: vi.fn().mockResolvedValue({ FIRECRAWL_API_KEY: "fc-test" }),
-      resolveSandboxCreateEnv: vi.fn().mockReturnValue({ envs: { FIRECRAWL_API_KEY: "fc-test" } }),
+      resolveEnvSource: vi.fn().mockResolvedValue({ FIRECRAWL_API_KEY: "fc-test", OPENCODE_SERVER_PASSWORD: "abcd" }),
+      resolveSandboxCreateEnv: vi
+        .fn()
+        .mockReturnValue({ envs: { FIRECRAWL_API_KEY: "fc-test", OPENCODE_SERVER_PASSWORD: "abcd" } }),
       loadLastRunState: vi.fn().mockResolvedValue(null)
     });
 

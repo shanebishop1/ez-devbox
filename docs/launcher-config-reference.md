@@ -74,7 +74,8 @@ When `project.working_dir = "auto"`, working directory behavior after repo selec
 ## `[env]`
 
 - `pass_through` (string array): extra host env var names to forward into sandbox creation.
-- Built-in pass-through vars are always considered as well: `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GITHUB_TOKEN`, `GH_TOKEN`, `OPENCODE_SERVER_PASSWORD`.
+- Built-in pass-through vars are always considered as well: `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GITHUB_TOKEN`, `GH_TOKEN`.
+- `OPENCODE_SERVER_PASSWORD` is scoped to web startup: ez-devbox injects it only when launching `startup.mode = "web"` (or `--mode web`).
 - Add service-specific keys (for example Firecrawl) explicitly in `pass_through`.
 
 ## `[opencode]`

@@ -11,6 +11,8 @@ import { formatPromptChoice } from "./prompt-style.js";
 import { loadCliEnvSource } from "./env-source.js";
 import { logger } from "../logging/logger.js";
 
+const OPENCODE_SERVER_PASSWORD_ENV_VAR = "OPENCODE_SERVER_PASSWORD";
+
 export interface CommandCommandDeps {
   loadConfig: (options?: LoadConfigOptions) => ReturnType<typeof loadConfig>;
   loadConfigWithMetadata?: (options?: LoadConfigOptions) => ReturnType<typeof loadConfigWithMetadata>;
@@ -59,10 +61,10 @@ export async function runCommandCommand(args: string[], deps: CommandCommandDeps
       : {
           envs: {}
         };
-    const runtimeEnv = {
+    const runtimeEnv = withoutOpenCodeServerPassword({
       ...envResolution.envs,
       ...tunnelRuntimeEnv
-    };
+    });
 
     const handle = await deps.connectSandbox(sandboxTarget.sandboxId, config);
     const result = await handle.run(parsed.command, {
@@ -87,6 +89,11 @@ export async function runCommandCommand(args: string[], deps: CommandCommandDeps
       exitCode: result.exitCode
     };
   });
+}
+
+function withoutOpenCodeServerPassword(envs: Record<string, string>): Record<string, string> {
+  const { [OPENCODE_SERVER_PASSWORD_ENV_VAR]: _ignored, ...rest } = envs;
+  return rest;
 }
 
 function parseCommandArgs(args: string[]): { sandboxId?: string; command: string } {

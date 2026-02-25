@@ -57,8 +57,7 @@ describe("sandbox env resolution", () => {
     expect(resolved.envs).toEqual({
       CUSTOM_TOKEN: "abc",
       OPENAI_API_KEY: "openai-key",
-      GITHUB_TOKEN: "ghp_123",
-      OPENCODE_SERVER_PASSWORD: "pw"
+      GITHUB_TOKEN: "ghp_123"
     });
   });
 

@@ -381,6 +381,70 @@ describe("CLI command integration", () => {
     });
   });
 
+  it("create does not inject OPENCODE_SERVER_PASSWORD outside web mode", async () => {
+    const createSandbox = vi.fn().mockResolvedValue({ sandboxId: "sbx-created" });
+    const launchMode = vi.fn().mockResolvedValue({ mode: "ssh-opencode", command: "opencode", message: "launched" });
+
+    await runCreateCommand(["--mode", "ssh-opencode"], {
+      loadConfig: vi.fn().mockResolvedValue(config),
+      createSandbox,
+      resolveEnvSource: vi.fn().mockResolvedValue({ OPENCODE_SERVER_PASSWORD: "abcd" }),
+      resolveSandboxCreateEnv: vi.fn().mockReturnValue({
+        envs: {
+          FIRECRAWL_API_KEY: "fc-test",
+          OPENCODE_SERVER_PASSWORD: "abcd"
+        }
+      }),
+      resolvePromptStartupMode: vi.fn().mockResolvedValue("ssh-opencode"),
+      launchMode,
+      bootstrapProjectWorkspace: vi.fn().mockResolvedValue(bootstrapResult),
+      syncToolingToSandbox: vi.fn().mockResolvedValue(syncSummary),
+      saveLastRunState: vi.fn().mockResolvedValue(undefined),
+      now: () => "2026-02-01T00:00:00.000Z"
+    });
+
+    expect(createSandbox).toHaveBeenCalledWith(
+      expect.any(Object),
+      expect.objectContaining({
+        envs: {
+          FIRECRAWL_API_KEY: "fc-test"
+        }
+      })
+    );
+    expect(launchMode).toHaveBeenCalledWith({ sandboxId: "sbx-created" }, "ssh-opencode", {
+      workingDirectory: undefined,
+      startupEnv: {
+        FIRECRAWL_API_KEY: "fc-test"
+      }
+    });
+  });
+
+  it("create injects OPENCODE_SERVER_PASSWORD for web mode launch only", async () => {
+    const createSandbox = vi.fn().mockResolvedValue({ sandboxId: "sbx-created" });
+    const launchMode = vi.fn().mockResolvedValue({ mode: "web", url: "https://sbx-created.e2b.dev", message: "launched" });
+
+    await runCreateCommand(["--mode", "web"], {
+      loadConfig: vi.fn().mockResolvedValue(config),
+      createSandbox,
+      resolveEnvSource: vi.fn().mockResolvedValue({ OPENCODE_SERVER_PASSWORD: "abcd" }),
+      resolveSandboxCreateEnv: vi.fn().mockReturnValue({ envs: {} }),
+      resolvePromptStartupMode: vi.fn().mockResolvedValue("web"),
+      launchMode,
+      bootstrapProjectWorkspace: vi.fn().mockResolvedValue(bootstrapResult),
+      syncToolingToSandbox: vi.fn().mockResolvedValue(syncSummary),
+      saveLastRunState: vi.fn().mockResolvedValue(undefined),
+      now: () => "2026-02-01T00:00:00.000Z"
+    });
+
+    expect(createSandbox).toHaveBeenCalledWith(expect.any(Object), expect.objectContaining({ envs: {} }));
+    expect(launchMode).toHaveBeenCalledWith({ sandboxId: "sbx-created" }, "web", {
+      workingDirectory: undefined,
+      startupEnv: {
+        OPENCODE_SERVER_PASSWORD: "abcd"
+      }
+    });
+  });
+
   it("create verbose logging lists only env var names", async () => {
     setVerboseLoggingEnabled(true);
     const loggerVerbose = vi.spyOn(logger, "verbose").mockImplementation(() => undefined);
@@ -725,7 +789,8 @@ describe("CLI command integration", () => {
     const resolveSandboxCreateEnv = vi.fn().mockReturnValue({
       envs: {
         FIRECRAWL_API_KEY: "fc-test",
-        OPENAI_API_KEY: "openai-test"
+        OPENAI_API_KEY: "openai-test",
+        OPENCODE_SERVER_PASSWORD: "abcd"
       }
     });
 
@@ -735,7 +800,9 @@ describe("CLI command integration", () => {
       loadLastRunState: vi.fn().mockResolvedValue(null),
       listSandboxes: vi.fn().mockResolvedValue([]),
       resolvePromptStartupMode: vi.fn().mockResolvedValue("ssh-shell"),
-      resolveEnvSource: vi.fn().mockResolvedValue({ FIRECRAWL_API_KEY: "fc-test", OPENAI_API_KEY: "openai-test" }),
+      resolveEnvSource: vi
+        .fn()
+        .mockResolvedValue({ FIRECRAWL_API_KEY: "fc-test", OPENAI_API_KEY: "openai-test", OPENCODE_SERVER_PASSWORD: "abcd" }),
       resolveSandboxCreateEnv,
       launchMode,
       bootstrapProjectWorkspace: vi.fn().mockResolvedValue({
@@ -748,7 +815,8 @@ describe("CLI command integration", () => {
 
     expect(resolveSandboxCreateEnv).toHaveBeenCalledWith(config, {
       FIRECRAWL_API_KEY: "fc-test",
-      OPENAI_API_KEY: "openai-test"
+      OPENAI_API_KEY: "openai-test",
+      OPENCODE_SERVER_PASSWORD: "abcd"
     });
     expect(launchMode).toHaveBeenCalledWith({ sandboxId: "sbx-arg" }, "ssh-shell", {
       workingDirectory: undefined,
@@ -756,6 +824,43 @@ describe("CLI command integration", () => {
         NEXT_PUBLIC_APP_ENV: "preview",
         FIRECRAWL_API_KEY: "fc-test",
         OPENAI_API_KEY: "openai-test"
+      }
+    });
+  });
+
+  it("connect injects OPENCODE_SERVER_PASSWORD for web mode launch only", async () => {
+    const launchMode = vi.fn().mockResolvedValue({ mode: "web", url: "https://sbx-arg.e2b.dev", message: "launched" });
+    const bootstrapProjectWorkspace = vi.fn().mockResolvedValue({
+      ...bootstrapResult,
+      startupEnv: { NEXT_PUBLIC_APP_ENV: "preview" }
+    });
+
+    await runConnectCommand(["--sandbox-id", "sbx-arg", "--mode", "web"], {
+      loadConfig: vi.fn().mockResolvedValue(config),
+      connectSandbox: vi.fn().mockResolvedValue({ sandboxId: "sbx-arg" }),
+      loadLastRunState: vi.fn().mockResolvedValue(null),
+      listSandboxes: vi.fn().mockResolvedValue([]),
+      resolvePromptStartupMode: vi.fn().mockResolvedValue("web"),
+      resolveEnvSource: vi.fn().mockResolvedValue({ OPENCODE_SERVER_PASSWORD: "abcd" }),
+      resolveSandboxCreateEnv: vi.fn().mockReturnValue({ envs: { OPENCODE_SERVER_PASSWORD: "abcd" } }),
+      launchMode,
+      bootstrapProjectWorkspace,
+      saveLastRunState: vi.fn().mockResolvedValue(undefined),
+      now: () => "2026-02-01T00:00:00.000Z"
+    });
+
+    expect(bootstrapProjectWorkspace).toHaveBeenCalledWith(
+      { sandboxId: "sbx-arg" },
+      config,
+      expect.objectContaining({
+        runtimeEnv: {}
+      })
+    );
+    expect(launchMode).toHaveBeenCalledWith({ sandboxId: "sbx-arg" }, "web", {
+      workingDirectory: undefined,
+      startupEnv: {
+        NEXT_PUBLIC_APP_ENV: "preview",
+        OPENCODE_SERVER_PASSWORD: "abcd"
       }
     });
   });
