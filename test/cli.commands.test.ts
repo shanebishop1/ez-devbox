@@ -141,9 +141,8 @@ describe("CLI command integration", () => {
     loggerVerbose.mockRestore();
   });
 
-  it("create skips tooling sync when user declines interactive confirmation", async () => {
+  it("create always syncs tooling without an interactive confirmation", async () => {
     const syncToolingToSandbox = vi.fn().mockResolvedValue(syncSummary);
-    const promptInput = vi.fn().mockResolvedValue("n");
 
     const result = await runCreateCommand(["--mode", "ssh-opencode"], {
       loadConfig: vi.fn().mockResolvedValue(config),
@@ -154,20 +153,16 @@ describe("CLI command integration", () => {
       launchMode: vi.fn().mockResolvedValue({ mode: "ssh-opencode", command: "opencode", message: "launched" }),
       bootstrapProjectWorkspace: vi.fn().mockResolvedValue(bootstrapResult),
       syncToolingToSandbox,
-      isInteractiveTerminal: () => true,
-      promptInput,
       saveLastRunState: vi.fn().mockResolvedValue(undefined),
       now: () => "2026-02-01T00:00:00.000Z"
     });
 
-    expect(promptInput).toHaveBeenCalledWith("Sync local tooling auth/config into sandbox now? [Y/n]: ");
-    expect(syncToolingToSandbox).not.toHaveBeenCalled();
-    expect(result.message).toContain("Tooling sync: skipped by user");
+    expect(syncToolingToSandbox).toHaveBeenCalledTimes(1);
+    expect(result.message).toContain("Tooling sync: discovered=2, written=2");
   });
 
-  it("create --yes-sync bypasses interactive tooling sync confirmation", async () => {
+  it("create accepts legacy --yes-sync without changing behavior", async () => {
     const syncToolingToSandbox = vi.fn().mockResolvedValue(syncSummary);
-    const promptInput = vi.fn().mockResolvedValue("n");
 
     await runCreateCommand(["--mode", "ssh-opencode", "--yes-sync"], {
       loadConfig: vi.fn().mockResolvedValue(config),
@@ -178,36 +173,10 @@ describe("CLI command integration", () => {
       launchMode: vi.fn().mockResolvedValue({ mode: "ssh-opencode", command: "opencode", message: "launched" }),
       bootstrapProjectWorkspace: vi.fn().mockResolvedValue(bootstrapResult),
       syncToolingToSandbox,
-      isInteractiveTerminal: () => true,
-      promptInput,
       saveLastRunState: vi.fn().mockResolvedValue(undefined),
       now: () => "2026-02-01T00:00:00.000Z"
     });
 
-    expect(promptInput).not.toHaveBeenCalled();
-    expect(syncToolingToSandbox).toHaveBeenCalledTimes(1);
-  });
-
-  it("create keeps tooling sync enabled in non-interactive mode without prompt", async () => {
-    const syncToolingToSandbox = vi.fn().mockResolvedValue(syncSummary);
-    const promptInput = vi.fn().mockResolvedValue("n");
-
-    await runCreateCommand(["--mode", "ssh-opencode"], {
-      loadConfig: vi.fn().mockResolvedValue(config),
-      createSandbox: vi.fn().mockResolvedValue({ sandboxId: "sbx-created" }),
-      resolveEnvSource: vi.fn().mockResolvedValue({}),
-      resolveSandboxCreateEnv: vi.fn().mockReturnValue({ envs: {} }),
-      resolvePromptStartupMode: vi.fn().mockResolvedValue("ssh-opencode"),
-      launchMode: vi.fn().mockResolvedValue({ mode: "ssh-opencode", command: "opencode", message: "launched" }),
-      bootstrapProjectWorkspace: vi.fn().mockResolvedValue(bootstrapResult),
-      syncToolingToSandbox,
-      isInteractiveTerminal: () => false,
-      promptInput,
-      saveLastRunState: vi.fn().mockResolvedValue(undefined),
-      now: () => "2026-02-01T00:00:00.000Z"
-    });
-
-    expect(promptInput).not.toHaveBeenCalled();
     expect(syncToolingToSandbox).toHaveBeenCalledTimes(1);
   });
 
@@ -572,6 +541,7 @@ describe("CLI command integration", () => {
     await mkdir(ghConfigDir, { recursive: true });
     await writeFile(join(opencodeConfigDir, "settings.toml"), "x=1", "utf8");
     await writeFile(opencodeAuthPath, "{}", "utf8");
+    await writeFile(join(ghConfigDir, "config.yml"), "git_protocol: https\n", "utf8");
     await writeFile(join(ghConfigDir, "hosts.yml"), "github.com:\n  user: test\n", "utf8");
 
     const writeFileInSandbox = vi.fn().mockResolvedValue(undefined);
@@ -598,7 +568,8 @@ describe("CLI command integration", () => {
     expect(summaryDisabled.ghConfigSynced).toBe(false);
     expect(summaryEnabled.ghEnabled).toBe(true);
     expect(summaryEnabled.ghConfigSynced).toBe(true);
-    expect(writeFileInSandbox).toHaveBeenCalledWith("/home/user/.config/gh/hosts.yml", expect.any(ArrayBuffer));
+    expect(writeFileInSandbox).toHaveBeenCalledWith("/home/user/.config/gh/config.yml", expect.any(ArrayBuffer));
+    expect(writeFileInSandbox).not.toHaveBeenCalledWith("/home/user/.config/gh/hosts.yml", expect.any(ArrayBuffer));
   });
 
   it("connect uses --sandbox-id when provided", async () => {
@@ -1014,6 +985,32 @@ describe("CLI command integration", () => {
     startLoading.mockRestore();
   });
 
+  it("create saves last-run state before startup launch and keeps it on launch failure", async () => {
+    const saveLastRunState = vi.fn().mockResolvedValue(undefined);
+
+    await expect(
+      runCreateCommand(["--mode", "ssh-opencode"], {
+        loadConfig: vi.fn().mockResolvedValue(config),
+        createSandbox: vi.fn().mockResolvedValue({ sandboxId: "sbx-created" }),
+        resolveEnvSource: vi.fn().mockResolvedValue({}),
+        resolveSandboxCreateEnv: vi.fn().mockReturnValue({ envs: {} }),
+        resolvePromptStartupMode: vi.fn().mockResolvedValue("ssh-opencode"),
+        launchMode: vi.fn().mockRejectedValue(new Error("launch failed")),
+        bootstrapProjectWorkspace: vi.fn().mockResolvedValue(bootstrapResult),
+        syncToolingToSandbox: vi.fn().mockResolvedValue(syncSummary),
+        saveLastRunState,
+        now: () => "2026-02-01T00:00:00.000Z"
+      })
+    ).rejects.toThrow("launch failed");
+
+    expect(saveLastRunState).toHaveBeenCalledWith({
+      sandboxId: "sbx-created",
+      mode: "ssh-opencode",
+      activeRepo: undefined,
+      updatedAt: "2026-02-01T00:00:00.000Z"
+    });
+  });
+
   it("connect bootstraps project workspace and tracks active repo", async () => {
     const launchMode = vi.fn().mockResolvedValue({ mode: "ssh-opencode", command: "opencode", message: "launched" });
     const saveLastRunState = vi.fn().mockResolvedValue(undefined);
@@ -1050,6 +1047,31 @@ describe("CLI command integration", () => {
       sandboxId: "sbx-arg",
       mode: "ssh-opencode",
       activeRepo: "alpha",
+      updatedAt: "2026-02-01T00:00:00.000Z"
+    });
+  });
+
+  it("connect saves last-run state before startup launch and keeps it on launch failure", async () => {
+    const saveLastRunState = vi.fn().mockResolvedValue(undefined);
+
+    await expect(
+      runConnectCommand(["--sandbox-id", "sbx-arg", "--mode", "ssh-opencode"], {
+        loadConfig: vi.fn().mockResolvedValue(config),
+        connectSandbox: vi.fn().mockResolvedValue({ sandboxId: "sbx-arg" }),
+        loadLastRunState: vi.fn().mockResolvedValue(null),
+        listSandboxes: vi.fn().mockResolvedValue([]),
+        resolvePromptStartupMode: vi.fn().mockResolvedValue("ssh-opencode"),
+        launchMode: vi.fn().mockRejectedValue(new Error("launch failed")),
+        bootstrapProjectWorkspace: vi.fn().mockResolvedValue(bootstrapResult),
+        saveLastRunState,
+        now: () => "2026-02-01T00:00:00.000Z"
+      })
+    ).rejects.toThrow("launch failed");
+
+    expect(saveLastRunState).toHaveBeenCalledWith({
+      sandboxId: "sbx-arg",
+      mode: "ssh-opencode",
+      activeRepo: undefined,
       updatedAt: "2026-02-01T00:00:00.000Z"
     });
   });

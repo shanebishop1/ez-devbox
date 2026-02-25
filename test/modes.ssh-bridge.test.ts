@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import type { SandboxHandle } from "../src/e2b/lifecycle.js";
 import {
+  allocateSshBridgePorts,
   buildInteractiveRemoteCommand,
   buildSshClientArgs,
   cleanupSshBridgeSession,
@@ -12,6 +13,27 @@ import {
 } from "../src/modes/ssh-bridge.js";
 
 describe("ssh bridge security behavior", () => {
+  it("allocateSshBridgePorts skips occupied candidates and returns available pair", async () => {
+    const run = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("occupied"))
+      .mockResolvedValueOnce({ stdout: "24123 24124", stderr: "", exitCode: 0 });
+
+    const ports = await allocateSshBridgePorts({ run } as Pick<SandboxHandle, "run">, "session-abc", 4);
+
+    expect(ports).toEqual({ sshdPort: 24123, websockifyPort: 24124 });
+    expect(run).toHaveBeenCalledTimes(2);
+  });
+
+  it("allocateSshBridgePorts fails after exhausting attempts", async () => {
+    const run = vi.fn().mockRejectedValue(new Error("occupied"));
+
+    await expect(allocateSshBridgePorts({ run } as Pick<SandboxHandle, "run">, "session-abc", 2)).rejects.toThrow(
+      "Unable to allocate SSH bridge ports after 2 attempts."
+    );
+    expect(run).toHaveBeenCalledTimes(2);
+  });
+
   it("buildSshClientArgs enforces strict host key verification", () => {
     const session: SshBridgeSession = {
       tempDir: "/tmp/ez-devbox-ssh-123",
@@ -71,6 +93,8 @@ describe("ssh bridge security behavior", () => {
         authorizedKeysPath: "/home/user/.ez-devbox-ssh/ssh-test/authorized_keys",
         hostPrivateKeyPath: "/home/user/.ez-devbox-ssh/ssh-test/host-ed25519",
         hostPublicKeyPath: "/home/user/.ez-devbox-ssh/ssh-test/host-ed25519.pub",
+        sshdPort: 2222,
+        websockifyPort: 8081,
         sshdConfigPath: "/home/user/.ez-devbox-ssh/ssh-test/sshd_config",
         sshdPidPath: "/home/user/.ez-devbox-ssh/ssh-test/sshd.pid",
         websockifyPidPath: "/home/user/.ez-devbox-ssh/ssh-test/websockify.pid",
@@ -110,6 +134,8 @@ describe("ssh bridge security behavior", () => {
         authorizedKeysPath: "/home/user/.ez-devbox-ssh/ssh-test/authorized_keys",
         hostPrivateKeyPath: "/home/user/.ez-devbox-ssh/ssh-test/host-ed25519",
         hostPublicKeyPath: "/home/user/.ez-devbox-ssh/ssh-test/host-ed25519.pub",
+        sshdPort: 2222,
+        websockifyPort: 8081,
         sshdConfigPath: "/home/user/.ez-devbox-ssh/ssh-test/sshd_config",
         sshdPidPath: "/home/user/.ez-devbox-ssh/ssh-test/sshd.pid",
         websockifyPidPath: "/home/user/.ez-devbox-ssh/ssh-test/websockify.pid",

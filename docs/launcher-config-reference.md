@@ -90,7 +90,7 @@ When `project.working_dir = "auto"`, working directory behavior after repo selec
 ## `[gh]`
 
 - `enabled` (boolean): enables GitHub CLI config sync into the sandbox and GitHub auth token injection for bootstrap/launch runtime (`GH_TOKEN` -> `GITHUB_TOKEN` -> `gh auth token`). Default: `false` (off).
-- `config_dir` (string): host GitHub CLI config directory to sync into `/home/user/.config/gh` in sandbox when enabled.
+- `config_dir` (string): host GitHub CLI config directory to sync into `/home/user/.config/gh` in sandbox when enabled. Auth-state files that trigger host keyring migration (`hosts.yml`) are intentionally excluded; sandbox GitHub auth still comes from injected `GH_TOKEN`/`GITHUB_TOKEN`.
 
 ## `[tunnel]`
 

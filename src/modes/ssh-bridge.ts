@@ -11,18 +11,26 @@ const SSH_SETUP_TIMEOUT_MS = 8 * 60 * 1000;
 const SSH_SHORT_TIMEOUT_MS = 15_000;
 const SSH_HOST = "e2b-sandbox";
 const SSH_USER_FALLBACK = "user";
-const SSHD_PORT = 2222;
-const WEBSOCKIFY_PORT = 8081;
+const SSHD_PORT_MIN = 20000;
+const SSHD_PORT_MAX = 45000;
+const PORT_ALLOCATION_ATTEMPTS = 96;
 
 export interface SshBridgeSessionArtifacts {
   sessionDir: string;
   authorizedKeysPath: string;
   hostPrivateKeyPath: string;
   hostPublicKeyPath: string;
+  sshdPort: number;
+  websockifyPort: number;
   sshdConfigPath: string;
   sshdPidPath: string;
   websockifyPidPath: string;
   websockifyLogPath: string;
+}
+
+export interface SshBridgePorts {
+  sshdPort: number;
+  websockifyPort: number;
 }
 
 export interface SshBridgeSession {
@@ -71,11 +79,15 @@ export async function prepareSshBridgeSession(handle: SandboxHandle): Promise<Ss
     throw new Error("Failed to resolve remote home directory for SSH bridge session.");
   }
   const sessionDir = `${remoteHome}/.ez-devbox-ssh/${sessionId}`;
+  const ports = await allocateSshBridgePorts(handle, sessionId);
+  logger.verbose(`SSH bridge: selected ports sshd=${ports.sshdPort}, websockify=${ports.websockifyPort}.`);
   const artifacts = {
     sessionDir,
     authorizedKeysPath: `${sessionDir}/authorized_keys`,
     hostPrivateKeyPath: `${sessionDir}/host-ed25519`,
     hostPublicKeyPath: `${sessionDir}/host-ed25519.pub`,
+    sshdPort: ports.sshdPort,
+    websockifyPort: ports.websockifyPort,
     sshdConfigPath: `${sessionDir}/sshd_config`,
     sshdPidPath: `${sessionDir}/sshd.pid`,
     websockifyPidPath: `${sessionDir}/websockify.pid`,
@@ -127,13 +139,13 @@ export async function prepareSshBridgeSession(handle: SandboxHandle): Promise<Ss
   await handle.run("sudo mkdir -p /run/sshd", { timeoutMs: SSH_SHORT_TIMEOUT_MS });
   await handle.run(`sudo /usr/sbin/sshd -f ${quoteShellArg(artifacts.sshdConfigPath)}`, { timeoutMs: SSH_SHORT_TIMEOUT_MS });
   await handle.run(
-    `nohup websockify 0.0.0.0:${WEBSOCKIFY_PORT} 127.0.0.1:${SSHD_PORT} >${quoteShellArg(
+    `nohup websockify 0.0.0.0:${artifacts.websockifyPort} 127.0.0.1:${artifacts.sshdPort} >${quoteShellArg(
       artifacts.websockifyLogPath
     )} 2>&1 & echo $! > ${quoteShellArg(artifacts.websockifyPidPath)}`,
     { timeoutMs: SSH_SHORT_TIMEOUT_MS }
   );
 
-  const wsUrl = toWsUrl(await handle.getHost(WEBSOCKIFY_PORT));
+  const wsUrl = toWsUrl(await handle.getHost(artifacts.websockifyPort));
   logger.verbose(`SSH bridge ready: ${wsUrl}`);
 
   return {
@@ -144,6 +156,33 @@ export async function prepareSshBridgeSession(handle: SandboxHandle): Promise<Ss
     remoteUser,
     artifacts
   };
+}
+
+export async function allocateSshBridgePorts(
+  handle: Pick<SandboxHandle, "run">,
+  sessionId: string,
+  attempts = PORT_ALLOCATION_ATTEMPTS
+): Promise<SshBridgePorts> {
+  const seed = calculateSessionPortSeed(sessionId);
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    const sshdPort = candidateSshdPort(seed, attempt);
+    const websockifyPort = sshdPort + 1;
+    try {
+      const result = await handle.run(
+        `bash -lc 'sshd_port=${sshdPort}; websockify_port=${websockifyPort}; if (echo >/dev/tcp/127.0.0.1/$sshd_port) >/dev/null 2>&1; then exit 1; fi; if (echo >/dev/tcp/127.0.0.1/$websockify_port) >/dev/null 2>&1; then exit 1; fi; printf "%s %s" "$sshd_port" "$websockify_port"'`,
+        { timeoutMs: SSH_SHORT_TIMEOUT_MS }
+      );
+
+      const parsed = parseAllocatedPorts(result.stdout);
+      if (parsed) {
+        return parsed;
+      }
+    } catch {
+      continue;
+    }
+  }
+
+  throw new Error(`Unable to allocate SSH bridge ports after ${attempts} attempts.`);
 }
 
 export function buildSshClientArgs(session: SshBridgeSession, remoteCommand: string): string[] {
@@ -324,7 +363,7 @@ async function runBestEffortRemoteCleanup(handle: SandboxHandle, command: string
 
 function buildSshdConfig(artifacts: SshBridgeSessionArtifacts): string {
   return [
-    `Port ${SSHD_PORT}`,
+    `Port ${artifacts.sshdPort}`,
     "ListenAddress 0.0.0.0",
     "HostKeyAlgorithms ssh-ed25519",
     `HostKey ${artifacts.hostPrivateKeyPath}`,
@@ -345,6 +384,40 @@ function buildSshdConfig(artifacts: SshBridgeSessionArtifacts): string {
     "PrintMotd no",
     "Subsystem sftp internal-sftp"
   ].join("\n");
+}
+
+function calculateSessionPortSeed(sessionId: string): number {
+  let hash = 2166136261;
+
+  for (let index = 0; index < sessionId.length; index += 1) {
+    hash ^= sessionId.charCodeAt(index);
+    hash = Math.imul(hash, 16777619) >>> 0;
+  }
+
+  return hash;
+}
+
+function candidateSshdPort(seed: number, attempt: number): number {
+  const range = SSHD_PORT_MAX - SSHD_PORT_MIN;
+  return SSHD_PORT_MIN + ((seed + attempt * 7919) % range);
+}
+
+function parseAllocatedPorts(stdout: string): SshBridgePorts | null {
+  const match = stdout.trim().match(/^(\d+)\s+(\d+)$/);
+  if (!match) {
+    return null;
+  }
+
+  const sshdPort = Number.parseInt(match[1], 10);
+  const websockifyPort = Number.parseInt(match[2], 10);
+  if (!Number.isInteger(sshdPort) || !Number.isInteger(websockifyPort)) {
+    return null;
+  }
+
+  return {
+    sshdPort,
+    websockifyPort
+  };
 }
 
 function toWsUrl(host: string): string {
