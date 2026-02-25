@@ -10,7 +10,7 @@ import {
   type SandboxHandle,
   type SandboxListItem
 } from "../e2b/lifecycle.js";
-import { launchMode, type ModeLaunchResult } from "../modes/index.js";
+import { launchMode, resolveStartupMode, type ModeLaunchResult } from "../modes/index.js";
 import { loadLastRunState, saveLastRunState, type LastRunState } from "../state/lastRun.js";
 import { logger } from "../logging/logger.js";
 import { formatSandboxDisplayLabel } from "./sandbox-display-name.js";
@@ -21,6 +21,8 @@ import { resolvePromptStartupMode } from "./startup-mode-prompt.js";
 import { bootstrapProjectWorkspace, type BootstrapProjectWorkspaceResult } from "../project/bootstrap.js";
 import { resolveSandboxCreateEnv, type SandboxCreateEnvResolution } from "../e2b/env.js";
 import { loadCliEnvSource } from "./env-source.js";
+
+const OPENCODE_SERVER_PASSWORD_ENV_VAR = "OPENCODE_SERVER_PASSWORD";
 
 export interface ConnectCommandDeps {
   loadConfig: (options?: LoadConfigOptions) => ReturnType<typeof loadConfig>;
@@ -89,6 +91,7 @@ export async function runConnectCommand(
     const requestedMode = parsed.mode ?? config.startup.mode;
     logger.verbose(`Resolving startup mode from '${requestedMode}'.`);
     const mode = await deps.resolvePromptStartupMode(requestedMode);
+    const resolvedMode = resolveStartupMode(mode);
     if (requestedMode === "prompt") {
       logger.verbose(`Startup mode selected via prompt: ${mode}.`);
     }
@@ -111,11 +114,12 @@ export async function runConnectCommand(
           envs: {}
         };
     const ghRuntimeEnv = await resolveGhRuntimeEnv(config, envSource, deps.resolveHostGhToken);
-    const runtimeEnv = {
+    const runtimeEnv = withoutOpenCodeServerPassword({
       ...envResolution.envs,
       ...tunnelRuntimeEnv,
       ...ghRuntimeEnv
-    };
+    });
+    const webServerPassword = resolveWebServerPassword(envSource);
     const preferredActiveRepo = await resolvePreferredActiveRepo(config, target.sandboxId, deps, options);
 
     try {
@@ -131,10 +135,14 @@ export async function runConnectCommand(
       logger.verbose(`Launching startup mode '${mode}'.`);
       const launched = await deps.launchMode(handle, mode, {
         workingDirectory: bootstrapResult.workingDirectory,
-        startupEnv: {
-          ...bootstrapResult.startupEnv,
-          ...runtimeEnv
-        }
+        startupEnv: addWebServerPasswordForWebMode(
+          {
+            ...bootstrapResult.startupEnv,
+            ...runtimeEnv
+          },
+          resolvedMode,
+          webServerPassword
+        )
       });
 
       const activeRepo = bootstrapResult.selectedRepoNames.length === 1 ? bootstrapResult.selectedRepoNames[0] : undefined;
@@ -302,6 +310,32 @@ async function promptForSandboxTargetSelection(
   return {
     sandboxId: selected.sandboxId,
     label: selected.label === selected.sandboxId ? undefined : selected.label
+  };
+}
+
+function withoutOpenCodeServerPassword(envs: Record<string, string>): Record<string, string> {
+  const { [OPENCODE_SERVER_PASSWORD_ENV_VAR]: _ignored, ...rest } = envs;
+  return rest;
+}
+
+function resolveWebServerPassword(envSource: Record<string, string | undefined>): string | undefined {
+  const value = envSource[OPENCODE_SERVER_PASSWORD_ENV_VAR]?.trim();
+  return value ? value : undefined;
+}
+
+function addWebServerPasswordForWebMode(
+  startupEnv: Record<string, string>,
+  mode: "ssh-opencode" | "ssh-codex" | "web" | "ssh-shell",
+  webServerPassword: string | undefined
+): Record<string, string> {
+  const base = withoutOpenCodeServerPassword(startupEnv);
+  if (mode !== "web" || webServerPassword === undefined) {
+    return base;
+  }
+
+  return {
+    ...base,
+    [OPENCODE_SERVER_PASSWORD_ENV_VAR]: webServerPassword
   };
 }
 

@@ -3,6 +3,7 @@ import { existsSync } from "node:fs";
 import { chmod, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join, posix } from "node:path";
+import { setTimeout as sleep } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 import type { SandboxHandle } from "../e2b/lifecycle.js";
 import { logger } from "../logging/logger.js";
@@ -14,6 +15,8 @@ const SSH_USER_FALLBACK = "user";
 const SSHD_PORT_MIN = 20000;
 const SSHD_PORT_MAX = 45000;
 const PORT_ALLOCATION_ATTEMPTS = 96;
+const APT_LOCK_RETRY_ATTEMPTS = 24;
+const APT_LOCK_RETRY_DELAY_MS = 5_000;
 
 export interface SshBridgeSessionArtifacts {
   sessionDir: string;
@@ -54,10 +57,7 @@ const ENV_VAR_NAME_REGEX = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
 export async function prepareSshBridgeSession(handle: SandboxHandle): Promise<SshBridgeSession> {
   logger.verbose("SSH bridge: checking/installing dependencies.");
-  await handle.run(
-    "bash -lc 'command -v sshd >/dev/null 2>&1 && command -v websockify >/dev/null 2>&1 && command -v ssh-keygen >/dev/null 2>&1 || (sudo apt-get update && sudo apt-get install -y openssh-server websockify)'",
-    { timeoutMs: SSH_SETUP_TIMEOUT_MS }
-  );
+  await ensureSshBridgeDependencies(handle);
 
   const tempDir = await mkdtemp(join(tmpdir(), "ez-devbox-ssh-"));
   const privateKeyPath = join(tempDir, "id_ed25519");
@@ -156,6 +156,53 @@ export async function prepareSshBridgeSession(handle: SandboxHandle): Promise<Ss
     remoteUser,
     artifacts
   };
+}
+
+async function ensureSshBridgeDependencies(handle: Pick<SandboxHandle, "run">): Promise<void> {
+  if (await hasSshBridgeDependencies(handle)) {
+    return;
+  }
+
+  logger.verbose("SSH bridge: missing dependencies; installing openssh-server and websockify.");
+  const installCommand = "bash -lc 'sudo apt-get update && sudo apt-get install -y openssh-server websockify'";
+
+  for (let attempt = 1; attempt <= APT_LOCK_RETRY_ATTEMPTS; attempt += 1) {
+    try {
+      await handle.run(installCommand, { timeoutMs: SSH_SETUP_TIMEOUT_MS });
+      if (await hasSshBridgeDependencies(handle)) {
+        return;
+      }
+      throw new Error("SSH bridge dependencies remain unavailable after apt-get install.");
+    } catch (error) {
+      if (!isDpkgLockError(error) || attempt === APT_LOCK_RETRY_ATTEMPTS) {
+        throw error;
+      }
+
+      logger.verbose(
+        `SSH bridge: apt/dpkg lock detected while installing dependencies (attempt ${attempt}/${APT_LOCK_RETRY_ATTEMPTS}); retrying in ${APT_LOCK_RETRY_DELAY_MS}ms.`
+      );
+      await sleep(APT_LOCK_RETRY_DELAY_MS);
+    }
+  }
+}
+
+async function hasSshBridgeDependencies(handle: Pick<SandboxHandle, "run">): Promise<boolean> {
+  const result = await handle.run(
+    "bash -lc 'if command -v sshd >/dev/null 2>&1 && command -v websockify >/dev/null 2>&1 && command -v ssh-keygen >/dev/null 2>&1; then printf READY; else printf MISSING; fi'",
+    { timeoutMs: SSH_SHORT_TIMEOUT_MS }
+  );
+
+  return result.stdout.trim() === "READY";
+}
+
+function isDpkgLockError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return (
+    message.includes("Could not get lock /var/lib/dpkg/lock-frontend") ||
+    message.includes("Unable to acquire the dpkg frontend lock") ||
+    message.includes("Could not get lock /var/lib/apt/lists/lock") ||
+    message.includes("Unable to lock directory /var/lib/apt/lists")
+  );
 }
 
 export async function allocateSshBridgePorts(
