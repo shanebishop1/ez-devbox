@@ -188,7 +188,7 @@ async function ensureSshBridgeDependencies(handle: Pick<SandboxHandle, "run">): 
 
 async function hasSshBridgeDependencies(handle: Pick<SandboxHandle, "run">): Promise<boolean> {
   const result = await handle.run(
-    "bash -lc 'if command -v sshd >/dev/null 2>&1 && command -v websockify >/dev/null 2>&1 && command -v ssh-keygen >/dev/null 2>&1; then printf READY; else printf MISSING; fi'",
+    "bash -lc 'if [ -x /usr/sbin/sshd ] && command -v websockify >/dev/null 2>&1 && command -v ssh-keygen >/dev/null 2>&1; then printf READY; else printf MISSING; fi'",
     { timeoutMs: SSH_SHORT_TIMEOUT_MS }
   );
 
