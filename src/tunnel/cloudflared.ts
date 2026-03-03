@@ -1,23 +1,22 @@
-import { spawn, type ChildProcessByStdio } from "node:child_process";
-import type { Readable } from "node:stream";
 import type { ResolvedLauncherConfig } from "../config/schema.js";
 import { logger } from "../logging/logger.js";
+import { attachLogStream, formatRecentLogs } from "./cloudflared.parse.js";
+import { isSpawnEnoentError, stopCloudflaredProcess, stopTunnelSessions, toErrorMessage } from "./cloudflared.process.js";
+import {
+  getCloudflaredInstallHint,
+  resolveTunnelPorts,
+  resolveTunnelUpstreamUrl,
+  spawnDockerCloudflared,
+  spawnLocalCloudflared
+} from "./cloudflared.spawn.js";
+import type { CloudflaredProcess, CloudflaredTunnelSession } from "./cloudflared.types.js";
+
+export { CLOUDFLARED_DOCKER_FALLBACK_IMAGE } from "./cloudflared.spawn.js";
 
 const CLOUDFLARED_START_TIMEOUT_MS = 20_000;
 const CLOUDFLARED_DOCKER_START_TIMEOUT_MS = 60_000;
-const CLOUDFLARED_STOP_TIMEOUT_MS = 5_000;
-export const CLOUDFLARED_DOCKER_FALLBACK_IMAGE = "cloudflare/cloudflared:2024.11.0";
 const SIGNALS: NodeJS.Signals[] = ["SIGINT", "SIGTERM", "SIGHUP"];
-const URL_REGEX = /https:\/\/[a-z0-9.-]+/gi;
 const RATE_LIMIT_SNIPPETS = ["429 too many requests", "error code: 1015", "status_code=\"429"];
-
-interface CloudflaredTunnelSession {
-  port: number;
-  url: string;
-  stop: () => Promise<void>;
-}
-
-type CloudflaredProcess = ChildProcessByStdio<null, Readable, Readable>;
 
 export type WithConfiguredTunnel = <T>(
   config: Pick<ResolvedLauncherConfig, "tunnel">,
@@ -167,13 +166,6 @@ function buildRuntimeEnv(sessions: CloudflaredTunnelSession[]): Record<string, s
   return runtimeEnv;
 }
 
-async function stopTunnelSessions(sessions: CloudflaredTunnelSession[]): Promise<void> {
-  const sessionsInReverseOrder = [...sessions].reverse();
-  for (const session of sessionsInReverseOrder) {
-    await session.stop();
-  }
-}
-
 async function waitForTunnelUrl(
   processHandle: CloudflaredProcess,
   recentLogs: string[],
@@ -229,209 +221,4 @@ async function waitForTunnelUrl(
     attachLogStream(processHandle.stdout, recentLogs, finishWithUrl);
     attachLogStream(processHandle.stderr, recentLogs, finishWithUrl);
   });
-}
-
-function attachLogStream(
-  stream: NodeJS.ReadableStream | null,
-  recentLogs: string[],
-  onUrl: (url: string) => void
-): void {
-  if (!stream) {
-    return;
-  }
-
-  stream.setEncoding("utf8");
-  let buffer = "";
-
-  stream.on("data", (chunk: string) => {
-    buffer += chunk;
-    const lines = buffer.split(/\r?\n/);
-    buffer = lines.pop() ?? "";
-
-    for (const line of lines) {
-      pushRecentLog(recentLogs, line);
-      const url = extractTunnelUrl(line);
-      if (url) {
-        onUrl(url);
-      }
-    }
-  });
-}
-
-function pushRecentLog(recentLogs: string[], line: string): void {
-  const normalized = line.trim();
-  if (normalized === "") {
-    return;
-  }
-
-  recentLogs.push(normalized);
-  if (recentLogs.length > 20) {
-    recentLogs.shift();
-  }
-}
-
-function extractTunnelUrl(value: string): string | null {
-  const matches = value.match(URL_REGEX);
-  if (!matches) {
-    return null;
-  }
-
-  for (const candidate of matches) {
-    if (candidate.includes("localhost") || candidate.includes("127.0.0.1")) {
-      continue;
-    }
-
-    try {
-      const hostname = new URL(candidate).hostname.toLowerCase();
-      if (hostname === "trycloudflare.com" || hostname.endsWith(".trycloudflare.com")) {
-        return candidate;
-      }
-    } catch {
-      continue;
-    }
-  }
-
-  return null;
-}
-
-function formatRecentLogs(recentLogs: string[]): string {
-  if (recentLogs.length === 0) {
-    return "";
-  }
-
-  return ` Recent cloudflared logs: ${recentLogs.slice(-5).join(" | ")}`;
-}
-
-async function stopCloudflaredProcess(processHandle: CloudflaredProcess): Promise<void> {
-  if (processHandle.exitCode !== null) {
-    return;
-  }
-
-  processHandle.kill("SIGTERM");
-  const exitedGracefully = await waitForExit(processHandle, CLOUDFLARED_STOP_TIMEOUT_MS);
-  if (exitedGracefully) {
-    return;
-  }
-
-  processHandle.kill("SIGKILL");
-  await waitForExit(processHandle, CLOUDFLARED_STOP_TIMEOUT_MS);
-}
-
-async function waitForExit(processHandle: CloudflaredProcess, timeoutMs: number): Promise<boolean> {
-  if (processHandle.exitCode !== null) {
-    return true;
-  }
-
-  return new Promise((resolve) => {
-    const timeout = setTimeout(() => {
-      processHandle.off("exit", onExit);
-      resolve(false);
-    }, timeoutMs);
-
-    const onExit = (): void => {
-      clearTimeout(timeout);
-      resolve(true);
-    };
-
-    processHandle.once("exit", onExit);
-  });
-}
-
-function spawnLocalCloudflared(upstreamUrl: string): CloudflaredProcess {
-  return spawn("cloudflared", ["tunnel", "--no-autoupdate", "--url", upstreamUrl], {
-    stdio: ["ignore", "pipe", "pipe"]
-  });
-}
-
-function spawnDockerCloudflared(upstreamUrl: string): CloudflaredProcess {
-  const args = ["run", "--rm", "-i"];
-  if (process.platform === "linux") {
-    args.push("--add-host", "host.docker.internal:host-gateway");
-  }
-
-  const dockerReachableUrl = toDockerReachableUrl(upstreamUrl);
-
-  args.push(
-    CLOUDFLARED_DOCKER_FALLBACK_IMAGE,
-    "tunnel",
-    "--no-autoupdate",
-    "--url",
-    dockerReachableUrl
-  );
-
-  return spawn("docker", args, {
-    stdio: ["ignore", "pipe", "pipe"]
-  });
-}
-
-function resolveTunnelUpstreamUrl(port: number, targets?: Record<string, string>): string {
-  return targets?.[String(port)] ?? `http://127.0.0.1:${port}`;
-}
-
-function resolveTunnelPorts(ports: number[], targets?: Record<string, string>): number[] {
-  if (targets && Object.keys(targets).length > 0) {
-    return Object.keys(targets).map((port) => Number.parseInt(port, 10));
-  }
-
-  return ports;
-}
-
-function toDockerReachableUrl(upstreamUrl: string): string {
-  let parsed: URL;
-  try {
-    parsed = new URL(upstreamUrl);
-  } catch {
-    return upstreamUrl;
-  }
-
-  const hostname = parsed.hostname.toLowerCase();
-  if (
-    hostname !== "127.0.0.1" &&
-    hostname !== "localhost" &&
-    hostname !== "0.0.0.0" &&
-    hostname !== "::1" &&
-    hostname !== "[::1]"
-  ) {
-    return upstreamUrl;
-  }
-
-  parsed.hostname = "host.docker.internal";
-  return formatUrlWithoutDefaultSlash(parsed);
-}
-
-function formatUrlWithoutDefaultSlash(url: URL): string {
-  const hasDefaultPath = url.pathname === "/" && url.search === "" && url.hash === "";
-  if (!hasDefaultPath) {
-    return url.toString();
-  }
-
-  return `${url.protocol}//${url.host}`;
-}
-
-function isSpawnEnoentError(error: unknown, command: string): boolean {
-  return error instanceof Error && error.message.includes(`spawn ${command} ENOENT`);
-}
-
-function getCloudflaredInstallHint(platform: NodeJS.Platform = process.platform): string {
-  if (platform === "darwin") {
-    return "brew install cloudflared";
-  }
-
-  if (platform === "win32") {
-    return "winget install --id Cloudflare.cloudflared -e";
-  }
-
-  if (platform === "linux") {
-    return "see Cloudflare docs for your distro: https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/";
-  }
-
-  return "install cloudflared from https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/";
-}
-
-function toErrorMessage(error: unknown): string {
-  if (error instanceof Error && error.message.trim() !== "") {
-    return error.message;
-  }
-
-  return "unknown error";
 }
