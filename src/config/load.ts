@@ -60,9 +60,10 @@ export async function loadConfigWithMetadata(options: LoadConfigOptions = {}): P
 
   const rawConfig = await readTomlConfig(configPath);
   const parsedEnv = await readEnvFile(envPath);
+  const envSource = options.env ?? process.env;
   const mergedEnv = {
     ...parsedEnv,
-    ...process.env
+    ...envSource
   };
 
   const e2bApiKey = mergedEnv.E2B_API_KEY;
@@ -104,6 +105,12 @@ export async function loadConfigWithMetadata(options: LoadConfigOptions = {}): P
       active:
         getOptionalEnum(projectRaw, "active", "project.active", PROJECT_ACTIVE_MODES) ??
         defaultConfig.project.active,
+      active_name:
+        getOptionalString(projectRaw, "active_name", "project.active_name") ??
+        defaultConfig.project.active_name,
+      active_index:
+        getOptionalNumber(projectRaw, "active_index", "project.active_index") ??
+        defaultConfig.project.active_index,
       dir: getOptionalString(projectRaw, "dir", "project.dir") ?? defaultConfig.project.dir,
       working_dir:
         getOptionalString(projectRaw, "working_dir", "project.working_dir") ?? defaultConfig.project.working_dir,
@@ -152,6 +159,26 @@ export async function loadConfigWithMetadata(options: LoadConfigOptions = {}): P
 
   if (resolved.project.working_dir !== "auto" && resolved.project.working_dir.trim() === "") {
     throw new Error("Invalid project.working_dir: expected 'auto' or a non-empty path string.");
+  }
+
+  if (resolved.project.active === "name") {
+    const activeName = resolved.project.active_name?.trim();
+    if (!activeName) {
+      throw new Error("Invalid project.active_name: required when project.active is 'name'.");
+    }
+  }
+
+  if (resolved.project.active === "index") {
+    const activeIndex = resolved.project.active_index;
+    if (!Number.isInteger(activeIndex)) {
+      throw new Error("Invalid project.active_index: required integer when project.active is 'index'.");
+    }
+    const resolvedActiveIndex = activeIndex as number;
+    if (resolvedActiveIndex < 0 || resolvedActiveIndex >= resolved.project.repos.length) {
+      throw new Error(
+        `Invalid project.active_index: index ${resolvedActiveIndex.toString()} is out of range for ${resolved.project.repos.length} repos.`
+      );
+    }
   }
 
   if (resolved.gh.config_dir.trim() === "") {

@@ -14,6 +14,8 @@ export const defaultConfig: ResolvedLauncherConfig = {
   project: {
     mode: "single",
     active: "prompt",
+    active_name: undefined,
+    active_index: undefined,
     dir: "/home/user/projects/workspace",
     working_dir: "auto",
     setup_on_connect: false,

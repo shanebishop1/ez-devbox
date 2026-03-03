@@ -200,6 +200,177 @@ describe("loadConfig", () => {
     );
   });
 
+  it("uses options.env when provided even if process env is empty", async () => {
+    const configPath = join(tempDir, "launcher.config.toml");
+    const envPath = join(tempDir, ".env");
+
+    await writeFile(configPath, "[startup]\nmode = \"prompt\"\n");
+    await writeFile(envPath, "FIRECRAWL_API_KEY=secret\n");
+
+    const resolved = await loadConfig({
+      configPath,
+      envPath,
+      env: { E2B_API_KEY: "from-options-env" }
+    });
+
+    expect(resolved.startup.mode).toBe("prompt");
+  });
+
+  it("does not implicitly read process.env when options.env is provided", async () => {
+    const configPath = join(tempDir, "launcher.config.toml");
+    const envPath = join(tempDir, ".env");
+    process.env.E2B_API_KEY = "from-process-env";
+
+    await writeFile(configPath, "[startup]\nmode = \"prompt\"\n");
+    await writeFile(envPath, "FIRECRAWL_API_KEY=secret\n");
+
+    await expect(
+      loadConfig({
+        configPath,
+        envPath,
+        env: {}
+      })
+    ).rejects.toThrow("E2B_API_KEY");
+  });
+
+  it("uses injected options.env instead of process.env when provided", async () => {
+    const configPath = join(tempDir, "launcher.config.toml");
+    const envPath = join(tempDir, ".env");
+
+    process.env.E2B_API_KEY = "from-process";
+    await writeFile(configPath, "[startup]\nmode = \"prompt\"\n");
+    await writeFile(envPath, "FIRECRAWL_API_KEY=secret\n");
+
+    await expect(
+      loadConfig({
+        configPath,
+        envPath,
+        env: {}
+      })
+    ).rejects.toThrow("E2B_API_KEY");
+
+    await expect(
+      loadConfig({
+        configPath,
+        envPath,
+        env: {
+          E2B_API_KEY: "from-options"
+        }
+      })
+    ).resolves.toBeDefined();
+  });
+
+  it("applies E2B_API_KEY precedence as .env then options.env override", async () => {
+    const configPath = join(tempDir, "launcher.config.toml");
+    const envPath = join(tempDir, ".env");
+
+    await writeFile(configPath, "[startup]\nmode = \"prompt\"\n");
+    await writeFile(envPath, "E2B_API_KEY=from-dotenv\n");
+
+    await expect(
+      loadConfig({
+        configPath,
+        envPath,
+        env: {}
+      })
+    ).resolves.toBeDefined();
+
+    await expect(
+      loadConfig({
+        configPath,
+        envPath,
+        env: {
+          E2B_API_KEY: ""
+        }
+      })
+    ).rejects.toThrow("E2B_API_KEY");
+  });
+
+  it("accepts project.active_name when active mode is name", async () => {
+    const configPath = join(tempDir, "launcher.config.toml");
+    const envPath = join(tempDir, ".env");
+
+    await writeFile(
+      configPath,
+      [
+        "[project]",
+        'active = "name"',
+        'active_name = "beta"',
+        "",
+        "[[project.repos]]",
+        'name = "alpha"',
+        'url = "https://example.com/alpha.git"',
+        "",
+        "[[project.repos]]",
+        'name = "beta"',
+        'url = "https://example.com/beta.git"'
+      ].join("\n")
+    );
+    await writeFile(envPath, "E2B_API_KEY=test-e2b-key\n");
+
+    const resolved = await loadConfig({ configPath, envPath });
+    expect(resolved.project.active).toBe("name");
+    expect(resolved.project.active_name).toBe("beta");
+  });
+
+  it("rejects active=name when project.active_name is missing", async () => {
+    const configPath = join(tempDir, "launcher.config.toml");
+    const envPath = join(tempDir, ".env");
+
+    await writeFile(configPath, ['[project]', 'active = "name"'].join("\n"));
+    await writeFile(envPath, "E2B_API_KEY=test-e2b-key\n");
+
+    await expect(loadConfig({ configPath, envPath })).rejects.toThrow("project.active_name");
+  });
+
+  it("accepts project.active_index when active mode is index", async () => {
+    const configPath = join(tempDir, "launcher.config.toml");
+    const envPath = join(tempDir, ".env");
+
+    await writeFile(
+      configPath,
+      [
+        "[project]",
+        'active = "index"',
+        "active_index = 1",
+        "",
+        "[[project.repos]]",
+        'name = "alpha"',
+        'url = "https://example.com/alpha.git"',
+        "",
+        "[[project.repos]]",
+        'name = "beta"',
+        'url = "https://example.com/beta.git"'
+      ].join("\n")
+    );
+    await writeFile(envPath, "E2B_API_KEY=test-e2b-key\n");
+
+    const resolved = await loadConfig({ configPath, envPath });
+    expect(resolved.project.active).toBe("index");
+    expect(resolved.project.active_index).toBe(1);
+  });
+
+  it("rejects out-of-range project.active_index for active=index", async () => {
+    const configPath = join(tempDir, "launcher.config.toml");
+    const envPath = join(tempDir, ".env");
+
+    await writeFile(
+      configPath,
+      [
+        "[project]",
+        'active = "index"',
+        "active_index = 4",
+        "",
+        "[[project.repos]]",
+        'name = "alpha"',
+        'url = "https://example.com/alpha.git"'
+      ].join("\n")
+    );
+    await writeFile(envPath, "E2B_API_KEY=test-e2b-key\n");
+
+    await expect(loadConfig({ configPath, envPath })).rejects.toThrow("project.active_index");
+  });
+
   it("accepts tunnel.ports override", async () => {
     const configPath = join(tempDir, "launcher.config.toml");
     const envPath = join(tempDir, ".env");

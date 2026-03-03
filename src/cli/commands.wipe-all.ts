@@ -69,9 +69,21 @@ export async function runWipeAllCommand(args: string[], deps: WipeAllCommandDeps
 }
 
 function parseWipeAllArgs(args: string[]): { yes: boolean } {
-  return {
-    yes: args.includes("--yes")
-  };
+  let yes = false;
+
+  for (const token of args) {
+    if (token === "--yes") {
+      yes = true;
+      continue;
+    }
+
+    if (token.startsWith("--")) {
+      throw new Error(`Unknown option for wipe-all: '${token}'. Use --help for usage.`);
+    }
+    throw new Error(`Unexpected positional argument for wipe-all: '${token}'. Use --help for usage.`);
+  }
+
+  return { yes };
 }
 
 async function promptInput(question: string): Promise<string> {

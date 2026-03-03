@@ -4,6 +4,7 @@ import { normalizePromptCancelledError } from "./prompt-cancelled.js";
 import { formatPromptChoice, formatPromptHeader } from "./prompt-style.js";
 
 const PROMPT_FALLBACK_MODE: Exclude<StartupMode, "prompt"> = "ssh-opencode";
+const PROMPT_MAX_ATTEMPTS = 3;
 const PROMPT_CHOICE_NUMBERS: Record<string, Exclude<StartupMode, "prompt">> = {
   "1": "ssh-opencode",
   "2": "ssh-codex",
@@ -42,14 +43,18 @@ export async function resolvePromptStartupMode(
     formatPromptChoice(4, "ssh-shell"),
     `Enter choice [1/${PROMPT_FALLBACK_MODE}]: `
   ].join("\n");
-  const answer = (await deps.promptInput(question)).trim().toLowerCase();
-  const resolved = resolvePromptAnswer(answer);
+  for (let attempt = 0; attempt < PROMPT_MAX_ATTEMPTS; attempt += 1) {
+    const answer = (await deps.promptInput(question)).trim().toLowerCase();
+    const resolved = resolvePromptAnswer(answer);
 
-  if (resolved) {
-    return resolved;
+    if (resolved) {
+      return resolved;
+    }
   }
 
-  return PROMPT_FALLBACK_MODE;
+  throw new Error(
+    `Invalid startup mode selection after ${PROMPT_MAX_ATTEMPTS} attempts. Expected one of ssh-opencode|ssh-codex|web|ssh-shell.`
+  );
 }
 
 function isConcreteStartupMode(value: string): value is Exclude<StartupMode, "prompt"> {

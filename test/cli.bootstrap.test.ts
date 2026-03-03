@@ -44,6 +44,10 @@ describe("CLI bootstrap routing", () => {
     expect(parsed.args).toEqual(["connect", "--sandbox-id", "sbx-1"]);
   });
 
+  it("rejects unknown global options before the command", () => {
+    expect(() => parseGlobalCliOptions(["--bad-flag", "list"])).toThrow("Unknown global option: --bad-flag");
+  });
+
   it("extracts global --verbose after -- for non-command commands", () => {
     const parsed = parseGlobalCliOptions(["create", "--", "--verbose"]);
 

@@ -2,6 +2,14 @@ import { describe, expect, it, vi } from "vitest";
 import { runListCommand } from "../src/cli/commands.list.js";
 
 describe("runListCommand", () => {
+  it("rejects unexpected arguments with help guidance", async () => {
+    await expect(
+      runListCommand(["--bad"], {
+        listSandboxes: vi.fn().mockResolvedValue([])
+      })
+    ).rejects.toThrow("Unknown option for list: '--bad'. Use --help for usage.");
+  });
+
   it("formats numbered sandbox lines with labels and state", async () => {
     const result = await runListCommand([], {
       listSandboxes: vi.fn().mockResolvedValue([
