@@ -1,8 +1,8 @@
-import { createInterface } from "node:readline/promises";
 import { killSandbox, listSandboxes, type LifecycleOperationOptions, type ListSandboxesOptions, type SandboxListItem } from "../e2b/lifecycle.js";
 import type { CommandResult } from "../types/index.js";
 import { clearLastRunState, loadLastRunState, type LastRunState } from "../state/lastRun.js";
 import { formatSandboxDisplayLabel } from "./sandbox-display-name.js";
+import { promptWithReadline } from "./readline-prompt.js";
 
 export interface WipeAllCommandDeps {
   listSandboxes: (options?: ListSandboxesOptions) => Promise<SandboxListItem[]>;
@@ -87,14 +87,5 @@ function parseWipeAllArgs(args: string[]): { yes: boolean } {
 }
 
 async function promptInput(question: string): Promise<string> {
-  const readline = createInterface({
-    input: process.stdin,
-    output: process.stdout
-  });
-
-  try {
-    return await readline.question(question);
-  } finally {
-    readline.close();
-  }
+  return promptWithReadline(question);
 }
