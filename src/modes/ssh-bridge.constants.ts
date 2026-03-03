@@ -1,0 +1,10 @@
+export const SSH_SETUP_TIMEOUT_MS = 8 * 60 * 1000;
+export const SSH_SHORT_TIMEOUT_MS = 15_000;
+export const SSH_HOST = "e2b-sandbox";
+export const SSH_USER_FALLBACK = "user";
+export const SSHD_PORT_MIN = 20000;
+export const SSHD_PORT_MAX = 45000;
+export const PORT_ALLOCATION_ATTEMPTS = 96;
+export const APT_LOCK_RETRY_ATTEMPTS = 24;
+export const APT_LOCK_RETRY_DELAY_MS = 5_000;
+export const ENV_VAR_NAME_REGEX = /^[A-Za-z_][A-Za-z0-9_]*$/;
