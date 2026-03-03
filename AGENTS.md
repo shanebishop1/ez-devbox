@@ -2,6 +2,19 @@
 
 Guidance for coding agents working in this repository (`ez-devbox`, a TypeScript CLI for E2B sandboxes).
 
+- Use Beads Rust (br) for multi-step implementation work; skip Beads for one-off tasks and planning/documentation-only work.
+## Beads Rust Usage
+
+Use `br` for multi-step implementation tracking.
+`bd` commands are forbidden in this repo.
+
+### Task Context (Required before starting)
+
+- `br show <task-id>`
+- `br dep tree <task-id>`
+- `br comments <task-id>`
+
+
 ## Purpose
 
 - Keep changes small, typed, and test-backed.

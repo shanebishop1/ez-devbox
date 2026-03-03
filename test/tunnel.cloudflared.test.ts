@@ -166,6 +166,150 @@ describe("withConfiguredTunnel", () => {
     expect(first.kill).toHaveBeenCalledWith("SIGTERM");
     expect(second.kill).toHaveBeenCalledWith("SIGTERM");
   });
+
+  it("uses tunnel.targets upstream URL for configured port", async () => {
+    const child = createMockCloudflaredProcess();
+    spawnMock.mockReturnValue(child);
+
+    queueMicrotask(() => {
+      child.stderr.write("INF | Tunnel URL https://remote.trycloudflare.com\n");
+    });
+
+    await withConfiguredTunnel(
+      {
+        tunnel: {
+          ports: [3002],
+          targets: {
+            "3002": "http://10.0.0.20:3002"
+          }
+        }
+      },
+      async () => undefined
+    );
+
+    expect(spawnMock).toHaveBeenCalledWith(
+      "cloudflared",
+      ["tunnel", "--no-autoupdate", "--url", "http://10.0.0.20:3002"],
+      { stdio: ["ignore", "pipe", "pipe"] }
+    );
+  });
+
+  it("rewrites localhost tunnel target when using Docker fallback", async () => {
+    const missingBinary = createMockCloudflaredProcess();
+    const dockerChild = createMockCloudflaredProcess();
+    spawnMock.mockReturnValueOnce(missingBinary).mockReturnValueOnce(dockerChild);
+
+    queueMicrotask(() => {
+      missingBinary.emitError(new Error("spawn cloudflared ENOENT"));
+      dockerChild.stderr.write("INF | Tunnel URL https://docker.trycloudflare.com\n");
+    });
+
+    await withConfiguredTunnel(
+      {
+        tunnel: {
+          ports: [3002],
+          targets: {
+            "3002": "http://127.0.0.1:3002"
+          }
+        }
+      },
+      async () => undefined
+    );
+
+    expect(spawnMock).toHaveBeenNthCalledWith(
+      2,
+      "docker",
+      expect.arrayContaining([
+        "run",
+        "--rm",
+        "-i",
+        CLOUDFLARED_DOCKER_FALLBACK_IMAGE,
+        "tunnel",
+        "--no-autoupdate",
+        "--url",
+        "http://host.docker.internal:3002"
+      ]),
+      { stdio: ["ignore", "pipe", "pipe"] }
+    );
+  });
+
+  it("keeps remote tunnel target URL unchanged when using Docker fallback", async () => {
+    const missingBinary = createMockCloudflaredProcess();
+    const dockerChild = createMockCloudflaredProcess();
+    spawnMock.mockReturnValueOnce(missingBinary).mockReturnValueOnce(dockerChild);
+
+    queueMicrotask(() => {
+      missingBinary.emitError(new Error("spawn cloudflared ENOENT"));
+      dockerChild.stderr.write("INF | Tunnel URL https://docker.trycloudflare.com\n");
+    });
+
+    await withConfiguredTunnel(
+      {
+        tunnel: {
+          ports: [3002],
+          targets: {
+            "3002": "http://10.0.0.20:3002"
+          }
+        }
+      },
+      async () => undefined
+    );
+
+    expect(spawnMock).toHaveBeenNthCalledWith(
+      2,
+      "docker",
+      expect.arrayContaining([
+        "run",
+        "--rm",
+        "-i",
+        CLOUDFLARED_DOCKER_FALLBACK_IMAGE,
+        "tunnel",
+        "--no-autoupdate",
+        "--url",
+        "http://10.0.0.20:3002"
+      ]),
+      { stdio: ["ignore", "pipe", "pipe"] }
+    );
+  });
+
+  it("rewrites IPv6 localhost tunnel target when using Docker fallback", async () => {
+    const missingBinary = createMockCloudflaredProcess();
+    const dockerChild = createMockCloudflaredProcess();
+    spawnMock.mockReturnValueOnce(missingBinary).mockReturnValueOnce(dockerChild);
+
+    queueMicrotask(() => {
+      missingBinary.emitError(new Error("spawn cloudflared ENOENT"));
+      dockerChild.stderr.write("INF | Tunnel URL https://docker.trycloudflare.com\n");
+    });
+
+    await withConfiguredTunnel(
+      {
+        tunnel: {
+          ports: [3002],
+          targets: {
+            "3002": "http://[::1]:3002"
+          }
+        }
+      },
+      async () => undefined
+    );
+
+    expect(spawnMock).toHaveBeenNthCalledWith(
+      2,
+      "docker",
+      expect.arrayContaining([
+        "run",
+        "--rm",
+        "-i",
+        CLOUDFLARED_DOCKER_FALLBACK_IMAGE,
+        "tunnel",
+        "--no-autoupdate",
+        "--url",
+        "http://host.docker.internal:3002"
+      ]),
+      { stdio: ["ignore", "pipe", "pipe"] }
+    );
+  });
 });
 
 function createMockCloudflaredProcess(): {

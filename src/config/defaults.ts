@@ -37,6 +37,8 @@ export const defaultConfig: ResolvedLauncherConfig = {
     config_dir: "~/.config/gh"
   },
   tunnel: {
-    ports: []
+    ports: [],
+    allow_remote_targets: false,
+    targets: {}
   }
 };

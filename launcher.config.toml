@@ -42,7 +42,7 @@ url = "https://github.com/shanebishop1/ez-devbox.git"
 # Branch checked out after clone/connect (defaults to main when omitted).
 branch = "main"
 # Primary setup command run in repo directory.
-setup_command = "./scripts/bootstrap-dev.sh"
+setup_command = "npm install"
 # Extra env vars injected for setup commands (string values only).
 setup_env = {}
 # Extra env vars injected only when exactly one repo is selected at launch time.
@@ -113,3 +113,9 @@ config_dir = "~/.config/gh"
 # - EZ_DEVBOX_TUNNEL_PORTS (comma-separated ports)
 # - EZ_DEVBOX_TUNNEL_URL (only when exactly one port is configured)
 ports = [3002]
+# Security: remote (non-localhost) targets require explicit opt-in.
+allow_remote_targets = true
+
+[tunnel.targets]
+# Optional per-port upstream override. This allows tunneling services not running on this VM.
+"3002" = "http://10.0.0.20:3002"
