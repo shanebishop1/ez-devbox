@@ -1,5 +1,4 @@
 import { posix } from "node:path";
-import { createInterface } from "node:readline/promises";
 import { loadConfig, loadConfigWithMetadata, type LoadConfigOptions } from "../config/load.js";
 import { connectSandbox, listSandboxes, type LifecycleOperationOptions, type ListSandboxesOptions, type SandboxHandle, type SandboxListItem } from "../e2b/lifecycle.js";
 import { resolveSandboxCreateEnv, type SandboxCreateEnvResolution } from "../e2b/env.js";
@@ -11,6 +10,7 @@ import { formatPromptChoice } from "./prompt-style.js";
 import { loadCliEnvSource } from "./env-source.js";
 import { logger } from "../logging/logger.js";
 import { selectReposForProvisioning } from "../repo/selection.js";
+import { promptWithReadline } from "./readline-prompt.js";
 
 const OPENCODE_SERVER_PASSWORD_ENV_VAR = "OPENCODE_SERVER_PASSWORD";
 
@@ -318,14 +318,5 @@ function resolveCommandWorkingDirectory(
 }
 
 async function promptInput(question: string): Promise<string> {
-  const readline = createInterface({
-    input: process.stdin,
-    output: process.stdout
-  });
-
-  try {
-    return await readline.question(question);
-  } finally {
-    readline.close();
-  }
+  return promptWithReadline(question);
 }

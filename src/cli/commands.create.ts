@@ -23,9 +23,16 @@ import {
   type ToolingSyncSummary
 } from "../tooling/host-sandbox-sync.js";
 import { loadCliEnvSource } from "./env-source.js";
+import {
+  addWebServerPasswordForWebMode,
+  formatSelectedReposSummary,
+  formatSetupOutcomeSummary,
+  parseStartupModeValue,
+  removeOpenCodeServerPassword,
+  resolveWebServerPassword
+} from "./command-shared.js";
 
 const TOOLING_SYNC_PROGRESS_LOG_INTERVAL = 50;
-const OPENCODE_SERVER_PASSWORD_ENV_VAR = "OPENCODE_SERVER_PASSWORD";
 
 export interface CreateCommandDeps {
   loadConfig: (options?: LoadConfigOptions) => ReturnType<typeof loadConfig>;
@@ -107,7 +114,7 @@ export async function runCreateCommand(args: string[], deps: CreateCommandDeps =
     const envSource = await deps.resolveEnvSource();
     const envResolution = deps.resolveSandboxCreateEnv(config, envSource);
     const ghRuntimeEnv = await resolveGhRuntimeEnv(config, envSource, deps.resolveHostGhToken);
-    const runtimeEnv = withoutOpenCodeServerPassword({
+    const runtimeEnv = removeOpenCodeServerPassword({
       ...envResolution.envs,
       ...tunnelRuntimeEnv,
       ...ghRuntimeEnv
@@ -267,21 +274,6 @@ async function resolveGhRuntimeEnv(
   };
 }
 
-function formatSelectedReposSummary(selectedRepoNames: string[]): string {
-  if (selectedRepoNames.length === 0) {
-    return "none";
-  }
-  return selectedRepoNames.join(", ");
-}
-
-function formatSetupOutcomeSummary(setup: BootstrapProjectWorkspaceResult["setup"]): string {
-  if (setup === null) {
-    return "skipped";
-  }
-
-  return `ran success=${setup.success} repos=${setup.repos.length}`;
-}
-
 export async function syncToolingForMode(
   config: Awaited<ReturnType<typeof loadConfig>>,
   sandbox: Pick<SandboxHandle, "writeFile">,
@@ -412,32 +404,6 @@ function toErrorMessage(error: unknown): string {
   return "unknown error";
 }
 
-function withoutOpenCodeServerPassword(envs: Record<string, string>): Record<string, string> {
-  const { [OPENCODE_SERVER_PASSWORD_ENV_VAR]: _ignored, ...rest } = envs;
-  return rest;
-}
-
-function resolveWebServerPassword(envSource: Record<string, string | undefined>): string | undefined {
-  const value = envSource[OPENCODE_SERVER_PASSWORD_ENV_VAR]?.trim();
-  return value ? value : undefined;
-}
-
-function addWebServerPasswordForWebMode(
-  startupEnv: Record<string, string>,
-  mode: "ssh-opencode" | "ssh-codex" | "web" | "ssh-shell",
-  webServerPassword: string | undefined
-): Record<string, string> {
-  const base = withoutOpenCodeServerPassword(startupEnv);
-  if (mode !== "web" || webServerPassword === undefined) {
-    return base;
-  }
-
-  return {
-    ...base,
-    [OPENCODE_SERVER_PASSWORD_ENV_VAR]: webServerPassword
-  };
-}
-
 function parseCreateArgs(args: string[]): { mode?: StartupMode; json: boolean } {
   let mode: StartupMode | undefined;
   let json = false;
@@ -447,11 +413,7 @@ function parseCreateArgs(args: string[]): { mode?: StartupMode; json: boolean } 
 
     if (token === "--mode") {
       const next = args[index + 1];
-      if (!isStartupMode(next)) {
-        throw new Error("Invalid value for --mode. Expected one of prompt|ssh-opencode|ssh-codex|web|ssh-shell.");
-      }
-
-      mode = next;
+      mode = parseStartupModeValue(next);
       index += 1;
       continue;
     }
@@ -472,8 +434,4 @@ function parseCreateArgs(args: string[]): { mode?: StartupMode; json: boolean } 
   }
 
   return { mode, json };
-}
-
-function isStartupMode(value: string | undefined): value is StartupMode {
-  return value === "prompt" || value === "ssh-opencode" || value === "ssh-codex" || value === "web" || value === "ssh-shell";
 }
