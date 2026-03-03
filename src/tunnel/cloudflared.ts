@@ -46,8 +46,6 @@ export async function withConfiguredTunnel<T>(
   }
 
   const runtimeEnv = buildRuntimeEnv(sessions);
-  const previousEnv = captureExistingEnv(runtimeEnv);
-  applyRuntimeEnv(runtimeEnv);
 
   let cleanedUp = false;
   const cleanup = async (): Promise<void> => {
@@ -58,7 +56,6 @@ export async function withConfiguredTunnel<T>(
     cleanedUp = true;
     removeSignalHandlers();
     await stopTunnelSessions(sessions);
-    restoreRuntimeEnv(previousEnv);
   };
 
   const signalHandlers = new Map<NodeJS.Signals, () => void>();
@@ -168,27 +165,6 @@ function buildRuntimeEnv(sessions: CloudflaredTunnelSession[]): Record<string, s
   }
 
   return runtimeEnv;
-}
-
-function captureExistingEnv(runtimeEnv: Record<string, string>): Record<string, string | undefined> {
-  const previousEnv: Record<string, string | undefined> = {};
-  for (const key of Object.keys(runtimeEnv)) {
-    previousEnv[key] = process.env[key];
-  }
-
-  return previousEnv;
-}
-
-function applyRuntimeEnv(runtimeEnv: Record<string, string>): void {
-  for (const [key, value] of Object.entries(runtimeEnv)) {
-    process.env[key] = value;
-  }
-}
-
-function restoreRuntimeEnv(previousEnv: Record<string, string | undefined>): void {
-  for (const [key, value] of Object.entries(previousEnv)) {
-    restoreProcessEnv(key, value);
-  }
 }
 
 async function stopTunnelSessions(sessions: CloudflaredTunnelSession[]): Promise<void> {
@@ -458,13 +434,4 @@ function toErrorMessage(error: unknown): string {
   }
 
   return "unknown error";
-}
-
-function restoreProcessEnv(key: string, value: string | undefined): void {
-  if (value === undefined) {
-    delete process.env[key];
-    return;
-  }
-
-  process.env[key] = value;
 }

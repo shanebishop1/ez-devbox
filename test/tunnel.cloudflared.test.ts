@@ -35,6 +35,8 @@ describe("withConfiguredTunnel", () => {
   it("starts and stops cloudflared around operation", async () => {
     const child = createMockCloudflaredProcess();
     spawnMock.mockReturnValue(child);
+    process.env.EZ_DEVBOX_TUNNEL_3002_URL = "original";
+    process.env.EZ_DEVBOX_TUNNEL_URL = "original-single";
 
     queueMicrotask(() => {
       child.stderr.write("INF | Your quick Tunnel has been created! Visit https://demo.trycloudflare.com\n");
@@ -47,8 +49,8 @@ describe("withConfiguredTunnel", () => {
         EZ_DEVBOX_TUNNEL_PORTS: "3002",
         EZ_DEVBOX_TUNNEL_URL: "https://demo.trycloudflare.com"
       });
-      expect(process.env.EZ_DEVBOX_TUNNEL_3002_URL).toBe("https://demo.trycloudflare.com");
-      expect(process.env.EZ_DEVBOX_TUNNEL_URL).toBe("https://demo.trycloudflare.com");
+      expect(process.env.EZ_DEVBOX_TUNNEL_3002_URL).toBe("original");
+      expect(process.env.EZ_DEVBOX_TUNNEL_URL).toBe("original-single");
       return "done";
     });
 
@@ -59,10 +61,10 @@ describe("withConfiguredTunnel", () => {
       { stdio: ["ignore", "pipe", "pipe"] }
     );
     expect(child.kill).toHaveBeenCalledWith("SIGTERM");
-    expect(process.env.EZ_DEVBOX_TUNNEL_3002_URL).toBeUndefined();
+    expect(process.env.EZ_DEVBOX_TUNNEL_3002_URL).toBe("original");
     expect(process.env.EZ_DEVBOX_TUNNELS_JSON).toBeUndefined();
     expect(process.env.EZ_DEVBOX_TUNNEL_PORTS).toBeUndefined();
-    expect(process.env.EZ_DEVBOX_TUNNEL_URL).toBeUndefined();
+    expect(process.env.EZ_DEVBOX_TUNNEL_URL).toBe("original-single");
   });
 
   it("falls back to Docker when cloudflared binary is missing", async () => {

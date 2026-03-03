@@ -297,20 +297,21 @@ async function runSyncUnit(
       return;
     }
 
-    const isCompletion = progress.filesWritten === progress.filesDiscovered;
+    const processedCount = progress.filesWritten + progress.filesUnchanged;
+    const isCompletion = processedCount === progress.filesDiscovered;
     const reachedInterval = progress.filesWritten - lastLoggedCount >= TOOLING_SYNC_PROGRESS_LOG_INTERVAL;
     if (!isCompletion && !reachedInterval) {
       return;
     }
 
     lastLoggedCount = progress.filesWritten;
-    logger.verbose(`Tooling sync progress: ${label} ${progress.filesWritten}/${progress.filesDiscovered}`);
+    logger.verbose(`Tooling sync progress: ${label} ${processedCount}/${progress.filesDiscovered} (written=${progress.filesWritten}, unchanged=${progress.filesUnchanged})`);
   };
 
   logger.verbose(`Tooling sync start: ${label}.`);
   const summary = await syncUnit(onProgress);
   logger.verbose(
-    `Tooling sync done: ${label} discovered=${summary.filesDiscovered}, written=${summary.filesWritten}, skippedMissing=${summary.skippedMissing}.`
+    `Tooling sync done: ${label} discovered=${summary.filesDiscovered}, written=${summary.filesWritten}, unchanged=${summary.filesUnchanged}, skippedMissing=${summary.skippedMissing}.`
   );
   return summary;
 }
@@ -330,6 +331,8 @@ function summarizeToolingSync(
   return {
     totalDiscovered: summaries.reduce((total, item) => total + item.filesDiscovered, 0),
     totalWritten: summaries.reduce((total, item) => total + item.filesWritten, 0),
+    totalUnchanged: summaries.reduce((total, item) => total + item.filesUnchanged, 0),
+    totalMissingPaths: summaries.reduce((total, item) => total + Number(item.skippedMissing), 0),
     skippedMissingPaths: summaries.reduce((total, item) => total + Number(item.skippedMissing), 0),
     opencodeConfigSynced: opencodeConfig !== null && !opencodeConfig.skippedMissing,
     opencodeAuthSynced: opencodeAuth !== null && !opencodeAuth.skippedMissing,
@@ -344,7 +347,7 @@ function formatToolingSyncSummary(summary: ToolingSyncSummary): string {
   const opencodeSynced = summary.opencodeConfigSynced || summary.opencodeAuthSynced;
   const codexSynced = summary.codexConfigSynced || summary.codexAuthSynced;
   const ghSynced = summary.ghEnabled && summary.ghConfigSynced;
-  return `discovered=${summary.totalDiscovered}, written=${summary.totalWritten}, missingPaths=${summary.skippedMissingPaths}, opencodeSynced=${opencodeSynced}, codexSynced=${codexSynced}, ghSynced=${ghSynced}`;
+  return `discovered=${summary.totalDiscovered}, written=${summary.totalWritten}, unchanged=${summary.totalUnchanged}, missingPaths=${summary.totalMissingPaths}, opencodeSynced=${opencodeSynced}, codexSynced=${codexSynced}, ghSynced=${ghSynced}`;
 }
 
 function formatEnvVarNames(envs: Record<string, string>): string {

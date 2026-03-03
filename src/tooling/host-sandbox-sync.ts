@@ -1,6 +1,7 @@
 import { readdir, readFile, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { basename, isAbsolute, join, posix, relative, resolve, sep } from "node:path";
+import { createHash } from "node:crypto";
 import type { ResolvedLauncherConfig } from "../config/schema.js";
 import type { SandboxHandle } from "../e2b/lifecycle.js";
 
@@ -41,10 +42,12 @@ export interface PathSyncSummary {
   skippedMissing: boolean;
   filesDiscovered: number;
   filesWritten: number;
+  filesUnchanged: number;
 }
 
 export interface DirectorySyncProgress {
   filesWritten: number;
+  filesUnchanged: number;
   filesDiscovered: number;
 }
 
@@ -59,6 +62,8 @@ interface DirectorySyncOptions extends HostToSandboxSyncOptions {
 export interface ToolingSyncSummary {
   totalDiscovered: number;
   totalWritten: number;
+  totalUnchanged: number;
+  totalMissingPaths: number;
   skippedMissingPaths: number;
   opencodeConfigSynced: boolean;
   opencodeAuthSynced: boolean;
@@ -69,6 +74,9 @@ export interface ToolingSyncSummary {
 }
 
 type ToolingSyncConfig = Pick<ResolvedLauncherConfig, "opencode" | "codex" | "gh">;
+type SandboxWritableHandle = Pick<SandboxHandle, "writeFile">;
+
+const SANDBOX_SYNC_CACHE = new WeakMap<SandboxWritableHandle, Map<string, string>>();
 
 export function resolveHostPath(inputPath: string, options: HostPathResolveOptions = {}): string {
   const homeDir = options.homeDir ?? process.env.HOME ?? homedir();
@@ -136,7 +144,7 @@ export async function syncGhConfigDir(
 
 export async function syncToolingToSandbox(
   config: ToolingSyncConfig,
-  sandbox: Pick<SandboxHandle, "writeFile">,
+  sandbox: SandboxWritableHandle,
   options?: HostToSandboxSyncOptions
 ): Promise<ToolingSyncSummary> {
   const opencodeConfig = await syncOpenCodeConfigDir(config, sandbox, options);
@@ -151,6 +159,8 @@ export async function syncToolingToSandbox(
   return {
     totalDiscovered: summaries.reduce((total, item) => total + item.filesDiscovered, 0),
     totalWritten: summaries.reduce((total, item) => total + item.filesWritten, 0),
+    totalUnchanged: summaries.reduce((total, item) => total + item.filesUnchanged, 0),
+    totalMissingPaths: summaries.reduce((total, item) => total + Number(item.skippedMissing), 0),
     skippedMissingPaths: summaries.reduce((total, item) => total + Number(item.skippedMissing), 0),
     opencodeConfigSynced: !opencodeConfig.skippedMissing,
     opencodeAuthSynced: !opencodeAuth.skippedMissing,
@@ -164,40 +174,56 @@ export async function syncToolingToSandbox(
 async function syncDirectory(
   localDirectoryPath: string,
   sandboxDirectoryPath: string,
-  sandbox: Pick<SandboxHandle, "writeFile">,
+  sandbox: SandboxWritableHandle,
   options?: DirectorySyncOptions
 ): Promise<PathSyncSummary> {
   const resolvedLocalDirectoryPath = resolveHostPath(localDirectoryPath, options);
+  const syncState = getSandboxSyncState(sandbox);
   if (!(await pathExists(resolvedLocalDirectoryPath))) {
+    pruneSandboxPrefix(syncState, ensureDirectoryPrefix(sandboxDirectoryPath), new Set());
     return {
       skippedMissing: true,
       filesDiscovered: 0,
-      filesWritten: 0
+      filesWritten: 0,
+      filesUnchanged: 0
     };
   }
 
   const discoveredFiles = await discoverDirectoryFiles(resolvedLocalDirectoryPath);
   const files = discoveredFiles.filter((filePath) => !shouldSkipSyncFile(filePath, options));
   let filesWritten = 0;
+  let filesUnchanged = 0;
+  const syncedPaths = new Set<string>();
   for (const absoluteFilePath of files) {
     const fileContent = await readFile(absoluteFilePath);
     const relativePath = relative(resolvedLocalDirectoryPath, absoluteFilePath).split(sep).join(posix.sep);
     const sandboxPath = posix.join(sandboxDirectoryPath, relativePath);
-    await sandbox.writeFile(sandboxPath, toArrayBuffer(fileContent));
-    filesWritten += 1;
+    syncedPaths.add(sandboxPath);
+    const fileDigest = digestBuffer(fileContent);
+    const previousDigest = syncState.get(sandboxPath);
+    if (previousDigest === fileDigest) {
+      filesUnchanged += 1;
+    } else {
+      await sandbox.writeFile(sandboxPath, toArrayBuffer(fileContent));
+      syncState.set(sandboxPath, fileDigest);
+      filesWritten += 1;
+    }
 
     if (options?.onProgress) {
       await options.onProgress({
         filesWritten,
+        filesUnchanged,
         filesDiscovered: files.length
       });
     }
   }
+  pruneSandboxPrefix(syncState, ensureDirectoryPrefix(sandboxDirectoryPath), syncedPaths);
 
   return {
     skippedMissing: false,
     filesDiscovered: files.length,
-    filesWritten
+    filesWritten,
+    filesUnchanged
   };
 }
 
@@ -212,25 +238,39 @@ function shouldSkipSyncFile(filePath: string, options?: DirectorySyncOptions): b
 async function syncFile(
   localFilePath: string,
   sandboxFilePath: string,
-  sandbox: Pick<SandboxHandle, "writeFile">,
+  sandbox: SandboxWritableHandle,
   options?: HostToSandboxSyncOptions
 ): Promise<PathSyncSummary> {
   const resolvedLocalFilePath = resolveHostPath(localFilePath, options);
+  const syncState = getSandboxSyncState(sandbox);
   if (!(await pathExists(resolvedLocalFilePath))) {
+    syncState.delete(sandboxFilePath);
     return {
       skippedMissing: true,
       filesDiscovered: 0,
-      filesWritten: 0
+      filesWritten: 0,
+      filesUnchanged: 0
     };
   }
 
   const content = await readFile(resolvedLocalFilePath);
-  await sandbox.writeFile(sandboxFilePath, toArrayBuffer(content));
+  const fileDigest = digestBuffer(content);
+  const previousDigest = syncState.get(sandboxFilePath);
+  let filesWritten = 0;
+  let filesUnchanged = 0;
+  if (previousDigest === fileDigest) {
+    filesUnchanged = 1;
+  } else {
+    await sandbox.writeFile(sandboxFilePath, toArrayBuffer(content));
+    syncState.set(sandboxFilePath, fileDigest);
+    filesWritten = 1;
+  }
 
   return {
     skippedMissing: false,
     filesDiscovered: 1,
-    filesWritten: 1
+    filesWritten,
+    filesUnchanged
   };
 }
 
@@ -295,6 +335,37 @@ function shouldSkipFileEntry(name: string): boolean {
 
 function toArrayBuffer(data: Uint8Array): ArrayBuffer {
   return Uint8Array.from(data).buffer;
+}
+
+function digestBuffer(data: Uint8Array): string {
+  return createHash("sha256").update(data).digest("hex");
+}
+
+function getSandboxSyncState(sandbox: SandboxWritableHandle): Map<string, string> {
+  const existing = SANDBOX_SYNC_CACHE.get(sandbox);
+  if (existing) {
+    return existing;
+  }
+
+  const created = new Map<string, string>();
+  SANDBOX_SYNC_CACHE.set(sandbox, created);
+  return created;
+}
+
+function ensureDirectoryPrefix(path: string): string {
+  return path.endsWith("/") ? path : `${path}/`;
+}
+
+function pruneSandboxPrefix(
+  syncState: Map<string, string>,
+  prefix: string,
+  currentPaths: ReadonlySet<string>
+): void {
+  for (const key of syncState.keys()) {
+    if (key.startsWith(prefix) && !currentPaths.has(key)) {
+      syncState.delete(key);
+    }
+  }
 }
 
 function isNodeError(error: unknown): error is NodeJS.ErrnoException {
