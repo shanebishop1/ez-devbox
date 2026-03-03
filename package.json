@@ -28,6 +28,8 @@
     "command": "tsx src/cli/index.ts command",
     "wipe": "tsx src/cli/index.ts wipe",
     "wipe-all": "tsx src/cli/index.ts wipe-all",
+    "check:complexity": "node scripts/check-complexity.mjs",
+    "validate": "npm run check:complexity && npm run test && npm run build",
     "test": "vitest run",
     "e2e:live": "tsx scripts/e2e.live.ts",
     "template:build": "tsx templates/build.ts",
