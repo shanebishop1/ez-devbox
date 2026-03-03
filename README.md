@@ -150,6 +150,22 @@ ez-devbox connect
 - `.ez-devbox-last-run.json`: auto-generated local state for reconnects (legacy `.agent-box-last-run.json` is still read as a fallback)
 - `docs/launcher-config-reference.md`: full `launcher.config.toml` field reference
 
+### Tunnel targets
+
+For non-local upstream services, you can keep `tunnel.ports` and override the upstream URL per port:
+
+```toml
+[tunnel]
+ports = [3002]
+allow_remote_targets = true
+
+[tunnel.targets]
+"3002" = "http://10.0.0.20:3002"
+```
+
+This keeps the same `EZ_DEVBOX_TUNNEL_*` env output while pointing cloudflared at a remote host/service.
+Security defaults are strict: remote targets are blocked unless `allow_remote_targets = true`, and target URLs cannot include credentials, path, query, or fragment.
+
 ## launcher.config.toml reference
 
 See `docs/launcher-config-reference.md`.

@@ -137,7 +137,11 @@ export async function loadConfigWithMetadata(options: LoadConfigOptions = {}): P
       config_dir: getOptionalString(ghRaw, "config_dir", "gh.config_dir") ?? defaultConfig.gh.config_dir
     },
     tunnel: {
-      ports: getOptionalNumberArray(tunnelRaw, "ports", "tunnel.ports") ?? defaultConfig.tunnel.ports
+      ports: getOptionalNumberArray(tunnelRaw, "ports", "tunnel.ports") ?? defaultConfig.tunnel.ports,
+      allow_remote_targets:
+        getOptionalBoolean(tunnelRaw, "allow_remote_targets", "tunnel.allow_remote_targets") ??
+        defaultConfig.tunnel.allow_remote_targets,
+      targets: getOptionalStringRecord(tunnelRaw, "targets", "tunnel.targets") ?? defaultConfig.tunnel.targets
     }
   };
 
@@ -168,6 +172,47 @@ export async function loadConfigWithMetadata(options: LoadConfigOptions = {}): P
     }
 
     seenTunnelPorts.add(port);
+  }
+
+  for (const [portKey, upstreamUrl] of Object.entries(resolved.tunnel.targets ?? {})) {
+    const port = Number.parseInt(portKey, 10);
+    if (!Number.isInteger(port) || port < 1 || port > 65535 || String(port) !== portKey) {
+      throw new Error(
+        `Invalid tunnel.targets.${portKey}: key must be a stringified integer between 1 and 65535.`
+      );
+    }
+
+    let parsedUrl: URL;
+    try {
+      parsedUrl = new URL(upstreamUrl);
+    } catch {
+      throw new Error(`Invalid tunnel.targets.${portKey}: expected a valid http(s) URL string.`);
+    }
+
+    if (parsedUrl.protocol !== "http:" && parsedUrl.protocol !== "https:") {
+      throw new Error(`Invalid tunnel.targets.${portKey}: expected an http(s) URL.`);
+    }
+
+    if (parsedUrl.username !== "" || parsedUrl.password !== "") {
+      throw new Error(`Invalid tunnel.targets.${portKey}: URL credentials are not allowed.`);
+    }
+
+    if (parsedUrl.search !== "" || parsedUrl.hash !== "" || parsedUrl.pathname !== "/") {
+      throw new Error(`Invalid tunnel.targets.${portKey}: query/fragment/path are not allowed.`);
+    }
+
+    const hostname = parsedUrl.hostname.toLowerCase();
+    const isLocalhostTarget =
+      hostname === "localhost" ||
+      hostname === "127.0.0.1" ||
+      hostname === "0.0.0.0" ||
+      hostname === "::1" ||
+      hostname === "[::1]";
+    if (!isLocalhostTarget && resolved.tunnel.allow_remote_targets !== true) {
+      throw new Error(
+        `Invalid tunnel.targets.${portKey}: remote hosts require tunnel.allow_remote_targets = true.`
+      );
+    }
   }
 
   return {
@@ -495,11 +540,11 @@ function getOptionalNumberArray(
 }
 
 function getOptionalStringRecord(
-  parent: JsonRecord,
+  parent: JsonRecord | undefined,
   key: string,
   path: string
 ): Record<string, string> | undefined {
-  const value = parent[key];
+  const value = parent?.[key];
   if (value === undefined) {
     return undefined;
   }

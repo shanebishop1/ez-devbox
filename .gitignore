@@ -11,6 +11,8 @@ dist/
 logs
 *.log
 .DS_Store
+.codex
+.agents
 
 # Local planning and publishing notes
 docs/plans/

@@ -30,7 +30,8 @@ export async function withConfiguredTunnel<T>(
   const sessions: CloudflaredTunnelSession[] = [];
   try {
     for (const port of config.tunnel.ports) {
-      sessions.push(await startCloudflaredTunnel(port));
+      const upstreamUrl = resolveTunnelUpstreamUrl(port, config.tunnel.targets);
+      sessions.push(await startCloudflaredTunnel(port, upstreamUrl));
     }
   } catch (error) {
     await stopTunnelSessions(sessions);
@@ -88,11 +89,11 @@ export async function withConfiguredTunnel<T>(
   }
 }
 
-async function startCloudflaredTunnel(port: number): Promise<CloudflaredTunnelSession> {
-  logger.verbose(`Tunnel: starting for http://127.0.0.1:${port}.`);
+async function startCloudflaredTunnel(port: number, upstreamUrl: string): Promise<CloudflaredTunnelSession> {
+  logger.verbose(`Tunnel: starting for ${upstreamUrl}.`);
   const installHint = getCloudflaredInstallHint();
 
-  let processHandle = spawnLocalCloudflared(port);
+  let processHandle = spawnLocalCloudflared(upstreamUrl);
   let recentLogs: string[] = [];
   let url: string;
 
@@ -114,7 +115,7 @@ async function startCloudflaredTunnel(port: number): Promise<CloudflaredTunnelSe
       logger.warn("Tunnel: quick tunnel is rate-limited (HTTP 429/1015); trying Docker fallback.");
     }
 
-    processHandle = spawnDockerCloudflared(port);
+    processHandle = spawnDockerCloudflared(upstreamUrl);
     recentLogs = [];
 
     try {
@@ -353,29 +354,67 @@ async function waitForExit(processHandle: CloudflaredProcess, timeoutMs: number)
   });
 }
 
-function spawnLocalCloudflared(port: number): CloudflaredProcess {
-  return spawn("cloudflared", ["tunnel", "--no-autoupdate", "--url", `http://127.0.0.1:${port}`], {
+function spawnLocalCloudflared(upstreamUrl: string): CloudflaredProcess {
+  return spawn("cloudflared", ["tunnel", "--no-autoupdate", "--url", upstreamUrl], {
     stdio: ["ignore", "pipe", "pipe"]
   });
 }
 
-function spawnDockerCloudflared(port: number): CloudflaredProcess {
+function spawnDockerCloudflared(upstreamUrl: string): CloudflaredProcess {
   const args = ["run", "--rm", "-i"];
   if (process.platform === "linux") {
     args.push("--add-host", "host.docker.internal:host-gateway");
   }
+
+  const dockerReachableUrl = toDockerReachableUrl(upstreamUrl);
 
   args.push(
     CLOUDFLARED_DOCKER_FALLBACK_IMAGE,
     "tunnel",
     "--no-autoupdate",
     "--url",
-    `http://host.docker.internal:${port}`
+    dockerReachableUrl
   );
 
   return spawn("docker", args, {
     stdio: ["ignore", "pipe", "pipe"]
   });
+}
+
+function resolveTunnelUpstreamUrl(port: number, targets?: Record<string, string>): string {
+  return targets?.[String(port)] ?? `http://127.0.0.1:${port}`;
+}
+
+function toDockerReachableUrl(upstreamUrl: string): string {
+  let parsed: URL;
+  try {
+    parsed = new URL(upstreamUrl);
+  } catch {
+    return upstreamUrl;
+  }
+
+  const hostname = parsed.hostname.toLowerCase();
+  if (
+    hostname !== "127.0.0.1" &&
+    hostname !== "localhost" &&
+    hostname !== "0.0.0.0" &&
+    hostname !== "::1" &&
+    hostname !== "[::1]"
+  ) {
+    return upstreamUrl;
+  }
+
+  parsed.hostname = "host.docker.internal";
+  return formatUrlWithoutDefaultSlash(parsed);
+}
+
+function formatUrlWithoutDefaultSlash(url: URL): string {
+  const hasDefaultPath = url.pathname === "/" && url.search === "" && url.hash === "";
+  if (!hasDefaultPath) {
+    return url.toString();
+  }
+
+  return `${url.protocol}//${url.host}`;
 }
 
 function isSpawnEnoentError(error: unknown, command: string): boolean {

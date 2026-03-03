@@ -214,6 +214,165 @@ describe("loadConfig", () => {
     expect(resolved.tunnel.ports).toEqual([3002, 8080]);
   });
 
+  it("accepts tunnel.targets override", async () => {
+    const configPath = join(tempDir, "launcher.config.toml");
+    const envPath = join(tempDir, ".env");
+
+    await writeFile(
+      configPath,
+      [
+        "[tunnel]",
+        "ports = [3002]",
+        "allow_remote_targets = true",
+        "",
+        "[tunnel.targets]",
+        '"3002" = "http://10.0.0.20:3002"'
+      ].join("\n")
+    );
+    await writeFile(envPath, "E2B_API_KEY=test-e2b-key\n");
+
+    const resolved = await loadConfig({ configPath, envPath });
+    expect(resolved.tunnel.targets).toEqual({
+      "3002": "http://10.0.0.20:3002"
+    });
+  });
+
+  it("rejects invalid tunnel.targets keys", async () => {
+    const configPath = join(tempDir, "launcher.config.toml");
+    const envPath = join(tempDir, ".env");
+
+    await writeFile(
+      configPath,
+      [
+        "[tunnel]",
+        "",
+        "[tunnel.targets]",
+        'not_a_port = "http://10.0.0.20:3002"'
+      ].join("\n")
+    );
+    await writeFile(envPath, "E2B_API_KEY=test-e2b-key\n");
+
+    await expect(loadConfig({ configPath, envPath })).rejects.toThrow("tunnel.targets");
+  });
+
+  it("rejects invalid tunnel.targets URL values", async () => {
+    const configPath = join(tempDir, "launcher.config.toml");
+    const envPath = join(tempDir, ".env");
+
+    await writeFile(
+      configPath,
+      [
+        "[tunnel]",
+        "",
+        "[tunnel.targets]",
+        '"3002" = "not-a-url"'
+      ].join("\n")
+    );
+    await writeFile(envPath, "E2B_API_KEY=test-e2b-key\n");
+
+    await expect(loadConfig({ configPath, envPath })).rejects.toThrow("tunnel.targets");
+  });
+
+  it("rejects remote tunnel.targets unless allow_remote_targets is true", async () => {
+    const configPath = join(tempDir, "launcher.config.toml");
+    const envPath = join(tempDir, ".env");
+
+    await writeFile(
+      configPath,
+      [
+        "[tunnel]",
+        "",
+        "[tunnel.targets]",
+        '"3002" = "http://10.0.0.20:3002"'
+      ].join("\n")
+    );
+    await writeFile(envPath, "E2B_API_KEY=test-e2b-key\n");
+
+    await expect(loadConfig({ configPath, envPath })).rejects.toThrow(
+      "allow_remote_targets"
+    );
+  });
+
+  it("accepts localhost tunnel.targets without allow_remote_targets", async () => {
+    const configPath = join(tempDir, "launcher.config.toml");
+    const envPath = join(tempDir, ".env");
+
+    await writeFile(
+      configPath,
+      [
+        "[tunnel]",
+        "",
+        "[tunnel.targets]",
+        '"3002" = "http://127.0.0.1:3002"'
+      ].join("\n")
+    );
+    await writeFile(envPath, "E2B_API_KEY=test-e2b-key\n");
+
+    const resolved = await loadConfig({ configPath, envPath });
+    expect(resolved.tunnel.targets).toEqual({
+      "3002": "http://127.0.0.1:3002"
+    });
+  });
+
+  it("accepts IPv6 localhost tunnel.targets without allow_remote_targets", async () => {
+    const configPath = join(tempDir, "launcher.config.toml");
+    const envPath = join(tempDir, ".env");
+
+    await writeFile(
+      configPath,
+      [
+        "[tunnel]",
+        "",
+        "[tunnel.targets]",
+        '"3002" = "http://[::1]:3002"'
+      ].join("\n")
+    );
+    await writeFile(envPath, "E2B_API_KEY=test-e2b-key\n");
+
+    const resolved = await loadConfig({ configPath, envPath });
+    expect(resolved.tunnel.targets).toEqual({
+      "3002": "http://[::1]:3002"
+    });
+  });
+
+  it("rejects tunnel.targets URLs that contain credentials", async () => {
+    const configPath = join(tempDir, "launcher.config.toml");
+    const envPath = join(tempDir, ".env");
+
+    await writeFile(
+      configPath,
+      [
+        "[tunnel]",
+        "allow_remote_targets = true",
+        "",
+        "[tunnel.targets]",
+        '"3002" = "http://user:pass@10.0.0.20:3002"'
+      ].join("\n")
+    );
+    await writeFile(envPath, "E2B_API_KEY=test-e2b-key\n");
+
+    await expect(loadConfig({ configPath, envPath })).rejects.toThrow("credentials");
+  });
+
+  it("rejects tunnel.targets URLs with query or fragment", async () => {
+    const configPath = join(tempDir, "launcher.config.toml");
+    const envPath = join(tempDir, ".env");
+
+    await writeFile(
+      configPath,
+      [
+        "[tunnel]",
+        "allow_remote_targets = true",
+        "",
+        "[tunnel.targets]",
+        '"3002" = "http://10.0.0.20:3002/path?x=1#frag"'
+      ].join("\n")
+    );
+    await writeFile(envPath, "E2B_API_KEY=test-e2b-key\n");
+
+    await expect(loadConfig({ configPath, envPath })).rejects.toThrow("query/fragment");
+  });
+
   it("rejects invalid tunnel.ports values", async () => {
     const configPath = join(tempDir, "launcher.config.toml");
     const envPath = join(tempDir, ".env");
