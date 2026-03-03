@@ -11,7 +11,7 @@ import { logger } from "../logging/logger.js";
 import { bootstrapProjectWorkspace, type BootstrapProjectWorkspaceResult } from "../project/bootstrap.js";
 import { resolveHostGhToken } from "../auth/gh-host-token.js";
 import { PromptCancelledError, isPromptCancelledError } from "./prompt-cancelled.js";
-import { withConfiguredTunnel } from "../tunnel/cloudflared.js";
+import { withConfiguredTunnel, type WithConfiguredTunnel } from "../tunnel/cloudflared.js";
 import {
   syncCodexAuthFile,
   syncCodexConfigDir,
@@ -54,6 +54,7 @@ export interface CreateCommandDeps {
   ) => Promise<ToolingSyncSummary>;
   saveLastRunState: (state: LastRunState) => Promise<void>;
   now: () => string;
+  withConfiguredTunnel?: WithConfiguredTunnel;
 }
 
 const defaultDeps: CreateCommandDeps = {
@@ -76,7 +77,14 @@ export async function runCreateCommand(args: string[], deps: CreateCommandDeps =
   if (loadedConfig) {
     logger.info(`Using launcher config: ${loadedConfig.configPath}`);
   }
-  return withConfiguredTunnel(config, async (tunnelRuntimeEnv) => {
+  const runWithTunnel = deps.withConfiguredTunnel ?? withConfiguredTunnel;
+  return runWithTunnel(config, async (tunnelRuntimeEnv) => {
+    if (hasPublicTunnelRuntimeEnv(tunnelRuntimeEnv)) {
+      logger.warn(
+        "Tunnel URL warning: anyone with the URL can access the forwarded service/data. Treat tunnel URLs as secrets."
+      );
+    }
+
     const requestedMode = parsed.mode ?? config.startup.mode;
     logger.verbose(`Resolving startup mode from '${requestedMode}'.`);
     const mode = await deps.resolvePromptStartupMode(requestedMode);
@@ -205,6 +213,12 @@ export async function runCreateCommand(args: string[], deps: CreateCommandDeps =
       stopLoadingIfRunning();
     }
   });
+}
+
+function hasPublicTunnelRuntimeEnv(runtimeEnv: Record<string, string>): boolean {
+  return Object.keys(runtimeEnv).some(
+    (key) => key.startsWith("EZ_DEVBOX_TUNNEL_") && key.endsWith("_URL")
+  );
 }
 
 async function resolveGhRuntimeEnv(

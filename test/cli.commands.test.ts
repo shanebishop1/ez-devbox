@@ -206,6 +206,32 @@ describe("CLI command integration", () => {
     infoSpy.mockRestore();
   });
 
+  it("create warns that tunnel URLs are publicly accessible", async () => {
+    const warnSpy = vi.spyOn(logger, "warn").mockImplementation(() => undefined);
+
+    await runCreateCommand(["--mode", "ssh-opencode"], {
+      loadConfig: vi.fn().mockResolvedValue(config),
+      withConfiguredTunnel: async (_cfg, operation) =>
+        operation({
+          EZ_DEVBOX_TUNNEL_3002_URL: "https://demo.trycloudflare.com"
+        }),
+      createSandbox: vi.fn().mockResolvedValue({ sandboxId: "sbx-created" }),
+      resolveEnvSource: vi.fn().mockResolvedValue({}),
+      resolveSandboxCreateEnv: vi.fn().mockReturnValue({ envs: {} }),
+      resolvePromptStartupMode: vi.fn().mockResolvedValue("ssh-opencode"),
+      launchMode: vi.fn().mockResolvedValue({ mode: "ssh-opencode", command: "opencode", message: "launched" }),
+      bootstrapProjectWorkspace: vi.fn().mockResolvedValue(bootstrapResult),
+      syncToolingToSandbox: vi.fn().mockResolvedValue(syncSummary),
+      saveLastRunState: vi.fn().mockResolvedValue(undefined),
+      now: () => "2026-02-01T00:00:00.000Z"
+    });
+
+    expect(warnSpy).toHaveBeenCalledWith(
+      "Tunnel URL warning: anyone with the URL can access the forwarded service/data. Treat tunnel URLs as secrets."
+    );
+    warnSpy.mockRestore();
+  });
+
   it("create auto-selects codex template for ssh-codex mode", async () => {
     const createSandbox = vi.fn().mockResolvedValue({ sandboxId: "sbx-created" });
     const syncToolingToSandbox = vi.fn().mockResolvedValue({
