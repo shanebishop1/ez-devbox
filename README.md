@@ -175,4 +175,7 @@ See `docs/launcher-config-reference.md`.
 ```bash
 npm run test
 npm run build
+npm run pack:check
 ```
+
+Release process details: `docs/release-checklist.md`.
