@@ -83,6 +83,25 @@ export async function runCommandCommand(args: string[], deps: CommandCommandDeps
     const stderr = result.stderr.trim() === "" ? "(empty)" : result.stderr;
     const sandboxLabel = sandboxTarget.label ?? sandboxTarget.sandboxId;
 
+    if (parsed.json) {
+      return {
+        message: JSON.stringify(
+          {
+            sandboxId: sandboxTarget.sandboxId,
+            sandboxLabel,
+            command: parsed.command,
+            cwd,
+            stdout: result.stdout,
+            stderr: result.stderr,
+            exitCode: result.exitCode
+          },
+          null,
+          2
+        ),
+        exitCode: result.exitCode
+      };
+    }
+
     return {
       message: [
         `Ran command in sandbox ${sandboxLabel}.`,
@@ -104,8 +123,9 @@ function withoutOpenCodeServerPassword(envs: Record<string, string>): Record<str
   return rest;
 }
 
-function parseCommandArgs(args: string[]): { sandboxId?: string; command: string } {
+function parseCommandArgs(args: string[]): { sandboxId?: string; command: string; json: boolean } {
   let sandboxId: string | undefined;
+  let json = false;
   let commandStartIndex = args.length;
 
   for (let index = 0; index < args.length; index += 1) {
@@ -126,6 +146,11 @@ function parseCommandArgs(args: string[]): { sandboxId?: string; command: string
       continue;
     }
 
+    if (token === "--json") {
+      json = true;
+      continue;
+    }
+
     if (token.startsWith("--")) {
       throw new Error(`Unknown option for command: '${token}'. Use --help for usage.`);
     }
@@ -141,7 +166,8 @@ function parseCommandArgs(args: string[]): { sandboxId?: string; command: string
 
   return {
     sandboxId,
-    command: commandTokens.join(" ")
+    command: commandTokens.join(" "),
+    json
   };
 }
 
