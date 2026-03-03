@@ -11,3 +11,5 @@ dist/
 logs
 *.log
 .DS_Store
+.codex
+.agents
