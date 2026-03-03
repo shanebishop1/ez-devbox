@@ -178,8 +178,10 @@ See `docs/launcher-config-reference.md`.
 ## Dev checks
 
 ```bash
+npm run check:complexity
 npm run test
 npm run build
+npm run validate
 npm run pack:check
 ```
 
