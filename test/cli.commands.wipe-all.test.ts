@@ -2,6 +2,19 @@ import { describe, expect, it, vi } from "vitest";
 import { runWipeAllCommand } from "../src/cli/commands.wipe-all.js";
 
 describe("runWipeAllCommand", () => {
+  it("rejects unexpected arguments with help guidance", async () => {
+    await expect(
+      runWipeAllCommand(["--bad"], {
+        listSandboxes: vi.fn().mockResolvedValue([]),
+        killSandbox: vi.fn().mockResolvedValue(undefined),
+        isInteractiveTerminal: () => false,
+        promptInput: vi.fn().mockResolvedValue("yes"),
+        loadLastRunState: vi.fn().mockResolvedValue(null),
+        clearLastRunState: vi.fn().mockResolvedValue(undefined)
+      })
+    ).rejects.toThrow("Unknown option for wipe-all: '--bad'. Use --help for usage.");
+  });
+
   it("deletes all sandboxes with --yes", async () => {
     const killSandbox = vi.fn().mockResolvedValue(undefined);
 

@@ -2,6 +2,19 @@ import { describe, expect, it, vi } from "vitest";
 import { runWipeCommand } from "../src/cli/commands.wipe.js";
 
 describe("runWipeCommand", () => {
+  it("rejects unexpected arguments with help guidance", async () => {
+    await expect(
+      runWipeCommand(["--bad"], {
+        listSandboxes: vi.fn().mockResolvedValue([]),
+        killSandbox: vi.fn().mockResolvedValue(undefined),
+        isInteractiveTerminal: () => false,
+        promptInput: vi.fn().mockResolvedValue("1"),
+        loadLastRunState: vi.fn().mockResolvedValue(null),
+        clearLastRunState: vi.fn().mockResolvedValue(undefined)
+      })
+    ).rejects.toThrow("Unknown option for wipe: '--bad'. Use --help for usage.");
+  });
+
   it("supports interactive numeric selection", async () => {
     const killSandbox = vi.fn().mockResolvedValue(undefined);
     const promptInput = vi.fn().mockResolvedValue("2");

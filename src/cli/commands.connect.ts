@@ -376,7 +376,13 @@ function parseConnectArgs(args: string[]): { sandboxId?: string; mode?: StartupM
       }
       mode = next;
       index += 1;
+      continue;
     }
+
+    if (token.startsWith("--")) {
+      throw new Error(`Unknown option for connect: '${token}'. Use --help for usage.`);
+    }
+    throw new Error(`Unexpected positional argument for connect: '${token}'. Use --help for usage.`);
   }
 
   return { sandboxId, mode };

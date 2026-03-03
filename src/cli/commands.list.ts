@@ -11,6 +11,13 @@ const defaultDeps: ListCommandDeps = {
 };
 
 export async function runListCommand(_args: string[], deps: ListCommandDeps = defaultDeps): Promise<CommandResult> {
+  if (_args.length > 0) {
+    if (_args[0].startsWith("--")) {
+      throw new Error(`Unknown option for list: '${_args[0]}'. Use --help for usage.`);
+    }
+    throw new Error(`Unexpected positional argument for list: '${_args[0]}'. Use --help for usage.`);
+  }
+
   const sandboxes = await deps.listSandboxes();
 
   if (sandboxes.length === 0) {
