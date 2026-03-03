@@ -100,6 +100,8 @@ describe("host to sandbox tooling sync", () => {
     expect(summary).toEqual({
       totalDiscovered: 0,
       totalWritten: 0,
+      totalUnchanged: 0,
+      totalMissingPaths: 4,
       skippedMissingPaths: 4,
       opencodeConfigSynced: false,
       opencodeAuthSynced: false,
@@ -149,10 +151,10 @@ describe("host to sandbox tooling sync", () => {
     const codexConfigSummary = await syncCodexConfigDir(config, { writeFile: writeFileInSandbox });
     const codexAuthSummary = await syncCodexAuthFile(config, { writeFile: writeFileInSandbox });
 
-    expect(opencodeConfigSummary).toEqual({ skippedMissing: false, filesDiscovered: 2, filesWritten: 2 });
-    expect(opencodeAuthSummary).toEqual({ skippedMissing: false, filesDiscovered: 1, filesWritten: 1 });
-    expect(codexConfigSummary).toEqual({ skippedMissing: false, filesDiscovered: 1, filesWritten: 1 });
-    expect(codexAuthSummary).toEqual({ skippedMissing: false, filesDiscovered: 1, filesWritten: 1 });
+    expect(opencodeConfigSummary).toEqual({ skippedMissing: false, filesDiscovered: 2, filesWritten: 2, filesUnchanged: 0 });
+    expect(opencodeAuthSummary).toEqual({ skippedMissing: false, filesDiscovered: 1, filesWritten: 1, filesUnchanged: 0 });
+    expect(codexConfigSummary).toEqual({ skippedMissing: false, filesDiscovered: 1, filesWritten: 1, filesUnchanged: 0 });
+    expect(codexAuthSummary).toEqual({ skippedMissing: false, filesDiscovered: 1, filesWritten: 1, filesUnchanged: 0 });
 
     expect(writeFileInSandbox).toHaveBeenCalledWith(
       "/home/user/.config/opencode/settings.toml",
@@ -204,11 +206,11 @@ describe("host to sandbox tooling sync", () => {
 
     const summary = await syncCodexConfigDir(config, { writeFile: writeFileInSandbox }, { onProgress });
 
-    expect(summary).toEqual({ skippedMissing: false, filesDiscovered: 3, filesWritten: 3 });
+    expect(summary).toEqual({ skippedMissing: false, filesDiscovered: 3, filesWritten: 3, filesUnchanged: 0 });
     expect(onProgress).toHaveBeenCalledTimes(3);
-    expect(onProgress).toHaveBeenNthCalledWith(1, { filesWritten: 1, filesDiscovered: 3 });
-    expect(onProgress).toHaveBeenNthCalledWith(2, { filesWritten: 2, filesDiscovered: 3 });
-    expect(onProgress).toHaveBeenNthCalledWith(3, { filesWritten: 3, filesDiscovered: 3 });
+    expect(onProgress).toHaveBeenNthCalledWith(1, { filesWritten: 1, filesUnchanged: 0, filesDiscovered: 3 });
+    expect(onProgress).toHaveBeenNthCalledWith(2, { filesWritten: 2, filesUnchanged: 0, filesDiscovered: 3 });
+    expect(onProgress).toHaveBeenNthCalledWith(3, { filesWritten: 3, filesUnchanged: 0, filesDiscovered: 3 });
   });
 
   it("excludes codex archived_sessions history artifacts from sync", async () => {
@@ -252,7 +254,7 @@ describe("host to sandbox tooling sync", () => {
 
     const summary = await syncCodexConfigDir(config, { writeFile: writeFileInSandbox });
 
-    expect(summary).toEqual({ skippedMissing: false, filesDiscovered: 1, filesWritten: 1 });
+    expect(summary).toEqual({ skippedMissing: false, filesDiscovered: 1, filesWritten: 1, filesUnchanged: 0 });
     expect(writeFileInSandbox).toHaveBeenCalledWith("/home/user/.codex/config.toml", expect.any(ArrayBuffer));
     expect(writeFileInSandbox).not.toHaveBeenCalledWith(
       "/home/user/.codex/archived_sessions/last-session.jsonl",
@@ -334,6 +336,8 @@ describe("host to sandbox tooling sync", () => {
     expect(summary).toEqual({
       totalDiscovered: 3,
       totalWritten: 3,
+      totalUnchanged: 0,
+      totalMissingPaths: 2,
       skippedMissingPaths: 2,
       opencodeConfigSynced: false,
       opencodeAuthSynced: false,
@@ -344,6 +348,37 @@ describe("host to sandbox tooling sync", () => {
     });
     expect(writeFileInSandbox).toHaveBeenCalledWith("/home/user/.config/gh/config.yml", expect.any(ArrayBuffer));
     expect(writeFileInSandbox).not.toHaveBeenCalledWith("/home/user/.config/gh/hosts.yml", expect.any(ArrayBuffer));
+  });
+
+  it("skips unchanged writes on repeat sync runs while reporting unchanged counts", async () => {
+    const root = await createTempRoot("unchanged");
+    const codexConfigDir = join(root, "codex-config");
+    await mkdir(codexConfigDir, { recursive: true });
+    await writeFile(join(codexConfigDir, "config.toml"), "model='gpt-5'", "utf8");
+
+    const config = {
+      opencode: {
+        config_dir: join(root, "missing-opencode-config"),
+        auth_path: join(root, "missing-opencode-auth.json")
+      },
+      codex: {
+        config_dir: codexConfigDir,
+        auth_path: join(root, "missing-codex-auth.json")
+      },
+      gh: {
+        enabled: false,
+        config_dir: join(root, "missing-gh")
+      }
+    };
+    const writeFileInSandbox = vi.fn().mockResolvedValue(undefined);
+    const sandbox = { writeFile: writeFileInSandbox };
+
+    const first = await syncCodexConfigDir(config, sandbox);
+    const second = await syncCodexConfigDir(config, sandbox);
+
+    expect(first).toEqual({ skippedMissing: false, filesDiscovered: 1, filesWritten: 1, filesUnchanged: 0 });
+    expect(second).toEqual({ skippedMissing: false, filesDiscovered: 1, filesWritten: 0, filesUnchanged: 1 });
+    expect(writeFileInSandbox).toHaveBeenCalledTimes(1);
   });
 });
 

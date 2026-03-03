@@ -27,6 +27,8 @@ describe("CLI command integration", () => {
   const syncSummary = {
     totalDiscovered: 2,
     totalWritten: 2,
+    totalUnchanged: 0,
+    totalMissingPaths: 0,
     skippedMissingPaths: 0,
     opencodeConfigSynced: true,
     opencodeAuthSynced: true,
@@ -158,7 +160,7 @@ describe("CLI command integration", () => {
     });
 
     expect(syncToolingToSandbox).toHaveBeenCalledTimes(1);
-    expect(result.message).toContain("Tooling sync: discovered=2, written=2");
+    expect(result.message).toContain("Tooling sync: discovered=2, written=2, unchanged=0, missingPaths=0");
   });
 
   it("create accepts legacy --yes-sync without changing behavior", async () => {
