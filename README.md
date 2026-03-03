@@ -147,7 +147,7 @@ ez-devbox connect
 
 - `launcher.config.toml`: ez-devbox behavior (sandbox, startup, project, env pass-through, tooling auth sync, tunnel). Resolved from local-first then global fallback.
 - `.env`: secrets and local env values
-- `.ez-devbox-last-run.json`: auto-generated local state for reconnects (legacy `.agent-box-last-run.json` is still read as a fallback)
+- last-run state: by default stored at `${TMPDIR}/ez-devbox/last-run/cwd-state/<sha1(cwd)>/.ez-devbox-last-run.json` (legacy `.agent-box-last-run.json` in the current directory is still read as a fallback)
 - `docs/launcher-config-reference.md`: full `launcher.config.toml` field reference
 
 ### Tunnel targets
