@@ -10,7 +10,7 @@ describe("loadConfig", () => {
   let originalE2bApiKey: string | undefined;
 
   beforeEach(async () => {
-    tempDir = await mkdtemp(join(tmpdir(), "agent-box-config-"));
+    tempDir = await mkdtemp(join(tmpdir(), "ez-devbox-config-"));
     originalE2bApiKey = process.env.E2B_API_KEY;
     delete process.env.E2B_API_KEY;
   });

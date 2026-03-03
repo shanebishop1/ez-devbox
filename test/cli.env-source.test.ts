@@ -9,7 +9,7 @@ describe("loadCliEnvSource", () => {
   let originalEnvValue: string | undefined;
 
   beforeEach(async () => {
-    tempDir = await mkdtemp(join(tmpdir(), "agent-box-env-source-"));
+    tempDir = await mkdtemp(join(tmpdir(), "ez-devbox-env-source-"));
     originalEnvValue = process.env.EZ_DEVBOX_TEST_ENV_SOURCE;
     delete process.env.EZ_DEVBOX_TEST_ENV_SOURCE;
   });

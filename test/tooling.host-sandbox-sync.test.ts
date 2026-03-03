@@ -383,7 +383,7 @@ describe("host to sandbox tooling sync", () => {
 });
 
 async function createTempRoot(prefix: string): Promise<string> {
-  const root = await mkdtemp(join(tmpdir(), `agent-box-${prefix}-`));
+  const root = await mkdtemp(join(tmpdir(), `ez-devbox-${prefix}-`));
   tempRoots.push(root);
   return root;
 }

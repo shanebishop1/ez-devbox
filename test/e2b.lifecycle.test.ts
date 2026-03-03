@@ -14,7 +14,7 @@ describe("e2b lifecycle adapter", () => {
     sandbox: {
       template: "base",
       reuse: true,
-      name: "agent-box",
+      name: "ez-devbox",
       timeout_ms: 1800_000,
       delete_on_exit: false
     },
@@ -62,14 +62,14 @@ describe("e2b lifecycle adapter", () => {
       client,
       envs: { GITHUB_TOKEN: "token" },
       metadata: { source: "test" },
-      tags: { project: "agent-box", mode: "web", user: "shane" }
+      tags: { project: "ez-devbox", mode: "web", user: "shane" }
     });
 
     expect(client.create).toHaveBeenCalledWith("base", {
       timeoutMs: 1_800_000,
       envs: { GITHUB_TOKEN: "token" },
       metadata: {
-        "launcher.project": "agent-box",
+        "launcher.project": "ez-devbox",
         "launcher.mode": "web",
         "launcher.user": "shane",
         source: "test"
@@ -109,7 +109,7 @@ describe("e2b lifecycle adapter", () => {
         {
           sandboxId: "sbx-1",
           state: "running",
-          metadata: { "launcher.project": "agent-box" }
+          metadata: { "launcher.project": "ez-devbox" }
         },
         {
           sandboxId: "sbx-2",
@@ -119,17 +119,17 @@ describe("e2b lifecycle adapter", () => {
       ])
     });
 
-    const listed = await listSandboxes({ client, tags: { project: "agent-box" } });
+    const listed = await listSandboxes({ client, tags: { project: "ez-devbox" } });
 
     expect(client.list).toHaveBeenCalledWith({
-      metadata: { "launcher.project": "agent-box" },
+      metadata: { "launcher.project": "ez-devbox" },
       requestTimeoutMs: undefined
     });
     expect(listed).toEqual([
       {
         sandboxId: "sbx-1",
         state: "running",
-        metadata: { "launcher.project": "agent-box" }
+        metadata: { "launcher.project": "ez-devbox" }
       },
       {
         sandboxId: "sbx-2",

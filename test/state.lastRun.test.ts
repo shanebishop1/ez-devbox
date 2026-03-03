@@ -14,7 +14,7 @@ describe("last-run state persistence", () => {
       {
         sandboxId: "sbx-123",
         mode: "web",
-        activeRepo: "agent-box",
+        activeRepo: "ez-devbox",
         updatedAt: "2026-01-01T00:00:00.000Z"
       },
       statePath
@@ -24,7 +24,7 @@ describe("last-run state persistence", () => {
     expect(loaded).toEqual({
       sandboxId: "sbx-123",
       mode: "web",
-      activeRepo: "agent-box",
+      activeRepo: "ez-devbox",
       updatedAt: "2026-01-01T00:00:00.000Z"
     });
 

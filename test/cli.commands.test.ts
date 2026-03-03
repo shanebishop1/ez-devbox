@@ -13,7 +13,7 @@ describe("CLI command integration", () => {
   const tempRoots: string[] = [];
 
   async function createTempRoot(prefix: string): Promise<string> {
-    const root = await mkdtemp(join(tmpdir(), `agent-box-cli-${prefix}-`));
+    const root = await mkdtemp(join(tmpdir(), `ez-devbox-cli-${prefix}-`));
     tempRoots.push(root);
     return root;
   }
@@ -1021,7 +1021,7 @@ describe("CLI command integration", () => {
           {
             sandboxId: "sbx-list",
             state: "running",
-            metadata: { "launcher.name": "Agent Box web 2026-02-01 00:00 UTC" }
+            metadata: { "launcher.name": "ez-devbox web 2026-02-01 00:00 UTC" }
           }
         ]),
         resolvePromptStartupMode: vi.fn().mockResolvedValue("ssh-opencode"),
@@ -1034,8 +1034,8 @@ describe("CLI command integration", () => {
     );
 
     expect(connectSandbox).toHaveBeenCalledWith("sbx-list", config);
-    expect(loggerVerbose).toHaveBeenCalledWith("Selected fallback sandbox: Agent Box web 2026-02-01 00:00 UTC (sbx-list).");
-    expect(result.message).toContain("Connected to sandbox Agent Box web 2026-02-01 00:00 UTC (sbx-list).");
+    expect(loggerVerbose).toHaveBeenCalledWith("Selected fallback sandbox: ez-devbox web 2026-02-01 00:00 UTC (sbx-list).");
+    expect(result.message).toContain("Connected to sandbox ez-devbox web 2026-02-01 00:00 UTC (sbx-list).");
     loggerVerbose.mockRestore();
   });
 
