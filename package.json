@@ -30,7 +30,8 @@
     "wipe-all": "tsx src/cli/index.ts wipe-all",
     "test": "vitest run",
     "e2e:live": "tsx scripts/e2e.live.ts",
-    "template:build": "tsx templates/build.ts"
+    "template:build": "tsx templates/build.ts",
+    "pack:check": "node scripts/verify-pack-dry-run.mjs"
   },
   "keywords": [
     "e2b",
