@@ -9,6 +9,16 @@ ez-devbox resolves config in this order:
 
 If neither file exists and a TTY is available, ez-devbox prompts to create a starter config locally or globally.
 
+## Last-run state location
+
+Last-run state is runtime metadata (not a launcher config field). By default it is stored at:
+
+- `${TMPDIR}/ez-devbox/last-run/cwd-state/<sha1(cwd)>/.ez-devbox-last-run.json`
+
+Compatibility behavior:
+
+- If the new default file is missing, ez-devbox still reads legacy `.agent-box-last-run.json` when present.
+
 ## Starter config
 
 Copy/paste this starter file into `launcher.config.toml` if you are setting up a new workspace:
