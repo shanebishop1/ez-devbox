@@ -38,7 +38,6 @@ export const defaultConfig: ResolvedLauncherConfig = {
   },
   tunnel: {
     ports: [],
-    allow_remote_targets: false,
     targets: {}
   }
 };

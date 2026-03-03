@@ -152,19 +152,18 @@ ez-devbox connect
 
 ### Tunnel targets
 
-For non-local upstream services, you can keep `tunnel.ports` and override the upstream URL per port:
+For non-local upstream services, define explicit tunnel targets (port -> upstream URL):
 
 ```toml
 [tunnel]
-ports = [3002]
-allow_remote_targets = true
 
 [tunnel.targets]
 "3002" = "http://10.0.0.20:3002"
 ```
 
 This keeps the same `EZ_DEVBOX_TUNNEL_*` env output while pointing cloudflared at a remote host/service.
-Security defaults are strict: remote targets are blocked unless `allow_remote_targets = true`, and target URLs cannot include credentials, path, query, or fragment.
+When `tunnel.targets` is present, its keys are the authoritative tunneled ports (you do not need `tunnel.ports`).
+Target URLs cannot include credentials, path, query, or fragment.
 
 ## launcher.config.toml reference
 

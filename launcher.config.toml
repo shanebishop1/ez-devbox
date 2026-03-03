@@ -106,15 +106,12 @@ config_dir = "~/.config/gh"
 
 [tunnel]
 # Optional local tunnel helper for host-only services running on local ports.
-# Empty list disables tunnel management; each listed local TCP port gets its own cloudflared tunnel.
+# Empty targets table disables tunnel management; each target key is a tunneled local port env key.
 # Runtime env vars available in sandbox/session:
 # - EZ_DEVBOX_TUNNEL_<PORT>_URL (one per configured port, e.g. EZ_DEVBOX_TUNNEL_3002_URL)
 # - EZ_DEVBOX_TUNNELS_JSON (JSON object: {"3002":"https://...", ...})
 # - EZ_DEVBOX_TUNNEL_PORTS (comma-separated ports)
 # - EZ_DEVBOX_TUNNEL_URL (only when exactly one port is configured)
-ports = [3002]
-# Security: remote (non-localhost) targets require explicit opt-in.
-allow_remote_targets = true
 
 [tunnel.targets]
 # Optional per-port upstream override. This allows tunneling services not running on this VM.
