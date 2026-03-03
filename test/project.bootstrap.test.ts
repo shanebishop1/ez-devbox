@@ -39,6 +39,7 @@ function createConfig(overrides?: Partial<ResolvedLauncherConfig["project"]>): R
       working_dir: "auto",
       setup_on_connect: false,
       setup_retries: 2,
+      setup_concurrency: 1,
       setup_continue_on_error: false,
       repos: [],
       ...(overrides ?? {})
@@ -716,6 +717,27 @@ describe("project bootstrap", () => {
       "Setup retry: repo=alpha step=setup_command attempt=1 next=2 error=deadline exceeded"
     );
     expect(progress).toHaveBeenCalledWith("Setup success: repo=alpha step=setup_command attempts=2");
+  });
+
+  it("passes setup_concurrency to setup runner options", async () => {
+    const runSetupForRepos = vi.fn().mockResolvedValue({ success: true, repos: [] });
+
+    await bootstrapProjectWorkspace(createHandle(), createConfig({ repos: [createRepo("alpha")], setup_concurrency: 3 }), {
+      deps: {
+        ensureProjectDirectory: vi.fn().mockResolvedValue(undefined),
+        provisionSelectedRepos: vi.fn().mockResolvedValue([
+          { repo: "alpha", path: "/workspace/alpha", cloned: true, reused: false, branchSwitched: false }
+        ]),
+        runSetupForRepos
+      }
+    });
+
+    expect(runSetupForRepos).toHaveBeenCalledWith(
+      expect.any(Object),
+      expect.any(Array),
+      expect.any(Array),
+      expect.objectContaining({ maxConcurrency: 3 })
+    );
   });
 
   it("falls back to origin tracking checkout when local branch checkout fails", async () => {

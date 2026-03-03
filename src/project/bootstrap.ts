@@ -138,6 +138,7 @@ async function maybeRunSetup(
     retryPolicy: {
       attempts: config.project.setup_retries + 1
     },
+    maxConcurrency: config.project.setup_concurrency,
     continueOnError: config.project.setup_continue_on_error,
     timeoutMs: config.sandbox.timeout_ms,
     onEvent: (event) => {

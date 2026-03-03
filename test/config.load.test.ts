@@ -63,6 +63,7 @@ describe("loadConfig", () => {
     expect(resolved.project.working_dir).toBe("auto");
     expect(resolved.project.setup_on_connect).toBe(false);
     expect(resolved.project.setup_retries).toBe(2);
+    expect(resolved.project.setup_concurrency).toBe(1);
     expect(resolved.project.setup_continue_on_error).toBe(false);
     expect(resolved.project.repos).toHaveLength(1);
     expect(resolved.project.repos[0].branch).toBe("main");
@@ -186,6 +187,27 @@ describe("loadConfig", () => {
     await expect(loadConfig({ configPath, envPath })).rejects.toThrow(
       "project.working_dir"
     );
+  });
+
+  it("accepts project.setup_concurrency override", async () => {
+    const configPath = join(tempDir, "launcher.config.toml");
+    const envPath = join(tempDir, ".env");
+
+    await writeFile(configPath, ["[project]", "setup_concurrency = 3"].join("\n"));
+    await writeFile(envPath, "E2B_API_KEY=test-e2b-key\n");
+
+    const resolved = await loadConfig({ configPath, envPath });
+    expect(resolved.project.setup_concurrency).toBe(3);
+  });
+
+  it("rejects invalid project.setup_concurrency", async () => {
+    const configPath = join(tempDir, "launcher.config.toml");
+    const envPath = join(tempDir, ".env");
+
+    await writeFile(configPath, ["[project]", "setup_concurrency = 0"].join("\n"));
+    await writeFile(envPath, "E2B_API_KEY=test-e2b-key\n");
+
+    await expect(loadConfig({ configPath, envPath })).rejects.toThrow("project.setup_concurrency");
   });
 
   it("rejects missing E2B_API_KEY", async () => {
