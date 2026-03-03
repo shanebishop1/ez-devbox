@@ -50,7 +50,6 @@ export interface ResolvedLauncherConfig {
   };
   tunnel: {
     ports: number[];
-    allow_remote_targets?: boolean;
     targets?: Record<string, string>;
   };
 }

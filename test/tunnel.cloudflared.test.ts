@@ -194,6 +194,36 @@ describe("withConfiguredTunnel", () => {
     );
   });
 
+  it("derives active tunnel ports from tunnel.targets when ports list is empty", async () => {
+    const child = createMockCloudflaredProcess();
+    spawnMock.mockReturnValue(child);
+
+    queueMicrotask(() => {
+      child.stderr.write("INF | Tunnel URL https://targets-only.trycloudflare.com\n");
+    });
+
+    await withConfiguredTunnel(
+      {
+        tunnel: {
+          ports: [],
+          targets: {
+            "3002": "http://10.0.0.20:3002"
+          }
+        }
+      },
+      async (runtimeEnv) => {
+        expect(runtimeEnv.EZ_DEVBOX_TUNNEL_3002_URL).toBe("https://targets-only.trycloudflare.com");
+        expect(runtimeEnv.EZ_DEVBOX_TUNNEL_PORTS).toBe("3002");
+      }
+    );
+
+    expect(spawnMock).toHaveBeenCalledWith(
+      "cloudflared",
+      ["tunnel", "--no-autoupdate", "--url", "http://10.0.0.20:3002"],
+      { stdio: ["ignore", "pipe", "pipe"] }
+    );
+  });
+
   it("rewrites localhost tunnel target when using Docker fallback", async () => {
     const missingBinary = createMockCloudflaredProcess();
     const dockerChild = createMockCloudflaredProcess();

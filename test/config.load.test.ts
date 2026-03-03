@@ -222,8 +222,6 @@ describe("loadConfig", () => {
       configPath,
       [
         "[tunnel]",
-        "ports = [3002]",
-        "allow_remote_targets = true",
         "",
         "[tunnel.targets]",
         '"3002" = "http://10.0.0.20:3002"'
@@ -232,6 +230,30 @@ describe("loadConfig", () => {
     await writeFile(envPath, "E2B_API_KEY=test-e2b-key\n");
 
     const resolved = await loadConfig({ configPath, envPath });
+    expect(resolved.tunnel.ports).toEqual([3002]);
+    expect(resolved.tunnel.targets).toEqual({
+      "3002": "http://10.0.0.20:3002"
+    });
+  });
+
+  it("uses tunnel.targets as authoritative ports when both are provided", async () => {
+    const configPath = join(tempDir, "launcher.config.toml");
+    const envPath = join(tempDir, ".env");
+
+    await writeFile(
+      configPath,
+      [
+        "[tunnel]",
+        "ports = [8080]",
+        "",
+        "[tunnel.targets]",
+        '"3002" = "http://10.0.0.20:3002"'
+      ].join("\n")
+    );
+    await writeFile(envPath, "E2B_API_KEY=test-e2b-key\n");
+
+    const resolved = await loadConfig({ configPath, envPath });
+    expect(resolved.tunnel.ports).toEqual([3002]);
     expect(resolved.tunnel.targets).toEqual({
       "3002": "http://10.0.0.20:3002"
     });
@@ -273,27 +295,7 @@ describe("loadConfig", () => {
     await expect(loadConfig({ configPath, envPath })).rejects.toThrow("tunnel.targets");
   });
 
-  it("rejects remote tunnel.targets unless allow_remote_targets is true", async () => {
-    const configPath = join(tempDir, "launcher.config.toml");
-    const envPath = join(tempDir, ".env");
-
-    await writeFile(
-      configPath,
-      [
-        "[tunnel]",
-        "",
-        "[tunnel.targets]",
-        '"3002" = "http://10.0.0.20:3002"'
-      ].join("\n")
-    );
-    await writeFile(envPath, "E2B_API_KEY=test-e2b-key\n");
-
-    await expect(loadConfig({ configPath, envPath })).rejects.toThrow(
-      "allow_remote_targets"
-    );
-  });
-
-  it("accepts localhost tunnel.targets without allow_remote_targets", async () => {
+  it("accepts localhost tunnel.targets", async () => {
     const configPath = join(tempDir, "launcher.config.toml");
     const envPath = join(tempDir, ".env");
 
@@ -314,7 +316,7 @@ describe("loadConfig", () => {
     });
   });
 
-  it("accepts IPv6 localhost tunnel.targets without allow_remote_targets", async () => {
+  it("accepts IPv6 localhost tunnel.targets", async () => {
     const configPath = join(tempDir, "launcher.config.toml");
     const envPath = join(tempDir, ".env");
 
@@ -343,7 +345,6 @@ describe("loadConfig", () => {
       configPath,
       [
         "[tunnel]",
-        "allow_remote_targets = true",
         "",
         "[tunnel.targets]",
         '"3002" = "http://user:pass@10.0.0.20:3002"'
@@ -362,7 +363,6 @@ describe("loadConfig", () => {
       configPath,
       [
         "[tunnel]",
-        "allow_remote_targets = true",
         "",
         "[tunnel.targets]",
         '"3002" = "http://10.0.0.20:3002/path?x=1#frag"'
