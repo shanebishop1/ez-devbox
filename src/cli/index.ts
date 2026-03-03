@@ -8,6 +8,7 @@ import { runListCommand } from "./commands.list.js";
 import { runResumeCommand } from "./commands.resume.js";
 import { runWipeCommand } from "./commands.wipe.js";
 import { runWipeAllCommand } from "./commands.wipe-all.js";
+import { toUserVisibleCliErrorMessage } from "./error-message.js";
 import { parseGlobalCliOptions, renderHelp, resolveCliCommand } from "./router.js";
 
 export async function runCli(argv: string[]): Promise<number> {
@@ -65,8 +66,7 @@ export async function runCli(argv: string[]): Promise<number> {
 
     throw new Error(`Unknown command: ${resolved.command}.`);
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Unexpected CLI failure";
-    logger.error(message);
+    logger.error(toUserVisibleCliErrorMessage(error));
     return 1;
   }
 }

@@ -1,3 +1,5 @@
+import { redactSensitiveText } from "../security/redaction.js";
+
 type LogLevel = "info" | "warn" | "error";
 
 let verboseEnabled = false;
@@ -43,7 +45,8 @@ function formatPrefix(level: LogLevel, output: NodeJS.WriteStream): string {
 
 function write(level: LogLevel, message: string): void {
   const output = level === "error" ? process.stderr : process.stdout;
-  const line = `${formatPrefix(level, output)} ${message}`;
+  const safeMessage = level === "error" ? redactSensitiveText(message) : message;
+  const line = `${formatPrefix(level, output)} ${safeMessage}`;
   if (level === "error") {
     console.error(line);
     return;

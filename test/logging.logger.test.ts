@@ -87,6 +87,20 @@ describe("logger formatting", () => {
     }
   });
 
+  it("redacts sensitive values in error logs", () => {
+    delete process.env.NO_COLOR;
+    delete process.env.FORCE_COLOR;
+    const restoreStderr = setTty(process.stderr, false);
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+
+    try {
+      logger.error("boom E2B_API_KEY=secret");
+      expect(errorSpy).toHaveBeenCalledWith("[ERROR] boom E2B_API_KEY=[REDACTED]");
+    } finally {
+      restoreStderr();
+    }
+  });
+
   it("allows forced color when output is not a tty", () => {
     delete process.env.NO_COLOR;
     process.env.FORCE_COLOR = "1";
