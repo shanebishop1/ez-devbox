@@ -200,6 +200,45 @@ describe("CLI command integration", () => {
     ).rejects.toThrow("Unknown option for create: '--bad'. Use --help for usage.");
   });
 
+  it("create returns structured json output with --json", async () => {
+    const result = await runCreateCommand(["--mode", "web", "--json"], {
+      loadConfig: vi.fn().mockResolvedValue(config),
+      createSandbox: vi.fn().mockResolvedValue({ sandboxId: "sbx-created" }),
+      resolveEnvSource: vi.fn().mockResolvedValue({}),
+      resolveSandboxCreateEnv: vi.fn().mockReturnValue({ envs: {} }),
+      resolvePromptStartupMode: vi.fn().mockResolvedValue("web"),
+      launchMode: vi.fn().mockResolvedValue({ mode: "web", url: "https://sbx-created.e2b.app", message: "launched" }),
+      bootstrapProjectWorkspace: vi.fn().mockResolvedValue({
+        ...bootstrapResult,
+        selectedRepoNames: ["alpha"],
+        workingDirectory: "/workspace/alpha"
+      }),
+      syncToolingToSandbox: vi.fn().mockResolvedValue(syncSummary),
+      saveLastRunState: vi.fn().mockResolvedValue(undefined),
+      now: () => "2026-02-01T00:00:00.000Z"
+    });
+
+    expect(result.message).toBe(
+      JSON.stringify(
+        {
+          sandboxId: "sbx-created",
+          sandboxLabel: "2026-02-01 00:00:00 UTC (sbx-created)",
+          mode: "web",
+          command: undefined,
+          url: "https://sbx-created.e2b.app",
+          workingDirectory: "/workspace/alpha",
+          activeRepo: "alpha",
+          template: "opencode",
+          setup: null,
+          toolingSync: syncSummary
+        },
+        null,
+        2
+      )
+    );
+    expect(result.exitCode).toBe(0);
+  });
+
   it("create logs the launcher config path when metadata loader is used", async () => {
     const infoSpy = vi.spyOn(logger, "info").mockImplementation(() => undefined);
 
@@ -1241,6 +1280,42 @@ describe("CLI command integration", () => {
         now: () => "2026-02-01T00:00:00.000Z"
       })
     ).rejects.toThrow("Unknown option for connect: '--bad'. Use --help for usage.");
+  });
+
+  it("connect returns structured json output with --json", async () => {
+    const result = await runConnectCommand(["--sandbox-id", "sbx-arg", "--mode", "ssh-opencode", "--json"], {
+      loadConfig: vi.fn().mockResolvedValue(config),
+      connectSandbox: vi.fn().mockResolvedValue({ sandboxId: "sbx-arg" }),
+      loadLastRunState: vi.fn().mockResolvedValue(null),
+      listSandboxes: vi.fn().mockResolvedValue([]),
+      resolvePromptStartupMode: vi.fn().mockResolvedValue("ssh-opencode"),
+      launchMode: vi.fn().mockResolvedValue({ mode: "ssh-opencode", command: "opencode", message: "launched" }),
+      bootstrapProjectWorkspace: vi.fn().mockResolvedValue({
+        ...bootstrapResult,
+        selectedRepoNames: ["alpha"],
+        workingDirectory: "/workspace/alpha"
+      }),
+      saveLastRunState: vi.fn().mockResolvedValue(undefined),
+      now: () => "2026-02-01T00:00:00.000Z"
+    });
+
+    expect(result.message).toBe(
+      JSON.stringify(
+        {
+          sandboxId: "sbx-arg",
+          sandboxLabel: "sbx-arg",
+          mode: "ssh-opencode",
+          command: "opencode",
+          url: undefined,
+          workingDirectory: "/workspace/alpha",
+          activeRepo: "alpha",
+          setup: null
+        },
+        null,
+        2
+      )
+    );
+    expect(result.exitCode).toBe(0);
   });
 
 });

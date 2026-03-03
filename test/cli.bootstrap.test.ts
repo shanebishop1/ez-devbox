@@ -93,6 +93,10 @@ describe("CLI bootstrap routing", () => {
     expect(renderHelp()).toContain("--verbose             Show detailed startup/provisioning logs");
   });
 
+  it("includes json option in help text", () => {
+    expect(renderHelp()).toContain("--json                Structured JSON output (list, command, create, connect)");
+  });
+
   it("does not include create tooling sync prompt option in help text", () => {
     expect(renderHelp()).not.toContain("--yes-sync");
   });

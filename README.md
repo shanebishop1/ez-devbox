@@ -130,6 +130,11 @@ ez-devbox connect
 - List available sandboxes:
   - `ez-devbox list`
   - `npm run list`
+- Machine-readable JSON output (automation):
+  - `ez-devbox list -- --json`
+  - `ez-devbox command -- --sandbox-id <sandbox-id> --json -- pwd`
+  - `ez-devbox create -- --mode web --json`
+  - `ez-devbox connect -- --mode web --json`
 - Wipe one sandbox (interactive picker or `--sandbox-id`):
   - `ez-devbox wipe`
   - `npm run wipe`

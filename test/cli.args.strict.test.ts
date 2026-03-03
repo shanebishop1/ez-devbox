@@ -80,4 +80,62 @@ describe("strict CLI argument parsing", () => {
       "Unknown global option: --bad-flag. Use --help for usage."
     );
   });
+
+  it("allows --json for list and command", async () => {
+    await expect(
+      runListCommand(["--json"], {
+        listSandboxes: vi.fn().mockResolvedValue([])
+      })
+    ).resolves.toBeDefined();
+
+    const run = vi.fn().mockResolvedValue({ stdout: "", stderr: "", exitCode: 0 });
+    await expect(
+      runCommandCommand(["--sandbox-id", "sbx-1", "--json", "--", "pwd"], {
+        loadConfig: vi.fn().mockResolvedValue({
+          sandbox: {
+            template: "base",
+            reuse: true,
+            name: "ez-devbox",
+            timeout_ms: 1_800_000,
+            delete_on_exit: false
+          },
+          startup: {
+            mode: "prompt"
+          },
+          project: {
+            mode: "single",
+            active: "prompt",
+            dir: "/workspace",
+            working_dir: "auto",
+            setup_on_connect: false,
+            setup_retries: 0,
+            setup_concurrency: 1,
+            setup_continue_on_error: false,
+            repos: []
+          },
+          env: {
+            pass_through: []
+          },
+          opencode: {
+            config_dir: "~/.config/opencode",
+            auth_path: "~/.local/share/opencode/auth.json"
+          },
+          codex: {
+            config_dir: "~/.codex",
+            auth_path: "~/.codex/auth.json"
+          },
+          gh: {
+            enabled: false,
+            config_dir: "~/.config/gh"
+          },
+          tunnel: {
+            ports: []
+          }
+        }),
+        listSandboxes: vi.fn().mockResolvedValue([]),
+        connectSandbox: vi.fn().mockResolvedValue({ sandboxId: "sbx-1", run }),
+        loadLastRunState: vi.fn().mockResolvedValue(null)
+      })
+    ).resolves.toBeDefined();
+  });
 });

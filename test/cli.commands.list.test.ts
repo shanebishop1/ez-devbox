@@ -30,4 +30,30 @@ describe("runListCommand", () => {
     expect(result.message).toBe("No sandboxes found.");
     expect(result.exitCode).toBe(0);
   });
+
+  it("returns structured json output with --json", async () => {
+    const result = await runListCommand(["--json"], {
+      listSandboxes: vi.fn().mockResolvedValue([
+        { sandboxId: "sbx-1", state: "running", metadata: { "launcher.name": "Alpha" } }
+      ])
+    });
+
+    expect(result.message).toBe(
+      JSON.stringify(
+        {
+          sandboxes: [
+            {
+              sandboxId: "sbx-1",
+              label: "Alpha (sbx-1)",
+              state: "running",
+              metadata: { "launcher.name": "Alpha" }
+            }
+          ]
+        },
+        null,
+        2
+      )
+    );
+    expect(result.exitCode).toBe(0);
+  });
 });
