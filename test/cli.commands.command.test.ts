@@ -21,6 +21,7 @@ const baseConfig: ResolvedLauncherConfig = {
     working_dir: "auto",
     setup_on_connect: false,
     setup_retries: 0,
+    setup_concurrency: 1,
     setup_continue_on_error: false,
     repos: []
   },

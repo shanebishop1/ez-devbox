@@ -55,6 +55,7 @@ setup_command = "npm install"
 - any non-empty path string: used as launch cwd; relative paths resolve under `project.dir`.
 - `setup_on_connect` (boolean): when `true`, setup runs on `connect` even for already-cloned repos.
 - `setup_retries` (number): retry count for `setup_command` after the first attempt (total attempts = `setup_retries + 1`).
+- `setup_concurrency` (number): max number of repos whose `setup_command` can run concurrently. Default `1` (sequential, existing behavior). Must be an integer `>= 1`.
 - `setup_continue_on_error` (boolean): when `true`, continue setup for other repos after a failure.
 - `[[project.repos]]`: list of repos to clone/checkout/bootstrap.
 - `name` (string): repo folder name under `project.dir`.
