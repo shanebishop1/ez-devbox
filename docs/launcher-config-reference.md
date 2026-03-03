@@ -98,15 +98,13 @@ When `project.working_dir = "auto"`, working directory behavior after repo selec
 - `ports` (number array): local TCP ports to expose with temporary cloudflared tunnels.
 - `[]` disables tunnel management.
 - Each value `1-65535` starts one tunnel to `http://127.0.0.1:<port>` for `create/connect/start/command`.
-- `allow_remote_targets` (boolean, default `false`): required to allow `tunnel.targets` entries that point to non-localhost hosts/IPs.
 - `targets` (table, optional): per-port upstream URL override.
 - Keys are stringified port numbers (for example `"3002"`), values are `http://` or `https://` URLs.
+- When `targets` is set, its keys are authoritative for which tunnel ports are started.
 - URL safety constraints: no credentials, no path, no query string, no fragment.
 - Example:
   ```toml
   [tunnel]
-  ports = [3002]
-  allow_remote_targets = true
 
   [tunnel.targets]
   "3002" = "http://10.0.0.20:3002"

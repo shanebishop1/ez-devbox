@@ -23,13 +23,15 @@ export async function withConfiguredTunnel<T>(
   config: Pick<ResolvedLauncherConfig, "tunnel">,
   operation: (runtimeEnv: Record<string, string>) => Promise<T>
 ): Promise<T> {
-  if (config.tunnel.ports.length === 0) {
+  const activePorts = resolveTunnelPorts(config.tunnel.ports, config.tunnel.targets);
+
+  if (activePorts.length === 0) {
     return operation({});
   }
 
   const sessions: CloudflaredTunnelSession[] = [];
   try {
-    for (const port of config.tunnel.ports) {
+    for (const port of activePorts) {
       const upstreamUrl = resolveTunnelUpstreamUrl(port, config.tunnel.targets);
       sessions.push(await startCloudflaredTunnel(port, upstreamUrl));
     }
@@ -383,6 +385,14 @@ function spawnDockerCloudflared(upstreamUrl: string): CloudflaredProcess {
 
 function resolveTunnelUpstreamUrl(port: number, targets?: Record<string, string>): string {
   return targets?.[String(port)] ?? `http://127.0.0.1:${port}`;
+}
+
+function resolveTunnelPorts(ports: number[], targets?: Record<string, string>): number[] {
+  if (targets && Object.keys(targets).length > 0) {
+    return Object.keys(targets).map((port) => Number.parseInt(port, 10));
+  }
+
+  return ports;
 }
 
 function toDockerReachableUrl(upstreamUrl: string): string {

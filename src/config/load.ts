@@ -138,9 +138,6 @@ export async function loadConfigWithMetadata(options: LoadConfigOptions = {}): P
     },
     tunnel: {
       ports: getOptionalNumberArray(tunnelRaw, "ports", "tunnel.ports") ?? defaultConfig.tunnel.ports,
-      allow_remote_targets:
-        getOptionalBoolean(tunnelRaw, "allow_remote_targets", "tunnel.allow_remote_targets") ??
-        defaultConfig.tunnel.allow_remote_targets,
       targets: getOptionalStringRecord(tunnelRaw, "targets", "tunnel.targets") ?? defaultConfig.tunnel.targets
     }
   };
@@ -161,19 +158,7 @@ export async function loadConfigWithMetadata(options: LoadConfigOptions = {}): P
     throw new Error("Invalid gh.config_dir: expected a non-empty path string.");
   }
 
-  const seenTunnelPorts = new Set<number>();
-  for (const [index, port] of resolved.tunnel.ports.entries()) {
-    if (!Number.isInteger(port) || port < 1 || port > 65535) {
-      throw new Error(`Invalid tunnel.ports[${index}]: expected an integer between 1 and 65535.`);
-    }
-
-    if (seenTunnelPorts.has(port)) {
-      throw new Error(`Invalid tunnel.ports[${index}]: duplicate port '${port}' is not allowed.`);
-    }
-
-    seenTunnelPorts.add(port);
-  }
-
+  const targetPorts: number[] = [];
   for (const [portKey, upstreamUrl] of Object.entries(resolved.tunnel.targets ?? {})) {
     const port = Number.parseInt(portKey, 10);
     if (!Number.isInteger(port) || port < 1 || port > 65535 || String(port) !== portKey) {
@@ -201,18 +186,24 @@ export async function loadConfigWithMetadata(options: LoadConfigOptions = {}): P
       throw new Error(`Invalid tunnel.targets.${portKey}: query/fragment/path are not allowed.`);
     }
 
-    const hostname = parsedUrl.hostname.toLowerCase();
-    const isLocalhostTarget =
-      hostname === "localhost" ||
-      hostname === "127.0.0.1" ||
-      hostname === "0.0.0.0" ||
-      hostname === "::1" ||
-      hostname === "[::1]";
-    if (!isLocalhostTarget && resolved.tunnel.allow_remote_targets !== true) {
-      throw new Error(
-        `Invalid tunnel.targets.${portKey}: remote hosts require tunnel.allow_remote_targets = true.`
-      );
+    targetPorts.push(port);
+  }
+
+  if (targetPorts.length > 0) {
+    resolved.tunnel.ports = targetPorts;
+  }
+
+  const seenTunnelPorts = new Set<number>();
+  for (const [index, port] of resolved.tunnel.ports.entries()) {
+    if (!Number.isInteger(port) || port < 1 || port > 65535) {
+      throw new Error(`Invalid tunnel.ports[${index}]: expected an integer between 1 and 65535.`);
     }
+
+    if (seenTunnelPorts.has(port)) {
+      throw new Error(`Invalid tunnel.ports[${index}]: duplicate port '${port}' is not allowed.`);
+    }
+
+    seenTunnelPorts.add(port);
   }
 
   return {
