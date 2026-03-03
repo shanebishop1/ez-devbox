@@ -187,6 +187,28 @@ export async function runCreateCommand(args: string[], deps: CreateCommandDeps =
           : "";
       const syncSuffix = `\nTooling sync: ${formatToolingSyncSummary(syncSummary)}`;
 
+      if (parsed.json) {
+        return {
+          message: JSON.stringify(
+            {
+              sandboxId: handle.sandboxId,
+              sandboxLabel,
+              mode: launched.mode,
+              command: launched.command,
+              url: launched.url,
+              workingDirectory: bootstrapResult.workingDirectory,
+              activeRepo,
+              template: createConfig.sandbox.template,
+              setup: bootstrapResult.setup,
+              toolingSync: syncSummary
+            },
+            null,
+            2
+          ),
+          exitCode: 0
+        };
+      }
+
       return {
         message: `Created sandbox ${sandboxLabel}. ${launched.message}${templateSuffix}${syncSuffix}`,
         exitCode: 0
@@ -416,8 +438,9 @@ function addWebServerPasswordForWebMode(
   };
 }
 
-function parseCreateArgs(args: string[]): { mode?: StartupMode } {
+function parseCreateArgs(args: string[]): { mode?: StartupMode; json: boolean } {
   let mode: StartupMode | undefined;
+  let json = false;
 
   for (let index = 0; index < args.length; index += 1) {
     const token = args[index];
@@ -437,13 +460,18 @@ function parseCreateArgs(args: string[]): { mode?: StartupMode } {
       continue;
     }
 
+    if (token === "--json") {
+      json = true;
+      continue;
+    }
+
     if (token.startsWith("--")) {
       throw new Error(`Unknown option for create: '${token}'. Use --help for usage.`);
     }
     throw new Error(`Unexpected positional argument for create: '${token}'. Use --help for usage.`);
   }
 
-  return { mode };
+  return { mode, json };
 }
 
 function isStartupMode(value: string | undefined): value is StartupMode {

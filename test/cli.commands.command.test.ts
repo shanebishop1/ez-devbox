@@ -296,6 +296,34 @@ describe("runCommandCommand", () => {
     expect(result.message).toContain("stderr:\nboom");
   });
 
+  it("returns structured json output when --json is provided", async () => {
+    const run = vi.fn().mockResolvedValue({ stdout: "ok\n", stderr: "", exitCode: 0 });
+
+    const result = await runCommandCommand(["--sandbox-id", "sbx-1", "--json", "--", "npm", "test"], {
+      loadConfig: vi.fn().mockResolvedValue(baseConfig),
+      listSandboxes: vi.fn().mockResolvedValue([]),
+      connectSandbox: vi.fn().mockResolvedValue({ sandboxId: "sbx-1", run }),
+      loadLastRunState: vi.fn().mockResolvedValue(null)
+    });
+
+    expect(result.message).toBe(
+      JSON.stringify(
+        {
+          sandboxId: "sbx-1",
+          sandboxLabel: "sbx-1",
+          command: "npm test",
+          cwd: "/workspace",
+          stdout: "ok\n",
+          stderr: "",
+          exitCode: 0
+        },
+        null,
+        2
+      )
+    );
+    expect(result.exitCode).toBe(0);
+  });
+
   it("injects passthrough envs when running command", async () => {
     const run = vi.fn().mockResolvedValue({ stdout: "ok", stderr: "", exitCode: 0 });
 

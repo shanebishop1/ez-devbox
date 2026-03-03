@@ -154,6 +154,26 @@ export async function runConnectCommand(
         updatedAt: deps.now()
       });
 
+      if (parsed.json) {
+        return {
+          message: JSON.stringify(
+            {
+              sandboxId: handle.sandboxId,
+              sandboxLabel: targetLabel,
+              mode: launched.mode,
+              command: launched.command,
+              url: launched.url,
+              workingDirectory: bootstrapResult.workingDirectory,
+              activeRepo,
+              setup: bootstrapResult.setup
+            },
+            null,
+            2
+          ),
+          exitCode: 0
+        };
+      }
+
       return {
         message: `Connected to sandbox ${targetLabel}. ${launched.message}`,
         exitCode: 0
@@ -352,9 +372,10 @@ async function promptInput(question: string): Promise<string> {
   }
 }
 
-function parseConnectArgs(args: string[]): { sandboxId?: string; mode?: StartupMode } {
+function parseConnectArgs(args: string[]): { sandboxId?: string; mode?: StartupMode; json: boolean } {
   let sandboxId: string | undefined;
   let mode: StartupMode | undefined;
+  let json = false;
 
   for (let index = 0; index < args.length; index += 1) {
     const token = args[index];
@@ -379,13 +400,18 @@ function parseConnectArgs(args: string[]): { sandboxId?: string; mode?: StartupM
       continue;
     }
 
+    if (token === "--json") {
+      json = true;
+      continue;
+    }
+
     if (token.startsWith("--")) {
       throw new Error(`Unknown option for connect: '${token}'. Use --help for usage.`);
     }
     throw new Error(`Unexpected positional argument for connect: '${token}'. Use --help for usage.`);
   }
 
-  return { sandboxId, mode };
+  return { sandboxId, mode, json };
 }
 
 function isStartupMode(value: string | undefined): value is StartupMode {
