@@ -120,6 +120,9 @@ export async function loadConfigWithMetadata(options: LoadConfigOptions = {}): P
       setup_retries:
         getOptionalNumber(projectRaw, "setup_retries", "project.setup_retries") ??
         defaultConfig.project.setup_retries,
+      setup_concurrency:
+        getOptionalNumber(projectRaw, "setup_concurrency", "project.setup_concurrency") ??
+        defaultConfig.project.setup_concurrency,
       setup_continue_on_error:
         getOptionalBoolean(projectRaw, "setup_continue_on_error", "project.setup_continue_on_error") ??
         defaultConfig.project.setup_continue_on_error,
@@ -155,6 +158,10 @@ export async function loadConfigWithMetadata(options: LoadConfigOptions = {}): P
 
   if (resolved.project.setup_retries < 0 || !Number.isInteger(resolved.project.setup_retries)) {
     throw new Error("Invalid project.setup_retries: expected an integer greater than or equal to 0.");
+  }
+
+  if (resolved.project.setup_concurrency < 1 || !Number.isInteger(resolved.project.setup_concurrency)) {
+    throw new Error("Invalid project.setup_concurrency: expected an integer greater than or equal to 1.");
   }
 
   if (resolved.project.working_dir !== "auto" && resolved.project.working_dir.trim() === "") {

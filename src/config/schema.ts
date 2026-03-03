@@ -32,6 +32,7 @@ export interface ResolvedLauncherConfig {
     working_dir: string;
     setup_on_connect: boolean;
     setup_retries: number;
+    setup_concurrency: number;
     setup_continue_on_error: boolean;
     repos: ResolvedProjectRepoConfig[];
   };
