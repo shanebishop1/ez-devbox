@@ -74,13 +74,13 @@ describe("sandbox display naming", () => {
   });
 
   it("resolves display name from metadata and falls back to sandbox id", () => {
-    expect(resolveSandboxDisplayName({ "launcher.name": "Agent Box Web" }, "sbx-123")).toBe("Agent Box Web");
+    expect(resolveSandboxDisplayName({ "launcher.name": "ez-devbox web" }, "sbx-123")).toBe("ez-devbox web");
     expect(resolveSandboxDisplayName(undefined, "sbx-123")).toBe("sbx-123");
     expect(resolveSandboxDisplayName({ "launcher.name": "  " }, "sbx-123")).toBe("sbx-123");
   });
 
   it("formats label as <name> (<id>) when metadata name exists", () => {
-    expect(formatSandboxDisplayLabel("sbx-123", { "launcher.name": "Agent Box Web" })).toBe("Agent Box Web (sbx-123)");
+    expect(formatSandboxDisplayLabel("sbx-123", { "launcher.name": "ez-devbox web" })).toBe("ez-devbox web (sbx-123)");
     expect(formatSandboxDisplayLabel("sbx-123", { "launcher.name": "   " })).toBe("sbx-123");
     expect(formatSandboxDisplayLabel("sbx-123")).toBe("sbx-123");
   });
