@@ -26,6 +26,8 @@ export interface ResolvedLauncherConfig {
   project: {
     mode: ProjectMode;
     active: ProjectActiveMode;
+    active_name?: string;
+    active_index?: number;
     dir: string;
     working_dir: string;
     setup_on_connect: boolean;

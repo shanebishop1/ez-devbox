@@ -10,6 +10,7 @@ import { withConfiguredTunnel } from "../tunnel/cloudflared.js";
 import { formatPromptChoice } from "./prompt-style.js";
 import { loadCliEnvSource } from "./env-source.js";
 import { logger } from "../logging/logger.js";
+import { selectReposForProvisioning } from "../repo/selection.js";
 
 const OPENCODE_SERVER_PASSWORD_ENV_VAR = "OPENCODE_SERVER_PASSWORD";
 
@@ -53,7 +54,14 @@ export async function runCommandCommand(args: string[], deps: CommandCommandDeps
   }
   return withConfiguredTunnel(config, async (tunnelRuntimeEnv) => {
     const sandboxTarget = await resolveSandboxTarget(parsed.sandboxId, deps);
-    const selectedRepos = await resolveSelectedRepos(config.project.repos, config.project.mode, config.project.active, deps);
+    const selectedRepos = await resolveSelectedRepos(
+      config.project.repos,
+      config.project.mode,
+      config.project.active,
+      config.project.active_name,
+      config.project.active_index,
+      deps
+    );
     const cwd = resolveCommandWorkingDirectory(config.project.dir, selectedRepos);
     const envSource = deps.resolveEnvSource ? await deps.resolveEnvSource() : {};
     const envResolution = deps.resolveSandboxCreateEnv
@@ -116,6 +124,10 @@ function parseCommandArgs(args: string[]): { sandboxId?: string; command: string
       sandboxId = next;
       index += 1;
       continue;
+    }
+
+    if (token.startsWith("--")) {
+      throw new Error(`Unknown option for command: '${token}'. Use --help for usage.`);
     }
 
     commandStartIndex = index;
@@ -213,6 +225,8 @@ async function resolveSelectedRepos(
   repos: Awaited<ReturnType<typeof loadConfig>>["project"]["repos"],
   mode: Awaited<ReturnType<typeof loadConfig>>["project"]["mode"],
   active: Awaited<ReturnType<typeof loadConfig>>["project"]["active"],
+  activeName: string | undefined,
+  activeIndex: number | undefined,
   deps: CommandCommandDeps
 ): Promise<Awaited<ReturnType<typeof loadConfig>>["project"]["repos"]> {
   if (repos.length === 0) {
@@ -240,10 +254,30 @@ async function resolveSelectedRepos(
     if (!selected) {
       throw new Error(`Invalid repo selection. Enter a number between 1 and ${repos.length}.`);
     }
-    return [selected];
+    return selectReposForProvisioning({
+      mode,
+      active,
+      repos,
+      promptIndex: selectedIndex - 1
+    });
   }
 
-  return [repos[0]];
+  if (active === "prompt") {
+    return selectReposForProvisioning({
+      mode,
+      active,
+      repos,
+      promptIndex: 0
+    });
+  }
+
+  return selectReposForProvisioning({
+    mode,
+    active,
+    repos,
+    activeName,
+    activeIndex
+  });
 }
 
 function resolveCommandWorkingDirectory(

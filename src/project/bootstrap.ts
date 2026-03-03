@@ -5,6 +5,7 @@ import type { SandboxHandle } from "../e2b/lifecycle.js";
 import { normalizePromptCancelledError } from "../cli/prompt-cancelled.js";
 import { resolveGitIdentity } from "../auth/gitIdentity.js";
 import { provisionRepos, type GitAdapter, type ProvisionedRepoSummary, type RepoExecutor } from "../repo/manager.js";
+import { selectReposForProvisioning } from "../repo/selection.js";
 import {
   runSetupPipeline,
   type RunSetupPipelineOptions,
@@ -73,7 +74,9 @@ export async function bootstrapProjectWorkspace(
   const selectedRepos = await selectRepos(config.project.repos, config.project.mode, config.project.active, {
     isInteractiveTerminal: options.isInteractiveTerminal,
     promptInput: options.promptInput,
-    preferredActiveRepo: options.preferredActiveRepo
+    preferredActiveRepo: options.preferredActiveRepo,
+    activeName: config.project.active_name,
+    activeIndex: config.project.active_index
   });
   options.onProgress?.(
     selectedRepos.length === 0
@@ -150,7 +153,10 @@ async function selectRepos(
   repos: ResolvedProjectRepoConfig[],
   mode: ResolvedLauncherConfig["project"]["mode"],
   active: ResolvedLauncherConfig["project"]["active"],
-  options: Pick<BootstrapProjectWorkspaceOptions, "isInteractiveTerminal" | "promptInput" | "preferredActiveRepo">
+  options: Pick<BootstrapProjectWorkspaceOptions, "isInteractiveTerminal" | "promptInput" | "preferredActiveRepo"> & {
+    activeName: string | undefined;
+    activeIndex: number | undefined;
+  }
 ): Promise<ResolvedProjectRepoConfig[]> {
   if (repos.length === 0) {
     return [];
@@ -164,8 +170,14 @@ async function selectRepos(
     return [repos[0]];
   }
 
-  if (active !== "prompt") {
-    return [repos[0]];
+  if (active === "name" || active === "index") {
+    return selectReposForProvisioning({
+      mode,
+      active,
+      repos,
+      activeName: options.activeName,
+      activeIndex: options.activeIndex
+    });
   }
 
   const preferredActiveRepo = options.preferredActiveRepo?.trim();
@@ -178,7 +190,12 @@ async function selectRepos(
 
   const isInteractiveTerminal = options.isInteractiveTerminal ?? (() => Boolean(process.stdin.isTTY && process.stdout.isTTY));
   if (!isInteractiveTerminal()) {
-    return [repos[0]];
+    return selectReposForProvisioning({
+      mode,
+      active,
+      repos,
+      promptIndex: 0
+    });
   }
 
   const prompt = options.promptInput ?? promptInput;
@@ -193,7 +210,12 @@ async function selectRepos(
     throw new Error(`Invalid repo selection. Enter a number between 1 and ${repos.length}.`);
   }
 
-  return [selected];
+  return selectReposForProvisioning({
+    mode,
+    active,
+    repos,
+    promptIndex: selectedIndex - 1
+  });
 }
 
 async function promptInput(question: string): Promise<string> {

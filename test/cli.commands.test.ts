@@ -180,6 +180,23 @@ describe("CLI command integration", () => {
     expect(syncToolingToSandbox).toHaveBeenCalledTimes(1);
   });
 
+  it("create rejects unexpected arguments with help guidance", async () => {
+    await expect(
+      runCreateCommand(["--bad"], {
+        loadConfig: vi.fn().mockResolvedValue(config),
+        createSandbox: vi.fn().mockResolvedValue({ sandboxId: "sbx-created" }),
+        resolveEnvSource: vi.fn().mockResolvedValue({}),
+        resolveSandboxCreateEnv: vi.fn().mockReturnValue({ envs: {} }),
+        resolvePromptStartupMode: vi.fn().mockResolvedValue("ssh-opencode"),
+        launchMode: vi.fn().mockResolvedValue({ mode: "ssh-opencode", command: "opencode", message: "launched" }),
+        bootstrapProjectWorkspace: vi.fn().mockResolvedValue(bootstrapResult),
+        syncToolingToSandbox: vi.fn().mockResolvedValue(syncSummary),
+        saveLastRunState: vi.fn().mockResolvedValue(undefined),
+        now: () => "2026-02-01T00:00:00.000Z"
+      })
+    ).rejects.toThrow("Unknown option for create: '--bad'. Use --help for usage.");
+  });
+
   it("create logs the launcher config path when metadata loader is used", async () => {
     const infoSpy = vi.spyOn(logger, "info").mockImplementation(() => undefined);
 
@@ -1205,6 +1222,22 @@ describe("CLI command integration", () => {
       activeRepo: undefined,
       updatedAt: "2026-02-01T00:00:00.000Z"
     });
+  });
+
+  it("connect rejects unexpected arguments with help guidance", async () => {
+    await expect(
+      runConnectCommand(["--bad"], {
+        loadConfig: vi.fn().mockResolvedValue(config),
+        connectSandbox: vi.fn().mockResolvedValue({ sandboxId: "sbx-arg" }),
+        loadLastRunState: vi.fn().mockResolvedValue(null),
+        listSandboxes: vi.fn().mockResolvedValue([{ sandboxId: "sbx-arg", state: "running" }]),
+        resolvePromptStartupMode: vi.fn().mockResolvedValue("ssh-opencode"),
+        launchMode: vi.fn().mockResolvedValue({ mode: "ssh-opencode", command: "opencode", message: "launched" }),
+        bootstrapProjectWorkspace: vi.fn().mockResolvedValue(bootstrapResult),
+        saveLastRunState: vi.fn().mockResolvedValue(undefined),
+        now: () => "2026-02-01T00:00:00.000Z"
+      })
+    ).rejects.toThrow("Unknown option for connect: '--bad'. Use --help for usage.");
   });
 
 });

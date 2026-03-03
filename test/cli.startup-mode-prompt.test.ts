@@ -40,11 +40,34 @@ describe("resolvePromptStartupMode", () => {
     await expectResolvedMode("ssh-shell", "ssh-shell");
   });
 
-  it("falls back to ssh-opencode on empty or invalid input", async () => {
-    await expectResolvedMode("", "ssh-opencode");
-    await expectResolvedMode(" ", "ssh-opencode");
-    await expectResolvedMode("5", "ssh-opencode");
-    await expectResolvedMode("not-a-mode", "ssh-opencode");
+  it("reprompts in interactive mode until a valid selection is provided", async () => {
+    const promptInput = vi
+      .fn()
+      .mockResolvedValueOnce("5")
+      .mockResolvedValueOnce("ssh-codex");
+
+    const result = await resolvePromptStartupMode("prompt", {
+      isInteractiveTerminal: () => true,
+      promptInput
+    });
+
+    expect(result).toBe("ssh-codex");
+    expect(promptInput).toHaveBeenCalledTimes(2);
+  });
+
+  it("throws actionable error after repeated invalid interactive input", async () => {
+    const promptInput = vi
+      .fn()
+      .mockResolvedValueOnce("")
+      .mockResolvedValueOnce(" ")
+      .mockResolvedValueOnce("not-a-mode");
+
+    await expect(
+      resolvePromptStartupMode("prompt", {
+        isInteractiveTerminal: () => true,
+        promptInput
+      })
+    ).rejects.toThrow("Invalid startup mode selection after 3 attempts");
   });
 
   it("shows numbered choices in the prompt text", async () => {

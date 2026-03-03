@@ -50,17 +50,21 @@ function parseWipeArgs(args: string[]): { sandboxId?: string } {
 
   for (let index = 0; index < args.length; index += 1) {
     const token = args[index];
-    if (token !== "--sandbox-id") {
+    if (token === "--sandbox-id") {
+      const next = args[index + 1];
+      if (!next || next.startsWith("--")) {
+        throw new Error("Missing value for --sandbox-id.");
+      }
+
+      sandboxId = next;
+      index += 1;
       continue;
     }
 
-    const next = args[index + 1];
-    if (!next || next.startsWith("--")) {
-      throw new Error("Missing value for --sandbox-id.");
+    if (token.startsWith("--")) {
+      throw new Error(`Unknown option for wipe: '${token}'. Use --help for usage.`);
     }
-
-    sandboxId = next;
-    index += 1;
+    throw new Error(`Unexpected positional argument for wipe: '${token}'. Use --help for usage.`);
   }
 
   return { sandboxId };

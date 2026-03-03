@@ -14,7 +14,10 @@ const defaultDeps: ResumeCommandDeps = {
 
 export async function runResumeCommand(args: string[], deps: ResumeCommandDeps = defaultDeps): Promise<CommandResult> {
   if (args.length > 0) {
-    throw new Error(`Unexpected arguments for resume: ${args.join(" ")}.`);
+    if (args[0].startsWith("--")) {
+      throw new Error(`Unknown option for resume: '${args[0]}'. Use --help for usage.`);
+    }
+    throw new Error(`Unexpected positional argument for resume: '${args[0]}'. Use --help for usage.`);
   }
 
   const lastRun = await deps.loadLastRunState();

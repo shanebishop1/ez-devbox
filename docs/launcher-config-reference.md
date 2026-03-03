@@ -39,14 +39,16 @@ setup_command = "npm install"
 ## `[startup]`
 
 - `mode` (enum): default startup mode. Allowed values: `prompt|ssh-opencode|ssh-codex|web|ssh-shell`.
-- `prompt` behavior: prompts in interactive terminals (accepts `1-4` or mode name); non-interactive fallback is `ssh-opencode`.
+- `prompt` behavior: prompts in interactive terminals (accepts `1-4` or mode name), reprompts invalid input up to 3 times, then fails with an actionable error.
+- Non-interactive fallback is `ssh-opencode`.
 
 ## `[project]`
 
 - `mode` (enum): repo selection strategy. Allowed values: `single|all`.
 - `active` (enum): single-repo chooser mode. Allowed values: `prompt|name|index`.
 - `prompt` asks which repo to use when multiple repos are configured and a TTY is available.
-- `name` and `index` are accepted config values, but current behavior falls back to the first configured repo.
+- `active_name` (string): required when `active = "name"`; must match one configured `[[project.repos]].name`.
+- `active_index` (number): required when `active = "index"`; zero-based repo index (`0` is the first repo).
 - `dir` (string): parent workspace directory in the sandbox where repos are cloned.
 - `working_dir` (string): launch cwd policy.
 - `auto` (default): one selected/provisioned repo -> repo path, multiple repos -> `project.dir`, no repo -> unchanged.

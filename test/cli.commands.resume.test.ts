@@ -54,6 +54,6 @@ describe("runResumeCommand", () => {
         loadLastRunState: vi.fn().mockResolvedValue(null),
         runConnectCommand: vi.fn()
       })
-    ).rejects.toThrow("Unexpected arguments for resume");
+    ).rejects.toThrow("Unknown option for resume: '--mode'. Use --help for usage.");
   });
 });

@@ -17,10 +17,15 @@ export function parseGlobalCliOptions(argv: string[]): GlobalCliOptions {
   let verbose = false;
   const args: string[] = [];
   const firstCommand = argv.find((token) => commands.has(token as CliCommandName));
+  const firstCommandIndex = firstCommand ? argv.indexOf(firstCommand) : -1;
   const stopAtDoubleDash = firstCommand === "command";
 
   for (let index = 0; index < argv.length; index += 1) {
     const token = argv[index];
+    if (firstCommandIndex > 0 && index < firstCommandIndex && token.startsWith("-") && token !== "--verbose" && !isHelpFlag(token)) {
+      throw new Error(`Unknown global option: ${token}. Use --help for usage.`);
+    }
+
     if (token === "--") {
       args.push(token);
       if (stopAtDoubleDash) {

@@ -45,6 +45,17 @@ const baseConfig: ResolvedLauncherConfig = {
 };
 
 describe("runCommandCommand", () => {
+  it("rejects unexpected flags before command tokens with help guidance", async () => {
+    await expect(
+      runCommandCommand(["--bad", "echo", "hello"], {
+        loadConfig: vi.fn().mockResolvedValue(baseConfig),
+        listSandboxes: vi.fn().mockResolvedValue([]),
+        connectSandbox: vi.fn(),
+        loadLastRunState: vi.fn().mockResolvedValue(null)
+      })
+    ).rejects.toThrow("Unknown option for command: '--bad'. Use --help for usage.");
+  });
+
   it("validates that a remote command is provided", async () => {
     await expect(
       runCommandCommand(["--sandbox-id", "sbx-1"], {
@@ -134,6 +145,56 @@ describe("runCommandCommand", () => {
     expect(run).toHaveBeenCalledWith("pwd", { cwd: "/workspace/repo-one" });
   });
 
+  it("selects cwd using project.active=name", async () => {
+    const run = vi.fn().mockResolvedValue({ stdout: "ok", stderr: "", exitCode: 0 });
+    await runCommandCommand(["--sandbox-id", "sbx-1", "pwd"], {
+      loadConfig: vi.fn().mockResolvedValue({
+        ...baseConfig,
+        project: {
+          ...baseConfig.project,
+          mode: "single",
+          active: "name",
+          active_name: "repo-two",
+          repos: [
+            { name: "repo-one", url: "https://example.com/repo-one.git", branch: "main", setup_command: "", setup_env: {}, startup_env: {} },
+            { name: "repo-two", url: "https://example.com/repo-two.git", branch: "main", setup_command: "", setup_env: {}, startup_env: {} }
+          ]
+        }
+      }),
+      listSandboxes: vi.fn().mockResolvedValue([]),
+      connectSandbox: vi.fn().mockResolvedValue({ sandboxId: "sbx-1", run }),
+      loadLastRunState: vi.fn().mockResolvedValue(null),
+      isInteractiveTerminal: () => false
+    });
+
+    expect(run).toHaveBeenCalledWith("pwd", { cwd: "/workspace/repo-two" });
+  });
+
+  it("selects cwd using project.active=index", async () => {
+    const run = vi.fn().mockResolvedValue({ stdout: "ok", stderr: "", exitCode: 0 });
+    await runCommandCommand(["--sandbox-id", "sbx-1", "pwd"], {
+      loadConfig: vi.fn().mockResolvedValue({
+        ...baseConfig,
+        project: {
+          ...baseConfig.project,
+          mode: "single",
+          active: "index",
+          active_index: 1,
+          repos: [
+            { name: "repo-one", url: "https://example.com/repo-one.git", branch: "main", setup_command: "", setup_env: {}, startup_env: {} },
+            { name: "repo-two", url: "https://example.com/repo-two.git", branch: "main", setup_command: "", setup_env: {}, startup_env: {} }
+          ]
+        }
+      }),
+      listSandboxes: vi.fn().mockResolvedValue([]),
+      connectSandbox: vi.fn().mockResolvedValue({ sandboxId: "sbx-1", run }),
+      loadLastRunState: vi.fn().mockResolvedValue(null),
+      isInteractiveTerminal: () => true
+    });
+
+    expect(run).toHaveBeenCalledWith("pwd", { cwd: "/workspace/repo-two" });
+  });
+
   it("selects project dir cwd for all mode with multiple repos", async () => {
     const run = vi.fn().mockResolvedValue({ stdout: "ok", stderr: "", exitCode: 0 });
     await runCommandCommand(["--sandbox-id", "sbx-1", "pwd"], {
@@ -154,6 +215,54 @@ describe("runCommandCommand", () => {
     });
 
     expect(run).toHaveBeenCalledWith("pwd", { cwd: "/workspace" });
+  });
+
+  it("selects configured repo cwd when project.active is name", async () => {
+    const run = vi.fn().mockResolvedValue({ stdout: "ok", stderr: "", exitCode: 0 });
+    await runCommandCommand(["--sandbox-id", "sbx-1", "pwd"], {
+      loadConfig: vi.fn().mockResolvedValue({
+        ...baseConfig,
+        project: {
+          ...baseConfig.project,
+          mode: "single",
+          active: "name",
+          active_name: "repo-two",
+          repos: [
+            { name: "repo-one", url: "https://example.com/repo-one.git", branch: "main", setup_command: "", setup_env: {}, startup_env: {} },
+            { name: "repo-two", url: "https://example.com/repo-two.git", branch: "main", setup_command: "", setup_env: {}, startup_env: {} }
+          ]
+        }
+      }),
+      listSandboxes: vi.fn().mockResolvedValue([]),
+      connectSandbox: vi.fn().mockResolvedValue({ sandboxId: "sbx-1", run }),
+      loadLastRunState: vi.fn().mockResolvedValue(null)
+    });
+
+    expect(run).toHaveBeenCalledWith("pwd", { cwd: "/workspace/repo-two" });
+  });
+
+  it("selects configured repo cwd when project.active is index", async () => {
+    const run = vi.fn().mockResolvedValue({ stdout: "ok", stderr: "", exitCode: 0 });
+    await runCommandCommand(["--sandbox-id", "sbx-1", "pwd"], {
+      loadConfig: vi.fn().mockResolvedValue({
+        ...baseConfig,
+        project: {
+          ...baseConfig.project,
+          mode: "single",
+          active: "index",
+          active_index: 1,
+          repos: [
+            { name: "repo-one", url: "https://example.com/repo-one.git", branch: "main", setup_command: "", setup_env: {}, startup_env: {} },
+            { name: "repo-two", url: "https://example.com/repo-two.git", branch: "main", setup_command: "", setup_env: {}, startup_env: {} }
+          ]
+        }
+      }),
+      listSandboxes: vi.fn().mockResolvedValue([]),
+      connectSandbox: vi.fn().mockResolvedValue({ sandboxId: "sbx-1", run }),
+      loadLastRunState: vi.fn().mockResolvedValue(null)
+    });
+
+    expect(run).toHaveBeenCalledWith("pwd", { cwd: "/workspace/repo-two" });
   });
 
   it("selects project dir cwd when no repos are configured", async () => {

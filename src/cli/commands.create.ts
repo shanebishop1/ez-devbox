@@ -430,6 +430,14 @@ function parseCreateArgs(args: string[]): { mode?: StartupMode } {
       continue;
     }
 
+    if (token === "--yes-sync") {
+      continue;
+    }
+
+    if (token.startsWith("--")) {
+      throw new Error(`Unknown option for create: '${token}'. Use --help for usage.`);
+    }
+    throw new Error(`Unexpected positional argument for create: '${token}'. Use --help for usage.`);
   }
 
   return { mode };

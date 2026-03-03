@@ -264,6 +264,52 @@ describe("project bootstrap", () => {
     expect(promptInput).not.toHaveBeenCalled();
   });
 
+  it("selects configured repo by project.active=name without prompting", async () => {
+    const repos = [createRepo("alpha"), createRepo("beta")];
+    const config = createConfig({ mode: "single", active: "name", active_name: "beta", repos });
+    const handle = createHandle();
+    const promptInput = vi.fn().mockResolvedValue("1");
+    const provisionSelectedRepos = vi.fn().mockResolvedValue([
+      { repo: "beta", path: "/workspace/beta", cloned: true, reused: false, branchSwitched: false }
+    ]);
+
+    const result = await bootstrapProjectWorkspace(handle, config, {
+      isInteractiveTerminal: () => true,
+      promptInput,
+      deps: {
+        ensureProjectDirectory: vi.fn().mockResolvedValue(undefined),
+        provisionSelectedRepos,
+        runSetupForRepos: vi.fn().mockResolvedValue({ success: true, repos: [] })
+      }
+    });
+
+    expect(result.selectedRepoNames).toEqual(["beta"]);
+    expect(promptInput).not.toHaveBeenCalled();
+  });
+
+  it("selects configured repo by project.active=index in non-interactive mode", async () => {
+    const repos = [createRepo("alpha"), createRepo("beta"), createRepo("gamma")];
+    const config = createConfig({ mode: "single", active: "index", active_index: 2, repos });
+    const handle = createHandle();
+    const promptInput = vi.fn().mockResolvedValue("1");
+    const provisionSelectedRepos = vi.fn().mockResolvedValue([
+      { repo: "gamma", path: "/workspace/gamma", cloned: true, reused: false, branchSwitched: false }
+    ]);
+
+    const result = await bootstrapProjectWorkspace(handle, config, {
+      isInteractiveTerminal: () => false,
+      promptInput,
+      deps: {
+        ensureProjectDirectory: vi.fn().mockResolvedValue(undefined),
+        provisionSelectedRepos,
+        runSetupForRepos: vi.fn().mockResolvedValue({ success: true, repos: [] })
+      }
+    });
+
+    expect(result.selectedRepoNames).toEqual(["gamma"]);
+    expect(promptInput).not.toHaveBeenCalled();
+  });
+
   it("skips setup on connect when repo reused and setup_on_connect is false", async () => {
     const repos = [createRepo("alpha")];
     const config = createConfig({ mode: "single", active: "prompt", repos, setup_on_connect: false });
