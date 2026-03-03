@@ -19,6 +19,11 @@ interface CloudflaredTunnelSession {
 
 type CloudflaredProcess = ChildProcessByStdio<null, Readable, Readable>;
 
+export type WithConfiguredTunnel = <T>(
+  config: Pick<ResolvedLauncherConfig, "tunnel">,
+  operation: (runtimeEnv: Record<string, string>) => Promise<T>
+) => Promise<T>;
+
 export async function withConfiguredTunnel<T>(
   config: Pick<ResolvedLauncherConfig, "tunnel">,
   operation: (runtimeEnv: Record<string, string>) => Promise<T>

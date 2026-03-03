@@ -111,4 +111,5 @@ When `project.working_dir = "auto"`, working directory behavior after repo selec
   ```
 - Docker fallback rewrites only localhost-style upstreams (`127.0.0.1`, `localhost`, `0.0.0.0`) to `host.docker.internal`; remote hosts/IPs are kept unchanged.
 - Runtime exports generic env vars: `EZ_DEVBOX_TUNNEL_<PORT>_URL`, `EZ_DEVBOX_TUNNELS_JSON`, and `EZ_DEVBOX_TUNNEL_PORTS`; `EZ_DEVBOX_TUNNEL_URL` is set only when exactly one tunnel is active.
+- On `create`, ez-devbox emits a warning reminding that anyone with a tunnel URL can access the forwarded service.
 - Runtime prefers local `cloudflared`; if missing, it falls back to `docker run cloudflare/cloudflared:2024.11.0`.

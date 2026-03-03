@@ -164,6 +164,7 @@ For non-local upstream services, define explicit tunnel targets (port -> upstrea
 This keeps the same `EZ_DEVBOX_TUNNEL_*` env output while pointing cloudflared at a remote host/service.
 When `tunnel.targets` is present, its keys are the authoritative tunneled ports (you do not need `tunnel.ports`).
 Target URLs cannot include credentials, path, query, or fragment.
+On `create`, ez-devbox prints a warning that tunnel URLs are effectively bearer links: anyone with the URL can reach the forwarded service.
 
 ## launcher.config.toml reference
 
