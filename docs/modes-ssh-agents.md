@@ -34,27 +34,23 @@ If they are missing/invalid locally, the corresponding CLI mode can start but no
 
 1. Ensure `.env` exists with `E2B_API_KEY` set.
 
-2. Create and launch one mode:
-OpenCode mode:
+2. Pick one mode and stay on that mode for reconnects.
+
+OpenCode flow:
 
 ```bash
 npx ez-devbox create --mode ssh-opencode
+npx ez-devbox connect --sandbox-id <sandbox-id> --mode ssh-opencode
 ```
 
-Codex mode:
+Codex flow:
 
 ```bash
 npx ez-devbox create --mode ssh-codex
-```
-
-3. Reconnect to a specific sandbox and mode:
-
-```bash
-npx ez-devbox connect --sandbox-id <sandbox-id> --mode ssh-opencode
 npx ez-devbox connect --sandbox-id <sandbox-id> --mode ssh-codex
 ```
 
-4. Resume the last saved sandbox/mode:
+3. Resume the last saved sandbox/mode:
 
 ```bash
 npx ez-devbox resume
@@ -62,14 +58,16 @@ npx ez-devbox resume
 
 ## Quick examples
 
-Create with Codex:
+OpenCode create/connect:
+
+```bash
+npx ez-devbox create --mode ssh-opencode
+npx ez-devbox connect --sandbox-id <sandbox-id> --mode ssh-opencode
+```
+
+Codex create/connect:
 
 ```bash
 npx ez-devbox create --mode ssh-codex
-```
-
-Connect with OpenCode:
-
-```bash
-npx ez-devbox connect --sandbox-id <sandbox-id> --mode ssh-opencode
+npx ez-devbox connect --sandbox-id <sandbox-id> --mode ssh-codex
 ```
