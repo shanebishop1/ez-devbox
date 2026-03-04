@@ -21,6 +21,9 @@ export async function loadConfigWithMetadata(options: LoadConfigOptions = {}): P
 
   const rawConfig = await readTomlConfig(configPath);
   const parsedEnv = await readEnvFile(envPath);
+  if (options.env === undefined) {
+    applyEnvDefaults(process.env, parsedEnv);
+  }
   const envSource = options.env ?? process.env;
   const mergedEnv = {
     ...parsedEnv,
@@ -38,4 +41,12 @@ export async function loadConfigWithMetadata(options: LoadConfigOptions = {}): P
     createdConfig: resolvedPath.created,
     scope: resolvedPath.scope,
   };
+}
+
+function applyEnvDefaults(targetEnv: NodeJS.ProcessEnv, parsedEnv: Record<string, string>): void {
+  for (const [key, value] of Object.entries(parsedEnv)) {
+    if (targetEnv[key] === undefined) {
+      targetEnv[key] = value;
+    }
+  }
 }

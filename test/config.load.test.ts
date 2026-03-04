@@ -204,6 +204,18 @@ describe("loadConfig", () => {
     await expect(loadConfig({ configPath, envPath })).rejects.toThrow("E2B_API_KEY");
   });
 
+  it("hydrates process.env from .env when options.env is omitted", async () => {
+    const configPath = join(tempDir, "launcher.config.toml");
+    const envPath = join(tempDir, ".env");
+
+    await writeFile(configPath, '[startup]\nmode = "prompt"\n');
+    await writeFile(envPath, "E2B_API_KEY=from-dotenv\n");
+
+    await loadConfig({ configPath, envPath });
+
+    expect(process.env.E2B_API_KEY).toBe("from-dotenv");
+  });
+
   it("uses options.env when provided even if process env is empty", async () => {
     const configPath = join(tempDir, "launcher.config.toml");
     const envPath = join(tempDir, ".env");

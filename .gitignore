@@ -13,6 +13,7 @@ logs
 .DS_Store
 .codex
 .agents
+.beads
 
 # Local planning and publishing notes
 docs/plans/
