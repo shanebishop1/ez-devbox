@@ -5,7 +5,7 @@ import {
   formatSetupOutcomeSummary,
   parseStartupModeValue,
   removeOpenCodeServerPassword,
-  resolveWebServerPassword
+  resolveWebServerPassword,
 } from "../src/cli/command-shared.js";
 
 describe("cli command shared helpers", () => {
@@ -29,10 +29,10 @@ describe("cli command shared helpers", () => {
 
     expect(addWebServerPasswordForWebMode({ A: "1" }, "web", "secret")).toEqual({
       A: "1",
-      OPENCODE_SERVER_PASSWORD: "secret"
+      OPENCODE_SERVER_PASSWORD: "secret",
     });
     expect(addWebServerPasswordForWebMode({ A: "1" }, "ssh-opencode", "secret")).toEqual({
-      A: "1"
+      A: "1",
     });
   });
 
@@ -41,8 +41,8 @@ describe("cli command shared helpers", () => {
     expect(formatSelectedReposSummary(["alpha", "beta"])).toBe("alpha, beta");
 
     expect(formatSetupOutcomeSummary(null)).toBe("skipped");
-    expect(formatSetupOutcomeSummary({ success: true, repos: [{ repo: "alpha", path: "/x", success: true, steps: [] }] })).toBe(
-      "ran success=true repos=1"
-    );
+    expect(
+      formatSetupOutcomeSummary({ success: true, repos: [{ repo: "alpha", path: "/x", success: true, steps: [] }] }),
+    ).toBe("ran success=true repos=1");
   });
 });

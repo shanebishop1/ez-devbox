@@ -3,15 +3,16 @@ import { logger } from "../logging/logger.js";
 import type { LaunchContextOptions, ModeLaunchResult } from "./index.js";
 import {
   buildInteractiveRemoteCommand,
-  type SshModeDeps,
   cleanupSshBridgeSession,
   prepareSshBridgeSession,
   runInteractiveSshSession,
-  stageInteractiveStartupEnv
+  type SshModeDeps,
+  stageInteractiveStartupEnv,
 } from "./ssh-bridge.js";
 
 const CODEX_SMOKE_COMMAND = "codex --version";
-const CODEX_AVAILABILITY_CHECK_COMMAND = "bash -lc 'if command -v codex >/dev/null 2>&1; then printf PRESENT; else printf MISSING; fi'";
+const CODEX_AVAILABILITY_CHECK_COMMAND =
+  "bash -lc 'if command -v codex >/dev/null 2>&1; then printf PRESENT; else printf MISSING; fi'";
 const CODEX_INSTALL_COMMAND = "npm i -g @openai/codex";
 const COMMAND_TIMEOUT_MS = 15_000;
 const INSTALL_TIMEOUT_MS = 120_000;
@@ -22,13 +23,13 @@ const defaultDeps: CodexModeDeps = {
   isInteractiveTerminal: () => Boolean(process.stdin.isTTY && process.stdout.isTTY),
   prepareSession: prepareSshBridgeSession,
   runInteractiveSession: runInteractiveSshSession,
-  cleanupSession: cleanupSshBridgeSession
+  cleanupSession: cleanupSshBridgeSession,
 };
 
 export async function startCodexMode(
   handle: SandboxHandle,
   launchContext: LaunchContextOptions = {},
-  deps: CodexModeDeps = defaultDeps
+  deps: CodexModeDeps = defaultDeps,
 ): Promise<ModeLaunchResult> {
   const commandContext = resolveCommandContext(launchContext);
   await ensureCodexCliAvailable(handle, commandContext);
@@ -48,8 +49,8 @@ export async function startCodexMode(
       buildInteractiveRemoteCommand({
         cwd: commandContext.cwd,
         envScriptPath,
-        command: "codex"
-      })
+        command: "codex",
+      }),
     );
   } finally {
     logger.verbose("Cleaning up interactive SSH session.");
@@ -61,21 +62,21 @@ export async function startCodexMode(
     command: "codex",
     details: {
       session: "interactive",
-      status: "completed"
+      status: "completed",
     },
-    message: `Codex interactive session ended for sandbox ${handle.sandboxId}`
+    message: `Codex interactive session ended for sandbox ${handle.sandboxId}`,
   };
 }
 
 async function ensureCodexCliAvailable(
   handle: SandboxHandle,
-  commandContext: { cwd?: string; envs: Record<string, string> }
+  commandContext: { cwd?: string; envs: Record<string, string> },
 ): Promise<void> {
   logger.verbose("Checking Codex CLI availability in sandbox.");
   const checkResult = await handle.run(CODEX_AVAILABILITY_CHECK_COMMAND, {
     ...(commandContext.cwd ? { cwd: commandContext.cwd } : {}),
     ...(Object.keys(commandContext.envs).length > 0 ? { envs: commandContext.envs } : {}),
-    timeoutMs: COMMAND_TIMEOUT_MS
+    timeoutMs: COMMAND_TIMEOUT_MS,
   });
 
   if (checkResult.stdout.trim() === "PRESENT") {
@@ -87,12 +88,12 @@ async function ensureCodexCliAvailable(
   const installResult = await handle.run(CODEX_INSTALL_COMMAND, {
     ...(commandContext.cwd ? { cwd: commandContext.cwd } : {}),
     ...(Object.keys(commandContext.envs).length > 0 ? { envs: commandContext.envs } : {}),
-    timeoutMs: INSTALL_TIMEOUT_MS
+    timeoutMs: INSTALL_TIMEOUT_MS,
   });
 
   if (installResult.exitCode !== 0) {
     throw new Error(
-      "Codex CLI is not available in the sandbox and automatic install failed. Install it in the sandbox with 'npm i -g @openai/codex' and retry."
+      "Codex CLI is not available in the sandbox and automatic install failed. Install it in the sandbox with 'npm i -g @openai/codex' and retry.",
     );
   }
 
@@ -100,12 +101,12 @@ async function ensureCodexCliAvailable(
   const verifyResult = await handle.run(CODEX_AVAILABILITY_CHECK_COMMAND, {
     ...(commandContext.cwd ? { cwd: commandContext.cwd } : {}),
     ...(Object.keys(commandContext.envs).length > 0 ? { envs: commandContext.envs } : {}),
-    timeoutMs: COMMAND_TIMEOUT_MS
+    timeoutMs: COMMAND_TIMEOUT_MS,
   });
 
   if (verifyResult.stdout.trim() !== "PRESENT") {
     throw new Error(
-      "Codex CLI install completed but codex is still unavailable in the sandbox. Install it manually with 'npm i -g @openai/codex' and retry."
+      "Codex CLI install completed but codex is still unavailable in the sandbox. Install it manually with 'npm i -g @openai/codex' and retry.",
     );
   }
 
@@ -114,12 +115,12 @@ async function ensureCodexCliAvailable(
 
 async function runSmokeCheck(
   handle: SandboxHandle,
-  commandContext: { cwd?: string; envs: Record<string, string> }
+  commandContext: { cwd?: string; envs: Record<string, string> },
 ): Promise<ModeLaunchResult> {
   const result = await handle.run(CODEX_SMOKE_COMMAND, {
     ...(commandContext.cwd ? { cwd: commandContext.cwd } : {}),
     ...(Object.keys(commandContext.envs).length > 0 ? { envs: commandContext.envs } : {}),
-    timeoutMs: COMMAND_TIMEOUT_MS
+    timeoutMs: COMMAND_TIMEOUT_MS,
   });
 
   const output = firstNonEmptyLine(result.stdout, result.stderr);
@@ -130,16 +131,16 @@ async function runSmokeCheck(
     details: {
       smoke: "codex-cli",
       status: "ready",
-      output
+      output,
     },
-    message: `Codex CLI smoke passed in sandbox ${handle.sandboxId}: ${output}`
+    message: `Codex CLI smoke passed in sandbox ${handle.sandboxId}: ${output}`,
   };
 }
 
 function resolveCommandContext(launchContext: LaunchContextOptions): { cwd?: string; envs: Record<string, string> } {
   return {
     cwd: normalizeOptionalValue(launchContext.workingDirectory),
-    envs: launchContext.startupEnv ?? {}
+    envs: launchContext.startupEnv ?? {},
   };
 }
 

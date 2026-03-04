@@ -1,11 +1,11 @@
-import type { SandboxHandle } from "../e2b/lifecycle.js";
 import { resolveGitIdentity } from "../auth/gitIdentity.js";
+import type { SandboxHandle } from "../e2b/lifecycle.js";
 import { quoteShellArg, quoteShellDoubleArg, runCommand } from "./bootstrap.command-utils.js";
 
 export async function resolveSetupRuntimeEnv(
   handle: SandboxHandle,
   runtimeEnv: Record<string, string>,
-  timeoutMs: number
+  timeoutMs: number,
 ): Promise<Record<string, string>> {
   const envWithGitIdentity = await resolveGitIdentityEnv(runtimeEnv);
 
@@ -15,7 +15,7 @@ export async function resolveSetupRuntimeEnv(
 
   const pathResult = await runCommand(handle, 'printf %s "$PATH"', {
     timeoutMs,
-    commandLabel: "resolve sandbox PATH"
+    commandLabel: "resolve sandbox PATH",
   });
   if (pathResult.exitCode !== 0) {
     throw new Error(`Failed to resolve sandbox PATH: ${pathResult.stderr || pathResult.stdout || "unknown error"}`);
@@ -28,7 +28,7 @@ export async function resolveSetupRuntimeEnv(
 
   return {
     ...envWithGitIdentity,
-    PATH: sandboxPath
+    PATH: sandboxPath,
   };
 }
 
@@ -54,7 +54,7 @@ async function resolveGitIdentityEnv(runtimeEnv: Record<string, string>): Promis
     GIT_AUTHOR_NAME: authorName,
     GIT_AUTHOR_EMAIL: authorEmail,
     GIT_COMMITTER_NAME: committerName,
-    GIT_COMMITTER_EMAIL: committerEmail
+    GIT_COMMITTER_EMAIL: committerEmail,
   };
 }
 

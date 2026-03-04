@@ -33,5 +33,8 @@ function formatTimestamp(timestamp: string): string {
     return timestamp.trim() === "" ? "unknown-time" : timestamp.trim();
   }
 
-  return parsed.toISOString().replace("T", " ").replace(/\.\d{3}Z$/, " UTC");
+  return parsed
+    .toISOString()
+    .replace("T", " ")
+    .replace(/\.\d{3}Z$/, " UTC");
 }

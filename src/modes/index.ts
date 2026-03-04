@@ -1,5 +1,5 @@
-import type { StartupMode } from "../types/index.js";
 import type { SandboxHandle } from "../e2b/lifecycle.js";
+import type { StartupMode } from "../types/index.js";
 import { startCodexMode } from "./codex.js";
 import { startOpenCodeMode } from "./opencode.js";
 import { startShellMode } from "./shell.js";
@@ -36,7 +36,7 @@ const MODE_RUNNERS: Record<ConcreteStartupMode, ConcreteModeRunner> = {
   "ssh-opencode": startOpenCodeMode,
   "ssh-codex": startCodexMode,
   "ssh-shell": startShellMode,
-  web: startWebMode
+  web: startWebMode,
 };
 
 export function resolveStartupMode(mode: StartupMode, options: LaunchModeOptions = {}): ConcreteStartupMode {
@@ -50,7 +50,7 @@ export function resolveStartupMode(mode: StartupMode, options: LaunchModeOptions
 export async function launchMode(
   handle: SandboxHandle,
   mode: StartupMode,
-  options: LaunchModeOptions = {}
+  options: LaunchModeOptions = {},
 ): Promise<ModeLaunchResult> {
   const { promptFallbackMode, workingDirectory, startupEnv } = options;
   const resolvedMode = resolveStartupMode(mode, { promptFallbackMode });

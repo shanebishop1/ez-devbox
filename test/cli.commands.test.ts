@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -35,14 +35,14 @@ describe("CLI command integration", () => {
     codexConfigSynced: false,
     codexAuthSynced: false,
     ghEnabled: false,
-    ghConfigSynced: false
+    ghConfigSynced: false,
   };
   const bootstrapResult = {
     selectedRepoNames: [],
     workingDirectory: undefined,
     startupEnv: {},
     provisionedRepos: [],
-    setup: null
+    setup: null,
   };
 
   const config: ResolvedLauncherConfig = {
@@ -51,10 +51,10 @@ describe("CLI command integration", () => {
       reuse: true,
       name: "ez-devbox",
       timeout_ms: 1_800_000,
-      delete_on_exit: false
+      delete_on_exit: false,
     },
     startup: {
-      mode: "prompt"
+      mode: "prompt",
     },
     project: {
       mode: "single",
@@ -65,26 +65,26 @@ describe("CLI command integration", () => {
       setup_retries: 2,
       setup_concurrency: 1,
       setup_continue_on_error: false,
-      repos: []
+      repos: [],
     },
     env: {
-      pass_through: []
+      pass_through: [],
     },
     opencode: {
       config_dir: "~/.config/opencode",
-      auth_path: "~/.local/share/opencode/auth.json"
+      auth_path: "~/.local/share/opencode/auth.json",
     },
     codex: {
       config_dir: "~/.codex",
-      auth_path: "~/.codex/auth.json"
+      auth_path: "~/.codex/auth.json",
     },
     gh: {
       enabled: false,
-      config_dir: "~/.config/gh"
+      config_dir: "~/.config/gh",
     },
     tunnel: {
-      ports: []
-    }
+      ports: [],
+    },
   };
 
   it("create resolves prompt mode using injected selector before template sync/launch", async () => {
@@ -107,7 +107,7 @@ describe("CLI command integration", () => {
       bootstrapProjectWorkspace: vi.fn().mockResolvedValue(bootstrapResult),
       syncToolingToSandbox,
       saveLastRunState,
-      now: () => "2026-02-01T00:00:00.000Z"
+      now: () => "2026-02-01T00:00:00.000Z",
     });
 
     expect(createSandbox).toHaveBeenCalledTimes(1);
@@ -117,28 +117,28 @@ describe("CLI command integration", () => {
         ...config,
         sandbox: {
           ...config.sandbox,
-          template: "codex"
-        }
+          template: "codex",
+        },
       },
       {
         envs: {},
         metadata: {
-          "launcher.name": displayName
-        }
-      }
+          "launcher.name": displayName,
+        },
+      },
     );
     expect(syncToolingToSandbox).toHaveBeenCalledWith(config, { sandboxId: "sbx-created" }, "ssh-codex");
     expect(syncToolingToSandbox.mock.invocationCallOrder[0]).toBeLessThan(launchMode.mock.invocationCallOrder[0]);
     expect(launchMode).toHaveBeenCalledWith({ sandboxId: "sbx-created" }, "ssh-codex", {
       workingDirectory: undefined,
-      startupEnv: {}
+      startupEnv: {},
     });
     expect(loggerVerbose).toHaveBeenCalledWith("Startup mode selected via prompt: ssh-codex.");
     expect(saveLastRunState).toHaveBeenCalledWith({
       sandboxId: "sbx-created",
       mode: "ssh-codex",
       activeRepo: undefined,
-      updatedAt: "2026-02-01T00:00:00.000Z"
+      updatedAt: "2026-02-01T00:00:00.000Z",
     });
     expect(result.message).toContain(`Created sandbox ${displayName} (sbx-created).`);
     loggerVerbose.mockRestore();
@@ -157,7 +157,7 @@ describe("CLI command integration", () => {
       bootstrapProjectWorkspace: vi.fn().mockResolvedValue(bootstrapResult),
       syncToolingToSandbox,
       saveLastRunState: vi.fn().mockResolvedValue(undefined),
-      now: () => "2026-02-01T00:00:00.000Z"
+      now: () => "2026-02-01T00:00:00.000Z",
     });
 
     expect(syncToolingToSandbox).toHaveBeenCalledTimes(1);
@@ -177,7 +177,7 @@ describe("CLI command integration", () => {
       bootstrapProjectWorkspace: vi.fn().mockResolvedValue(bootstrapResult),
       syncToolingToSandbox,
       saveLastRunState: vi.fn().mockResolvedValue(undefined),
-      now: () => "2026-02-01T00:00:00.000Z"
+      now: () => "2026-02-01T00:00:00.000Z",
     });
 
     expect(syncToolingToSandbox).toHaveBeenCalledTimes(1);
@@ -195,8 +195,8 @@ describe("CLI command integration", () => {
         bootstrapProjectWorkspace: vi.fn().mockResolvedValue(bootstrapResult),
         syncToolingToSandbox: vi.fn().mockResolvedValue(syncSummary),
         saveLastRunState: vi.fn().mockResolvedValue(undefined),
-        now: () => "2026-02-01T00:00:00.000Z"
-      })
+        now: () => "2026-02-01T00:00:00.000Z",
+      }),
     ).rejects.toThrow("Unknown option for create: '--bad'. Use --help for usage.");
   });
 
@@ -211,11 +211,11 @@ describe("CLI command integration", () => {
       bootstrapProjectWorkspace: vi.fn().mockResolvedValue({
         ...bootstrapResult,
         selectedRepoNames: ["alpha"],
-        workingDirectory: "/workspace/alpha"
+        workingDirectory: "/workspace/alpha",
       }),
       syncToolingToSandbox: vi.fn().mockResolvedValue(syncSummary),
       saveLastRunState: vi.fn().mockResolvedValue(undefined),
-      now: () => "2026-02-01T00:00:00.000Z"
+      now: () => "2026-02-01T00:00:00.000Z",
     });
 
     expect(result.message).toBe(
@@ -230,11 +230,11 @@ describe("CLI command integration", () => {
           activeRepo: "alpha",
           template: "opencode",
           setup: null,
-          toolingSync: syncSummary
+          toolingSync: syncSummary,
         },
         null,
-        2
-      )
+        2,
+      ),
     );
     expect(result.exitCode).toBe(0);
   });
@@ -248,7 +248,7 @@ describe("CLI command integration", () => {
         config,
         configPath: "/tmp/launcher.config.toml",
         createdConfig: false,
-        scope: "local"
+        scope: "local",
       }),
       createSandbox: vi.fn().mockResolvedValue({ sandboxId: "sbx-created" }),
       resolveEnvSource: vi.fn().mockResolvedValue({}),
@@ -258,7 +258,7 @@ describe("CLI command integration", () => {
       bootstrapProjectWorkspace: vi.fn().mockResolvedValue(bootstrapResult),
       syncToolingToSandbox: vi.fn().mockResolvedValue(syncSummary),
       saveLastRunState: vi.fn().mockResolvedValue(undefined),
-      now: () => "2026-02-01T00:00:00.000Z"
+      now: () => "2026-02-01T00:00:00.000Z",
     });
 
     expect(infoSpy).toHaveBeenCalledWith("Using launcher config: /tmp/launcher.config.toml");
@@ -272,7 +272,7 @@ describe("CLI command integration", () => {
       loadConfig: vi.fn().mockResolvedValue(config),
       withConfiguredTunnel: async (_cfg, operation) =>
         operation({
-          EZ_DEVBOX_TUNNEL_3002_URL: "https://demo.trycloudflare.com"
+          EZ_DEVBOX_TUNNEL_3002_URL: "https://demo.trycloudflare.com",
         }),
       createSandbox: vi.fn().mockResolvedValue({ sandboxId: "sbx-created" }),
       resolveEnvSource: vi.fn().mockResolvedValue({}),
@@ -282,11 +282,11 @@ describe("CLI command integration", () => {
       bootstrapProjectWorkspace: vi.fn().mockResolvedValue(bootstrapResult),
       syncToolingToSandbox: vi.fn().mockResolvedValue(syncSummary),
       saveLastRunState: vi.fn().mockResolvedValue(undefined),
-      now: () => "2026-02-01T00:00:00.000Z"
+      now: () => "2026-02-01T00:00:00.000Z",
     });
 
     expect(warnSpy).toHaveBeenCalledWith(
-      "Tunnel URL warning: anyone with the URL can access the forwarded service/data. Treat tunnel URLs as secrets."
+      "Tunnel URL warning: anyone with the URL can access the forwarded service/data. Treat tunnel URLs as secrets.",
     );
     warnSpy.mockRestore();
   });
@@ -298,7 +298,7 @@ describe("CLI command integration", () => {
       opencodeConfigSynced: false,
       opencodeAuthSynced: false,
       codexConfigSynced: true,
-      codexAuthSynced: true
+      codexAuthSynced: true,
     });
     const resolvePromptStartupMode = vi.fn().mockImplementation(async (mode: string) => mode);
     const displayName = buildSandboxDisplayName(config.project.repos, "2026-02-01T00:00:00.000Z");
@@ -313,7 +313,7 @@ describe("CLI command integration", () => {
       bootstrapProjectWorkspace: vi.fn().mockResolvedValue(bootstrapResult),
       syncToolingToSandbox,
       saveLastRunState: vi.fn().mockResolvedValue(undefined),
-      now: () => "2026-02-01T00:00:00.000Z"
+      now: () => "2026-02-01T00:00:00.000Z",
     });
 
     expect(resolvePromptStartupMode).toHaveBeenCalledWith("ssh-codex");
@@ -322,15 +322,15 @@ describe("CLI command integration", () => {
         ...config,
         sandbox: {
           ...config.sandbox,
-          template: "codex"
-        }
+          template: "codex",
+        },
       },
       {
         envs: {},
         metadata: {
-          "launcher.name": displayName
-        }
-      }
+          "launcher.name": displayName,
+        },
+      },
     );
     expect(syncToolingToSandbox).toHaveBeenCalledWith(config, { sandboxId: "sbx-created" }, "ssh-codex");
   });
@@ -347,10 +347,10 @@ describe("CLI command integration", () => {
             branch: "canary",
             setup_command: "",
             setup_env: {},
-            startup_env: {}
-          }
-        ]
-      }
+            startup_env: {},
+          },
+        ],
+      },
     };
     const createSandbox = vi.fn().mockResolvedValue({ sandboxId: "sbx-created" });
 
@@ -364,16 +364,16 @@ describe("CLI command integration", () => {
       bootstrapProjectWorkspace: vi.fn().mockResolvedValue(bootstrapResult),
       syncToolingToSandbox: vi.fn().mockResolvedValue(syncSummary),
       saveLastRunState: vi.fn().mockResolvedValue(undefined),
-      now: () => "2026-02-01T00:00:00.000Z"
+      now: () => "2026-02-01T00:00:00.000Z",
     });
 
     expect(createSandbox).toHaveBeenCalledWith(
       expect.any(Object),
       expect.objectContaining({
         metadata: {
-            "launcher.name": "next.js canary 2026-02-01 00:00:00 UTC"
-        }
-      })
+          "launcher.name": "next.js canary 2026-02-01 00:00:00 UTC",
+        },
+      }),
     );
   });
 
@@ -394,23 +394,23 @@ describe("CLI command integration", () => {
       bootstrapProjectWorkspace: vi.fn().mockResolvedValue(bootstrapResult),
       syncToolingToSandbox,
       saveLastRunState: vi.fn().mockResolvedValue(undefined),
-      now: () => "2026-02-01T00:00:00.000Z"
+      now: () => "2026-02-01T00:00:00.000Z",
     });
 
     expect(resolveEnvSource).toHaveBeenCalledTimes(1);
     expect(resolveSandboxCreateEnv).toHaveBeenCalledWith(
       expect.any(Object),
-      expect.objectContaining({ FIRECRAWL_API_URL: "https://example.trycloudflare.com" })
+      expect.objectContaining({ FIRECRAWL_API_URL: "https://example.trycloudflare.com" }),
     );
     expect(createSandbox).toHaveBeenCalledWith(
       expect.any(Object),
       expect.objectContaining({
-        envs: {}
-      })
+        envs: {},
+      }),
     );
     expect(launchMode).toHaveBeenCalledWith({ sandboxId: "sbx-created" }, "ssh-opencode", {
       workingDirectory: undefined,
-      startupEnv: {}
+      startupEnv: {},
     });
   });
 
@@ -419,15 +419,15 @@ describe("CLI command integration", () => {
       ...config,
       gh: {
         ...config.gh,
-        enabled: true
-      }
+        enabled: true,
+      },
     };
     const createSandbox = vi.fn().mockResolvedValue({ sandboxId: "sbx-created" });
     const launchMode = vi.fn().mockResolvedValue({ mode: "ssh-opencode", command: "opencode", message: "launched" });
     const resolveHostGhToken = vi.fn().mockResolvedValue("ghp_token");
     const bootstrapProjectWorkspace = vi.fn().mockResolvedValue({
       ...bootstrapResult,
-      startupEnv: { NEXT_PUBLIC_APP_ENV: "preview" }
+      startupEnv: { NEXT_PUBLIC_APP_ENV: "preview" },
     });
 
     await runCreateCommand(["--mode", "ssh-opencode"], {
@@ -441,7 +441,7 @@ describe("CLI command integration", () => {
       bootstrapProjectWorkspace,
       syncToolingToSandbox: vi.fn().mockResolvedValue({ ...syncSummary, ghEnabled: true }),
       saveLastRunState: vi.fn().mockResolvedValue(undefined),
-      now: () => "2026-02-01T00:00:00.000Z"
+      now: () => "2026-02-01T00:00:00.000Z",
     });
 
     expect(resolveHostGhToken).toHaveBeenCalledTimes(1);
@@ -451,9 +451,9 @@ describe("CLI command integration", () => {
         envs: {
           OPENAI_API_KEY: "existing",
           GH_TOKEN: "ghp_token",
-          GITHUB_TOKEN: "ghp_token"
-        }
-      })
+          GITHUB_TOKEN: "ghp_token",
+        },
+      }),
     );
     expect(launchMode).toHaveBeenCalledWith({ sandboxId: "sbx-created" }, "ssh-opencode", {
       workingDirectory: undefined,
@@ -461,8 +461,8 @@ describe("CLI command integration", () => {
         NEXT_PUBLIC_APP_ENV: "preview",
         OPENAI_API_KEY: "existing",
         GH_TOKEN: "ghp_token",
-        GITHUB_TOKEN: "ghp_token"
-      }
+        GITHUB_TOKEN: "ghp_token",
+      },
     });
   });
 
@@ -477,36 +477,38 @@ describe("CLI command integration", () => {
       resolveSandboxCreateEnv: vi.fn().mockReturnValue({
         envs: {
           FIRECRAWL_API_KEY: "fc-test",
-          OPENCODE_SERVER_PASSWORD: "abcd"
-        }
+          OPENCODE_SERVER_PASSWORD: "abcd",
+        },
       }),
       resolvePromptStartupMode: vi.fn().mockResolvedValue("ssh-opencode"),
       launchMode,
       bootstrapProjectWorkspace: vi.fn().mockResolvedValue(bootstrapResult),
       syncToolingToSandbox: vi.fn().mockResolvedValue(syncSummary),
       saveLastRunState: vi.fn().mockResolvedValue(undefined),
-      now: () => "2026-02-01T00:00:00.000Z"
+      now: () => "2026-02-01T00:00:00.000Z",
     });
 
     expect(createSandbox).toHaveBeenCalledWith(
       expect.any(Object),
       expect.objectContaining({
         envs: {
-          FIRECRAWL_API_KEY: "fc-test"
-        }
-      })
+          FIRECRAWL_API_KEY: "fc-test",
+        },
+      }),
     );
     expect(launchMode).toHaveBeenCalledWith({ sandboxId: "sbx-created" }, "ssh-opencode", {
       workingDirectory: undefined,
       startupEnv: {
-        FIRECRAWL_API_KEY: "fc-test"
-      }
+        FIRECRAWL_API_KEY: "fc-test",
+      },
     });
   });
 
   it("create injects OPENCODE_SERVER_PASSWORD for web mode launch only", async () => {
     const createSandbox = vi.fn().mockResolvedValue({ sandboxId: "sbx-created" });
-    const launchMode = vi.fn().mockResolvedValue({ mode: "web", url: "https://sbx-created.e2b.dev", message: "launched" });
+    const launchMode = vi
+      .fn()
+      .mockResolvedValue({ mode: "web", url: "https://sbx-created.e2b.dev", message: "launched" });
 
     await runCreateCommand(["--mode", "web"], {
       loadConfig: vi.fn().mockResolvedValue(config),
@@ -518,15 +520,15 @@ describe("CLI command integration", () => {
       bootstrapProjectWorkspace: vi.fn().mockResolvedValue(bootstrapResult),
       syncToolingToSandbox: vi.fn().mockResolvedValue(syncSummary),
       saveLastRunState: vi.fn().mockResolvedValue(undefined),
-      now: () => "2026-02-01T00:00:00.000Z"
+      now: () => "2026-02-01T00:00:00.000Z",
     });
 
     expect(createSandbox).toHaveBeenCalledWith(expect.any(Object), expect.objectContaining({ envs: {} }));
     expect(launchMode).toHaveBeenCalledWith({ sandboxId: "sbx-created" }, "web", {
       workingDirectory: undefined,
       startupEnv: {
-        OPENCODE_SERVER_PASSWORD: "abcd"
-      }
+        OPENCODE_SERVER_PASSWORD: "abcd",
+      },
     });
   });
 
@@ -541,15 +543,15 @@ describe("CLI command integration", () => {
       resolveSandboxCreateEnv: vi.fn().mockReturnValue({
         envs: {
           OPENROUTER_API_KEY: "or-secret",
-          OPENAI_API_KEY: "oa-secret"
-        }
+          OPENAI_API_KEY: "oa-secret",
+        },
       }),
       resolvePromptStartupMode: vi.fn().mockResolvedValue("ssh-opencode"),
       launchMode: vi.fn().mockResolvedValue({ mode: "ssh-opencode", command: "opencode", message: "launched" }),
       bootstrapProjectWorkspace: vi.fn().mockResolvedValue(bootstrapResult),
       syncToolingToSandbox: vi.fn().mockResolvedValue(syncSummary),
       saveLastRunState: vi.fn().mockResolvedValue(undefined),
-      now: () => "2026-02-01T00:00:00.000Z"
+      now: () => "2026-02-01T00:00:00.000Z",
     });
 
     const envLog = loggerVerbose.mock.calls
@@ -567,8 +569,8 @@ describe("CLI command integration", () => {
       ...config,
       gh: {
         ...config.gh,
-        enabled: true
-      }
+        enabled: true,
+      },
     };
     const createSandbox = vi.fn().mockResolvedValue({ sandboxId: "sbx-created" });
     const launchMode = vi.fn().mockResolvedValue({ mode: "ssh-opencode", command: "opencode", message: "launched" });
@@ -584,14 +586,14 @@ describe("CLI command integration", () => {
       bootstrapProjectWorkspace: vi.fn().mockResolvedValue(bootstrapResult),
       syncToolingToSandbox: vi.fn().mockResolvedValue({ ...syncSummary, ghEnabled: true }),
       saveLastRunState: vi.fn().mockResolvedValue(undefined),
-      now: () => "2026-02-01T00:00:00.000Z"
+      now: () => "2026-02-01T00:00:00.000Z",
     });
 
     expect(result.exitCode).toBe(0);
     expect(createSandbox).toHaveBeenCalledWith(expect.any(Object), expect.objectContaining({ envs: {} }));
     expect(launchMode).toHaveBeenCalledWith({ sandboxId: "sbx-created" }, "ssh-opencode", {
       workingDirectory: undefined,
-      startupEnv: {}
+      startupEnv: {},
     });
   });
 
@@ -617,8 +619,8 @@ describe("CLI command integration", () => {
         }),
         syncToolingToSandbox: vi.fn().mockResolvedValue(syncSummary),
         saveLastRunState: vi.fn().mockResolvedValue(undefined),
-        now: () => "2026-02-01T00:00:00.000Z"
-      })
+        now: () => "2026-02-01T00:00:00.000Z",
+      }),
     ).rejects.toThrow("was wiped");
 
     expect(createSandbox).toHaveBeenCalledTimes(1);
@@ -639,13 +641,15 @@ describe("CLI command integration", () => {
         createSandbox,
         resolveEnvSource: vi.fn().mockResolvedValue({}),
         resolveSandboxCreateEnv: vi.fn().mockReturnValue({ envs: {} }),
-        resolvePromptStartupMode: vi.fn().mockRejectedValue(new PromptCancelledError("Startup mode selection cancelled.")),
+        resolvePromptStartupMode: vi
+          .fn()
+          .mockRejectedValue(new PromptCancelledError("Startup mode selection cancelled.")),
         launchMode: vi.fn(),
         bootstrapProjectWorkspace: vi.fn().mockResolvedValue(bootstrapResult),
         syncToolingToSandbox: vi.fn().mockResolvedValue(syncSummary),
         saveLastRunState: vi.fn().mockResolvedValue(undefined),
-        now: () => "2026-02-01T00:00:00.000Z"
-      })
+        now: () => "2026-02-01T00:00:00.000Z",
+      }),
     ).rejects.toThrow("Startup mode selection cancelled.");
 
     expect(createSandbox).not.toHaveBeenCalled();
@@ -670,8 +674,8 @@ describe("CLI command integration", () => {
         }),
         syncToolingToSandbox: vi.fn().mockResolvedValue(syncSummary),
         saveLastRunState: vi.fn().mockResolvedValue(undefined),
-        now: () => "2026-02-01T00:00:00.000Z"
-      })
+        now: () => "2026-02-01T00:00:00.000Z",
+      }),
     ).rejects.toThrow("bootstrap failed");
 
     expect(startLoading).toHaveBeenCalledWith("Bootstrapping...");
@@ -698,19 +702,19 @@ describe("CLI command integration", () => {
       {
         ...config,
         opencode: { config_dir: opencodeConfigDir, auth_path: opencodeAuthPath },
-        gh: { enabled: false, config_dir: ghConfigDir }
+        gh: { enabled: false, config_dir: ghConfigDir },
       },
       { writeFile: writeFileInSandbox },
-      "ssh-opencode"
+      "ssh-opencode",
     );
     const summaryEnabled = await syncToolingForCreateMode(
       {
         ...config,
         opencode: { config_dir: opencodeConfigDir, auth_path: opencodeAuthPath },
-        gh: { enabled: true, config_dir: ghConfigDir }
+        gh: { enabled: true, config_dir: ghConfigDir },
       },
       { writeFile: writeFileInSandbox },
-      "ssh-opencode"
+      "ssh-opencode",
     );
 
     expect(summaryDisabled.ghEnabled).toBe(false);
@@ -735,13 +739,15 @@ describe("CLI command integration", () => {
     await runConnectCommand(["--sandbox-id", "sbx-arg"], {
       loadConfig: vi.fn().mockResolvedValue(config),
       connectSandbox,
-      loadLastRunState: vi.fn().mockResolvedValue({ sandboxId: "sbx-last", mode: "web", updatedAt: "2026-01-01T00:00:00.000Z" }),
+      loadLastRunState: vi
+        .fn()
+        .mockResolvedValue({ sandboxId: "sbx-last", mode: "web", updatedAt: "2026-01-01T00:00:00.000Z" }),
       listSandboxes: vi.fn().mockResolvedValue([{ sandboxId: "sbx-list", state: "running" }]),
       resolvePromptStartupMode,
       launchMode,
       bootstrapProjectWorkspace,
       saveLastRunState: vi.fn().mockResolvedValue(undefined),
-      now: () => "2026-02-01T00:00:00.000Z"
+      now: () => "2026-02-01T00:00:00.000Z",
     });
 
     expect(connectSandbox).toHaveBeenCalledWith("sbx-arg", config);
@@ -749,7 +755,7 @@ describe("CLI command integration", () => {
     expect(loggerVerbose).toHaveBeenCalledWith("Bootstrap: Repo clone: /workspace/alpha");
     expect(launchMode).toHaveBeenCalledWith({ sandboxId: "sbx-arg" }, "ssh-opencode", {
       workingDirectory: undefined,
-      startupEnv: {}
+      startupEnv: {},
     });
     expect(loggerVerbose).toHaveBeenCalledWith("Startup mode selected via prompt: ssh-opencode.");
     loggerVerbose.mockRestore();
@@ -764,7 +770,7 @@ describe("CLI command integration", () => {
         config,
         configPath: "/tmp/global/launcher.config.toml",
         createdConfig: false,
-        scope: "global"
+        scope: "global",
       }),
       connectSandbox: vi.fn().mockResolvedValue({ sandboxId: "sbx-arg" }),
       loadLastRunState: vi.fn().mockResolvedValue(null),
@@ -773,7 +779,7 @@ describe("CLI command integration", () => {
       launchMode: vi.fn().mockResolvedValue({ mode: "ssh-opencode", command: "opencode", message: "launched" }),
       bootstrapProjectWorkspace: vi.fn().mockResolvedValue(bootstrapResult),
       saveLastRunState: vi.fn().mockResolvedValue(undefined),
-      now: () => "2026-02-01T00:00:00.000Z"
+      now: () => "2026-02-01T00:00:00.000Z",
     });
 
     expect(infoSpy).toHaveBeenCalledWith("Using launcher config: /tmp/global/launcher.config.toml");
@@ -792,7 +798,7 @@ describe("CLI command integration", () => {
             branch: "main",
             setup_command: "",
             setup_env: {},
-            startup_env: {}
+            startup_env: {},
           },
           {
             name: "next.js",
@@ -800,10 +806,10 @@ describe("CLI command integration", () => {
             branch: "canary",
             setup_command: "",
             setup_env: {},
-            startup_env: {}
-          }
-        ]
-      }
+            startup_env: {},
+          },
+        ],
+      },
     };
     const bootstrapProjectWorkspace = vi.fn().mockResolvedValue(bootstrapResult);
 
@@ -814,20 +820,20 @@ describe("CLI command integration", () => {
         sandboxId: "sbx-arg",
         mode: "ssh-opencode",
         activeRepo: "sample-repo",
-        updatedAt: "2026-02-01T00:00:00.000Z"
+        updatedAt: "2026-02-01T00:00:00.000Z",
       }),
       listSandboxes: vi.fn().mockResolvedValue([]),
       resolvePromptStartupMode: vi.fn().mockResolvedValue("ssh-opencode"),
       launchMode: vi.fn().mockResolvedValue({ mode: "ssh-opencode", command: "opencode", message: "launched" }),
       bootstrapProjectWorkspace,
       saveLastRunState: vi.fn().mockResolvedValue(undefined),
-      now: () => "2026-02-01T00:00:00.000Z"
+      now: () => "2026-02-01T00:00:00.000Z",
     });
 
     expect(bootstrapProjectWorkspace).toHaveBeenCalledWith(
       { sandboxId: "sbx-arg" },
       multiRepoConfig,
-      expect.objectContaining({ preferredActiveRepo: "sample-repo" })
+      expect.objectContaining({ preferredActiveRepo: "sample-repo" }),
     );
   });
 
@@ -836,8 +842,8 @@ describe("CLI command integration", () => {
       ...config,
       gh: {
         ...config.gh,
-        enabled: true
-      }
+        enabled: true,
+      },
     };
     const launchMode = vi.fn().mockResolvedValue({ mode: "ssh-opencode", command: "opencode", message: "launched" });
     const resolveHostGhToken = vi.fn().mockResolvedValue("ghp_token");
@@ -852,10 +858,10 @@ describe("CLI command integration", () => {
       launchMode,
       bootstrapProjectWorkspace: vi.fn().mockResolvedValue({
         ...bootstrapResult,
-        startupEnv: { NEXT_PUBLIC_APP_ENV: "preview" }
+        startupEnv: { NEXT_PUBLIC_APP_ENV: "preview" },
       }),
       saveLastRunState: vi.fn().mockResolvedValue(undefined),
-      now: () => "2026-02-01T00:00:00.000Z"
+      now: () => "2026-02-01T00:00:00.000Z",
     });
 
     expect(resolveHostGhToken).toHaveBeenCalledTimes(1);
@@ -864,8 +870,8 @@ describe("CLI command integration", () => {
       startupEnv: {
         NEXT_PUBLIC_APP_ENV: "preview",
         GH_TOKEN: "ghp_token",
-        GITHUB_TOKEN: "ghp_token"
-      }
+        GITHUB_TOKEN: "ghp_token",
+      },
     });
   });
 
@@ -875,8 +881,8 @@ describe("CLI command integration", () => {
       envs: {
         FIRECRAWL_API_KEY: "fc-test",
         OPENAI_API_KEY: "openai-test",
-        OPENCODE_SERVER_PASSWORD: "abcd"
-      }
+        OPENCODE_SERVER_PASSWORD: "abcd",
+      },
     });
 
     await runConnectCommand(["--sandbox-id", "sbx-arg", "--mode", "ssh-shell"], {
@@ -885,31 +891,33 @@ describe("CLI command integration", () => {
       loadLastRunState: vi.fn().mockResolvedValue(null),
       listSandboxes: vi.fn().mockResolvedValue([]),
       resolvePromptStartupMode: vi.fn().mockResolvedValue("ssh-shell"),
-      resolveEnvSource: vi
-        .fn()
-        .mockResolvedValue({ FIRECRAWL_API_KEY: "fc-test", OPENAI_API_KEY: "openai-test", OPENCODE_SERVER_PASSWORD: "abcd" }),
+      resolveEnvSource: vi.fn().mockResolvedValue({
+        FIRECRAWL_API_KEY: "fc-test",
+        OPENAI_API_KEY: "openai-test",
+        OPENCODE_SERVER_PASSWORD: "abcd",
+      }),
       resolveSandboxCreateEnv,
       launchMode,
       bootstrapProjectWorkspace: vi.fn().mockResolvedValue({
         ...bootstrapResult,
-        startupEnv: { NEXT_PUBLIC_APP_ENV: "preview" }
+        startupEnv: { NEXT_PUBLIC_APP_ENV: "preview" },
       }),
       saveLastRunState: vi.fn().mockResolvedValue(undefined),
-      now: () => "2026-02-01T00:00:00.000Z"
+      now: () => "2026-02-01T00:00:00.000Z",
     });
 
     expect(resolveSandboxCreateEnv).toHaveBeenCalledWith(config, {
       FIRECRAWL_API_KEY: "fc-test",
       OPENAI_API_KEY: "openai-test",
-      OPENCODE_SERVER_PASSWORD: "abcd"
+      OPENCODE_SERVER_PASSWORD: "abcd",
     });
     expect(launchMode).toHaveBeenCalledWith({ sandboxId: "sbx-arg" }, "ssh-shell", {
       workingDirectory: undefined,
       startupEnv: {
         NEXT_PUBLIC_APP_ENV: "preview",
         FIRECRAWL_API_KEY: "fc-test",
-        OPENAI_API_KEY: "openai-test"
-      }
+        OPENAI_API_KEY: "openai-test",
+      },
     });
   });
 
@@ -917,7 +925,7 @@ describe("CLI command integration", () => {
     const launchMode = vi.fn().mockResolvedValue({ mode: "web", url: "https://sbx-arg.e2b.dev", message: "launched" });
     const bootstrapProjectWorkspace = vi.fn().mockResolvedValue({
       ...bootstrapResult,
-      startupEnv: { NEXT_PUBLIC_APP_ENV: "preview" }
+      startupEnv: { NEXT_PUBLIC_APP_ENV: "preview" },
     });
 
     await runConnectCommand(["--sandbox-id", "sbx-arg", "--mode", "web"], {
@@ -931,28 +939,30 @@ describe("CLI command integration", () => {
       launchMode,
       bootstrapProjectWorkspace,
       saveLastRunState: vi.fn().mockResolvedValue(undefined),
-      now: () => "2026-02-01T00:00:00.000Z"
+      now: () => "2026-02-01T00:00:00.000Z",
     });
 
     expect(bootstrapProjectWorkspace).toHaveBeenCalledWith(
       { sandboxId: "sbx-arg" },
       config,
       expect.objectContaining({
-        runtimeEnv: {}
-      })
+        runtimeEnv: {},
+      }),
     );
     expect(launchMode).toHaveBeenCalledWith({ sandboxId: "sbx-arg" }, "web", {
       workingDirectory: undefined,
       startupEnv: {
         NEXT_PUBLIC_APP_ENV: "preview",
-        OPENCODE_SERVER_PASSWORD: "abcd"
-      }
+        OPENCODE_SERVER_PASSWORD: "abcd",
+      },
     });
   });
 
   it("connect uses the only listed sandbox when exactly one exists", async () => {
     const connectSandbox = vi.fn().mockResolvedValue({ sandboxId: "sbx-list" });
-    const loadLastRunState = vi.fn().mockResolvedValue({ sandboxId: "sbx-last", mode: "web", updatedAt: "2026-01-01T00:00:00.000Z" });
+    const loadLastRunState = vi
+      .fn()
+      .mockResolvedValue({ sandboxId: "sbx-last", mode: "web", updatedAt: "2026-01-01T00:00:00.000Z" });
 
     await runConnectCommand([], {
       loadConfig: vi.fn().mockResolvedValue(config),
@@ -963,7 +973,7 @@ describe("CLI command integration", () => {
       launchMode: vi.fn().mockResolvedValue({ mode: "web", url: "https://sbx-last.e2b.dev", message: "launched" }),
       bootstrapProjectWorkspace: vi.fn().mockResolvedValue(bootstrapResult),
       saveLastRunState: vi.fn().mockResolvedValue(undefined),
-      now: () => "2026-02-01T00:00:00.000Z"
+      now: () => "2026-02-01T00:00:00.000Z",
     });
 
     expect(connectSandbox).toHaveBeenCalledWith("sbx-list", config);
@@ -977,10 +987,12 @@ describe("CLI command integration", () => {
     const result = await runConnectCommand([], {
       loadConfig: vi.fn().mockResolvedValue(config),
       connectSandbox,
-      loadLastRunState: vi.fn().mockResolvedValue({ sandboxId: "sbx-1", mode: "web", updatedAt: "2026-01-01T00:00:00.000Z" }),
+      loadLastRunState: vi
+        .fn()
+        .mockResolvedValue({ sandboxId: "sbx-1", mode: "web", updatedAt: "2026-01-01T00:00:00.000Z" }),
       listSandboxes: vi.fn().mockResolvedValue([
         { sandboxId: "sbx-1", state: "running", metadata: { "launcher.name": "Repo One main 2026-02-01 00:00 UTC" } },
-        { sandboxId: "sbx-2", state: "running", metadata: { "launcher.name": "Repo Two canary 2026-02-01 00:01 UTC" } }
+        { sandboxId: "sbx-2", state: "running", metadata: { "launcher.name": "Repo Two canary 2026-02-01 00:01 UTC" } },
       ]),
       resolvePromptStartupMode: vi.fn().mockResolvedValue("ssh-opencode"),
       launchMode: vi.fn().mockResolvedValue({ mode: "ssh-opencode", command: "opencode", message: "launched" }),
@@ -988,7 +1000,7 @@ describe("CLI command integration", () => {
       saveLastRunState: vi.fn().mockResolvedValue(undefined),
       isInteractiveTerminal: () => true,
       promptInput,
-      now: () => "2026-02-01T00:00:00.000Z"
+      now: () => "2026-02-01T00:00:00.000Z",
     });
 
     expect(promptInput).toHaveBeenCalledWith(
@@ -996,8 +1008,8 @@ describe("CLI command integration", () => {
         "Multiple sandboxes available. Select one:",
         "1) Repo One main 2026-02-01 00:00 UTC (sbx-1)",
         "2) Repo Two canary 2026-02-01 00:01 UTC (sbx-2)",
-        "Enter choice [1-2]: "
-      ].join("\n")
+        "Enter choice [1-2]: ",
+      ].join("\n"),
     );
     expect(connectSandbox).toHaveBeenCalledWith("sbx-2", config);
     expect(result.message).toContain("Connected to sandbox Repo Two canary 2026-02-01 00:01 UTC (sbx-2).");
@@ -1009,17 +1021,19 @@ describe("CLI command integration", () => {
     await runConnectCommand([], {
       loadConfig: vi.fn().mockResolvedValue(config),
       connectSandbox,
-      loadLastRunState: vi.fn().mockResolvedValue({ sandboxId: "sbx-2", mode: "web", updatedAt: "2026-01-01T00:00:00.000Z" }),
+      loadLastRunState: vi
+        .fn()
+        .mockResolvedValue({ sandboxId: "sbx-2", mode: "web", updatedAt: "2026-01-01T00:00:00.000Z" }),
       listSandboxes: vi.fn().mockResolvedValue([
         { sandboxId: "sbx-1", state: "running" },
-        { sandboxId: "sbx-2", state: "running" }
+        { sandboxId: "sbx-2", state: "running" },
       ]),
       resolvePromptStartupMode: vi.fn().mockResolvedValue("ssh-opencode"),
       launchMode: vi.fn().mockResolvedValue({ mode: "ssh-opencode", command: "opencode", message: "launched" }),
       bootstrapProjectWorkspace: vi.fn().mockResolvedValue(bootstrapResult),
       saveLastRunState: vi.fn().mockResolvedValue(undefined),
       isInteractiveTerminal: () => false,
-      now: () => "2026-02-01T00:00:00.000Z"
+      now: () => "2026-02-01T00:00:00.000Z",
     });
 
     expect(connectSandbox).toHaveBeenCalledWith("sbx-2", config);
@@ -1030,18 +1044,20 @@ describe("CLI command integration", () => {
       runConnectCommand([], {
         loadConfig: vi.fn().mockResolvedValue(config),
         connectSandbox: vi.fn(),
-        loadLastRunState: vi.fn().mockResolvedValue({ sandboxId: "sbx-missing", mode: "web", updatedAt: "2026-01-01T00:00:00.000Z" }),
+        loadLastRunState: vi
+          .fn()
+          .mockResolvedValue({ sandboxId: "sbx-missing", mode: "web", updatedAt: "2026-01-01T00:00:00.000Z" }),
         listSandboxes: vi.fn().mockResolvedValue([
           { sandboxId: "sbx-1", state: "running" },
-          { sandboxId: "sbx-2", state: "running" }
+          { sandboxId: "sbx-2", state: "running" },
         ]),
         resolvePromptStartupMode: vi.fn().mockResolvedValue("ssh-opencode"),
         launchMode: vi.fn(),
         bootstrapProjectWorkspace: vi.fn().mockResolvedValue(bootstrapResult),
         saveLastRunState: vi.fn().mockResolvedValue(undefined),
         isInteractiveTerminal: () => false,
-        now: () => "2026-02-01T00:00:00.000Z"
-      })
+        now: () => "2026-02-01T00:00:00.000Z",
+      }),
     ).rejects.toThrow("Re-run with --sandbox-id <sandbox-id>");
   });
 
@@ -1060,20 +1076,22 @@ describe("CLI command integration", () => {
           {
             sandboxId: "sbx-list",
             state: "running",
-            metadata: { "launcher.name": "ez-devbox web 2026-02-01 00:00 UTC" }
-          }
+            metadata: { "launcher.name": "ez-devbox web 2026-02-01 00:00 UTC" },
+          },
         ]),
         resolvePromptStartupMode: vi.fn().mockResolvedValue("ssh-opencode"),
         launchMode: vi.fn().mockResolvedValue({ mode: "ssh-opencode", command: "opencode", message: "launched" }),
         bootstrapProjectWorkspace: vi.fn().mockResolvedValue(bootstrapResult),
         saveLastRunState: vi.fn().mockResolvedValue(undefined),
-        now: () => "2026-02-01T00:00:00.000Z"
+        now: () => "2026-02-01T00:00:00.000Z",
       },
-      { skipLastRun: true }
+      { skipLastRun: true },
     );
 
     expect(connectSandbox).toHaveBeenCalledWith("sbx-list", config);
-    expect(loggerVerbose).toHaveBeenCalledWith("Selected fallback sandbox: ez-devbox web 2026-02-01 00:00 UTC (sbx-list).");
+    expect(loggerVerbose).toHaveBeenCalledWith(
+      "Selected fallback sandbox: ez-devbox web 2026-02-01 00:00 UTC (sbx-list).",
+    );
     expect(result.message).toContain("Connected to sandbox ez-devbox web 2026-02-01 00:00 UTC (sbx-list).");
     loggerVerbose.mockRestore();
   });
@@ -1085,8 +1103,10 @@ describe("CLI command integration", () => {
       selectedRepoNames: ["alpha"],
       workingDirectory: "/workspace/alpha",
       startupEnv: { NEXT_PUBLIC_APP_ENV: "preview" },
-      provisionedRepos: [{ repo: "alpha", path: "/workspace/alpha", cloned: true, reused: false, branchSwitched: false }],
-      setup: { success: true, repos: [] }
+      provisionedRepos: [
+        { repo: "alpha", path: "/workspace/alpha", cloned: true, reused: false, branchSwitched: false },
+      ],
+      setup: { success: true, repos: [] },
     });
 
     await runCreateCommand(["--mode", "ssh-opencode"], {
@@ -1099,23 +1119,23 @@ describe("CLI command integration", () => {
       bootstrapProjectWorkspace,
       syncToolingToSandbox: vi.fn().mockResolvedValue(syncSummary),
       saveLastRunState,
-      now: () => "2026-02-01T00:00:00.000Z"
+      now: () => "2026-02-01T00:00:00.000Z",
     });
 
     expect(bootstrapProjectWorkspace).toHaveBeenCalledWith(
       { sandboxId: "sbx-created" },
       config,
-      expect.objectContaining({ isConnect: false, onProgress: expect.any(Function) })
+      expect.objectContaining({ isConnect: false, onProgress: expect.any(Function) }),
     );
     expect(launchMode).toHaveBeenCalledWith({ sandboxId: "sbx-created" }, "ssh-opencode", {
       workingDirectory: "/workspace/alpha",
-      startupEnv: { NEXT_PUBLIC_APP_ENV: "preview" }
+      startupEnv: { NEXT_PUBLIC_APP_ENV: "preview" },
     });
     expect(saveLastRunState).toHaveBeenCalledWith({
       sandboxId: "sbx-created",
       mode: "ssh-opencode",
       activeRepo: "alpha",
-      updatedAt: "2026-02-01T00:00:00.000Z"
+      updatedAt: "2026-02-01T00:00:00.000Z",
     });
   });
 
@@ -1140,7 +1160,7 @@ describe("CLI command integration", () => {
       bootstrapProjectWorkspace,
       syncToolingToSandbox: vi.fn().mockResolvedValue(syncSummary),
       saveLastRunState: vi.fn().mockResolvedValue(undefined),
-      now: () => "2026-02-01T00:00:00.000Z"
+      now: () => "2026-02-01T00:00:00.000Z",
     });
 
     expect(startLoading).toHaveBeenCalledTimes(1);
@@ -1166,7 +1186,7 @@ describe("CLI command integration", () => {
       }),
       syncToolingToSandbox: vi.fn().mockResolvedValue(syncSummary),
       saveLastRunState: vi.fn().mockResolvedValue(undefined),
-      now: () => "2026-02-01T00:00:00.000Z"
+      now: () => "2026-02-01T00:00:00.000Z",
     });
 
     expect(startLoading).toHaveBeenCalledTimes(1);
@@ -1189,15 +1209,15 @@ describe("CLI command integration", () => {
         bootstrapProjectWorkspace: vi.fn().mockResolvedValue(bootstrapResult),
         syncToolingToSandbox: vi.fn().mockResolvedValue(syncSummary),
         saveLastRunState,
-        now: () => "2026-02-01T00:00:00.000Z"
-      })
+        now: () => "2026-02-01T00:00:00.000Z",
+      }),
     ).rejects.toThrow("launch failed");
 
     expect(saveLastRunState).toHaveBeenCalledWith({
       sandboxId: "sbx-created",
       mode: "ssh-opencode",
       activeRepo: undefined,
-      updatedAt: "2026-02-01T00:00:00.000Z"
+      updatedAt: "2026-02-01T00:00:00.000Z",
     });
   });
 
@@ -1208,8 +1228,10 @@ describe("CLI command integration", () => {
       selectedRepoNames: ["alpha"],
       workingDirectory: "/workspace/alpha",
       startupEnv: { NEXT_PUBLIC_APP_ENV: "preview" },
-      provisionedRepos: [{ repo: "alpha", path: "/workspace/alpha", cloned: false, reused: true, branchSwitched: false }],
-      setup: null
+      provisionedRepos: [
+        { repo: "alpha", path: "/workspace/alpha", cloned: false, reused: true, branchSwitched: false },
+      ],
+      setup: null,
     });
 
     await runConnectCommand(["--sandbox-id", "sbx-arg"], {
@@ -1221,23 +1243,23 @@ describe("CLI command integration", () => {
       launchMode,
       bootstrapProjectWorkspace,
       saveLastRunState,
-      now: () => "2026-02-01T00:00:00.000Z"
+      now: () => "2026-02-01T00:00:00.000Z",
     });
 
     expect(bootstrapProjectWorkspace).toHaveBeenCalledWith(
       { sandboxId: "sbx-arg" },
       config,
-      expect.objectContaining({ isConnect: true, onProgress: expect.any(Function) })
+      expect.objectContaining({ isConnect: true, onProgress: expect.any(Function) }),
     );
     expect(launchMode).toHaveBeenCalledWith({ sandboxId: "sbx-arg" }, "ssh-opencode", {
       workingDirectory: "/workspace/alpha",
-      startupEnv: { NEXT_PUBLIC_APP_ENV: "preview" }
+      startupEnv: { NEXT_PUBLIC_APP_ENV: "preview" },
     });
     expect(saveLastRunState).toHaveBeenCalledWith({
       sandboxId: "sbx-arg",
       mode: "ssh-opencode",
       activeRepo: "alpha",
-      updatedAt: "2026-02-01T00:00:00.000Z"
+      updatedAt: "2026-02-01T00:00:00.000Z",
     });
   });
 
@@ -1254,15 +1276,15 @@ describe("CLI command integration", () => {
         launchMode: vi.fn().mockRejectedValue(new Error("launch failed")),
         bootstrapProjectWorkspace: vi.fn().mockResolvedValue(bootstrapResult),
         saveLastRunState,
-        now: () => "2026-02-01T00:00:00.000Z"
-      })
+        now: () => "2026-02-01T00:00:00.000Z",
+      }),
     ).rejects.toThrow("launch failed");
 
     expect(saveLastRunState).toHaveBeenCalledWith({
       sandboxId: "sbx-arg",
       mode: "ssh-opencode",
       activeRepo: undefined,
-      updatedAt: "2026-02-01T00:00:00.000Z"
+      updatedAt: "2026-02-01T00:00:00.000Z",
     });
   });
 
@@ -1277,8 +1299,8 @@ describe("CLI command integration", () => {
         launchMode: vi.fn().mockResolvedValue({ mode: "ssh-opencode", command: "opencode", message: "launched" }),
         bootstrapProjectWorkspace: vi.fn().mockResolvedValue(bootstrapResult),
         saveLastRunState: vi.fn().mockResolvedValue(undefined),
-        now: () => "2026-02-01T00:00:00.000Z"
-      })
+        now: () => "2026-02-01T00:00:00.000Z",
+      }),
     ).rejects.toThrow("Unknown option for connect: '--bad'. Use --help for usage.");
   });
 
@@ -1293,10 +1315,10 @@ describe("CLI command integration", () => {
       bootstrapProjectWorkspace: vi.fn().mockResolvedValue({
         ...bootstrapResult,
         selectedRepoNames: ["alpha"],
-        workingDirectory: "/workspace/alpha"
+        workingDirectory: "/workspace/alpha",
       }),
       saveLastRunState: vi.fn().mockResolvedValue(undefined),
-      now: () => "2026-02-01T00:00:00.000Z"
+      now: () => "2026-02-01T00:00:00.000Z",
     });
 
     expect(result.message).toBe(
@@ -1309,13 +1331,12 @@ describe("CLI command integration", () => {
           url: undefined,
           workingDirectory: "/workspace/alpha",
           activeRepo: "alpha",
-          setup: null
+          setup: null,
         },
         null,
-        2
-      )
+        2,
+      ),
     );
     expect(result.exitCode).toBe(0);
   });
-
 });

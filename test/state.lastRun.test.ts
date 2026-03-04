@@ -7,7 +7,7 @@ import { clearLastRunState, loadLastRunState, saveLastRunState } from "../src/st
 
 describe("last-run state persistence", () => {
   it("save/load/clear roundtrip", async () => {
-    const directory = await mkdtemp(join(tmpdir(), "agent-box-last-run-"));
+    const directory = await mkdtemp(join(tmpdir(), "ez-devbox-last-run-"));
     const statePath = join(directory, "last-run.json");
 
     await saveLastRunState(
@@ -15,9 +15,9 @@ describe("last-run state persistence", () => {
         sandboxId: "sbx-123",
         mode: "web",
         activeRepo: "ez-devbox",
-        updatedAt: "2026-01-01T00:00:00.000Z"
+        updatedAt: "2026-01-01T00:00:00.000Z",
       },
-      statePath
+      statePath,
     );
 
     const loaded = await loadLastRunState(statePath);
@@ -25,7 +25,7 @@ describe("last-run state persistence", () => {
       sandboxId: "sbx-123",
       mode: "web",
       activeRepo: "ez-devbox",
-      updatedAt: "2026-01-01T00:00:00.000Z"
+      updatedAt: "2026-01-01T00:00:00.000Z",
     });
 
     await clearLastRunState(statePath);
@@ -41,14 +41,14 @@ describe("last-run state persistence", () => {
     await saveLastRunState({
       sandboxId: "sbx-temp",
       mode: "web",
-      updatedAt: "2026-02-01T00:00:00.000Z"
+      updatedAt: "2026-02-01T00:00:00.000Z",
     });
 
     const loaded = await loadLastRunState();
     expect(loaded).toEqual({
       sandboxId: "sbx-temp",
       mode: "web",
-      updatedAt: "2026-02-01T00:00:00.000Z"
+      updatedAt: "2026-02-01T00:00:00.000Z",
     });
 
     await expect(stat(expectedStatePath)).resolves.toBeTruthy();
@@ -67,12 +67,12 @@ describe("last-run state persistence", () => {
         {
           sandboxId: "sbx-legacy",
           mode: "ssh-opencode",
-          updatedAt: "2026-01-01T00:00:00.000Z"
+          updatedAt: "2026-01-01T00:00:00.000Z",
         },
         null,
-        2
+        2,
       ),
-      "utf8"
+      "utf8",
     );
 
     const loaded = await loadLastRunState(newStatePath);
@@ -80,7 +80,7 @@ describe("last-run state persistence", () => {
       sandboxId: "sbx-legacy",
       mode: "ssh-opencode",
       updatedAt: "2026-01-01T00:00:00.000Z",
-      activeRepo: undefined
+      activeRepo: undefined,
     });
   });
 });

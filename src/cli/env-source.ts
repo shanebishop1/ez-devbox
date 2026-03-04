@@ -2,7 +2,9 @@ import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { parse as parseDotEnv } from "dotenv";
 
-export async function loadCliEnvSource(envPath: string = resolve(process.cwd(), ".env")): Promise<Record<string, string | undefined>> {
+export async function loadCliEnvSource(
+  envPath: string = resolve(process.cwd(), ".env"),
+): Promise<Record<string, string | undefined>> {
   let parsedFileEnv: Record<string, string | undefined> = {};
 
   try {
@@ -15,7 +17,7 @@ export async function loadCliEnvSource(envPath: string = resolve(process.cwd(), 
 
   return {
     ...parsedFileEnv,
-    ...process.env
+    ...process.env,
   };
 }
 

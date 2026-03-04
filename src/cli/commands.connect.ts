@@ -1,34 +1,31 @@
-import type { CommandResult } from "../types/index.js";
-import type { StartupMode } from "../types/index.js";
-import { loadConfig, loadConfigWithMetadata, type LoadConfigOptions } from "../config/load.js";
+import { type LoadConfigOptions, loadConfig, loadConfigWithMetadata } from "../config/load.js";
+import { resolveSandboxCreateEnv, type SandboxCreateEnvResolution } from "../e2b/env.js";
 import {
   connectSandbox,
-  listSandboxes,
   type LifecycleOperationOptions,
   type ListSandboxesOptions,
+  listSandboxes,
   type SandboxHandle,
-  type SandboxListItem
+  type SandboxListItem,
 } from "../e2b/lifecycle.js";
-import { launchMode, resolveStartupMode, type ModeLaunchResult } from "../modes/index.js";
-import { loadLastRunState, saveLastRunState, type LastRunState } from "../state/lastRun.js";
 import { logger } from "../logging/logger.js";
-import { formatSandboxDisplayLabel } from "./sandbox-display-name.js";
-import { resolveHostGhToken } from "../auth/gh-host-token.js";
+import { launchMode, type ModeLaunchResult, resolveStartupMode } from "../modes/index.js";
+import { type BootstrapProjectWorkspaceResult, bootstrapProjectWorkspace } from "../project/bootstrap.js";
+import { type LastRunState, loadLastRunState, saveLastRunState } from "../state/lastRun.js";
 import { withConfiguredTunnel } from "../tunnel/cloudflared.js";
-import { formatPromptChoice } from "./prompt-style.js";
-import { resolvePromptStartupMode } from "./startup-mode-prompt.js";
-import { bootstrapProjectWorkspace, type BootstrapProjectWorkspaceResult } from "../project/bootstrap.js";
-import { resolveSandboxCreateEnv, type SandboxCreateEnvResolution } from "../e2b/env.js";
-import { loadCliEnvSource } from "./env-source.js";
+import type { CommandResult, StartupMode } from "../types/index.js";
 import {
   addWebServerPasswordForWebMode,
   formatSelectedReposSummary,
   formatSetupOutcomeSummary,
-  parseStartupModeValue,
   removeOpenCodeServerPassword,
-  resolveWebServerPassword
+  resolveWebServerPassword,
 } from "./command-shared.js";
-import { promptWithReadline } from "./readline-prompt.js";
+import { parseConnectArgs } from "./commands.connect.args.js";
+import { resolveGhRuntimeEnv } from "./commands.connect.env.js";
+import { resolvePreferredActiveRepo, resolveSandboxTarget } from "./commands.connect.target.js";
+import { loadCliEnvSource } from "./env-source.js";
+import { resolvePromptStartupMode } from "./startup-mode-prompt.js";
 
 export interface ConnectCommandDeps {
   loadConfig: (options?: LoadConfigOptions) => ReturnType<typeof loadConfig>;
@@ -36,22 +33,26 @@ export interface ConnectCommandDeps {
   connectSandbox: (
     sandboxId: string,
     config: Awaited<ReturnType<typeof loadConfig>>,
-    options?: LifecycleOperationOptions
+    options?: LifecycleOperationOptions,
   ) => Promise<SandboxHandle>;
   loadLastRunState: () => Promise<LastRunState | null>;
   listSandboxes: (options?: ListSandboxesOptions) => Promise<SandboxListItem[]>;
   resolvePromptStartupMode: (requestedMode: StartupMode) => Promise<StartupMode>;
-  launchMode: (handle: SandboxHandle, mode: StartupMode, options?: { workingDirectory?: string; startupEnv?: Record<string, string> }) => Promise<ModeLaunchResult>;
+  launchMode: (
+    handle: SandboxHandle,
+    mode: StartupMode,
+    options?: { workingDirectory?: string; startupEnv?: Record<string, string> },
+  ) => Promise<ModeLaunchResult>;
   resolveEnvSource?: () => Promise<Record<string, string | undefined>>;
   resolveSandboxCreateEnv?: (
     config: Awaited<ReturnType<typeof loadConfig>>,
-    envSource?: Record<string, string | undefined>
+    envSource?: Record<string, string | undefined>,
   ) => SandboxCreateEnvResolution;
   resolveHostGhToken?: (env: NodeJS.ProcessEnv) => Promise<string | undefined>;
   bootstrapProjectWorkspace?: (
     handle: SandboxHandle,
     config: Awaited<ReturnType<typeof loadConfig>>,
-    options?: { isConnect?: boolean; runtimeEnv?: Record<string, string>; onProgress?: (message: string) => void }
+    options?: { isConnect?: boolean; runtimeEnv?: Record<string, string>; onProgress?: (message: string) => void },
   ) => Promise<BootstrapProjectWorkspaceResult>;
   saveLastRunState: (state: LastRunState) => Promise<void>;
   isInteractiveTerminal?: () => boolean;
@@ -71,8 +72,7 @@ const defaultDeps: ConnectCommandDeps = {
   resolveSandboxCreateEnv,
   saveLastRunState,
   isInteractiveTerminal: () => Boolean(process.stdin.isTTY && process.stdout.isTTY),
-  promptInput,
-  now: () => new Date().toISOString()
+  now: () => new Date().toISOString(),
 };
 
 export interface ConnectCommandOptions {
@@ -82,7 +82,7 @@ export interface ConnectCommandOptions {
 export async function runConnectCommand(
   args: string[],
   deps: ConnectCommandDeps = defaultDeps,
-  options: ConnectCommandOptions = {}
+  options: ConnectCommandOptions = {},
 ): Promise<CommandResult> {
   const parsed = parseConnectArgs(args);
   const loadedConfig = deps.loadConfigWithMetadata ? await deps.loadConfigWithMetadata() : undefined;
@@ -110,259 +110,79 @@ export async function runConnectCommand(
       sandboxId: handle.sandboxId,
       mode,
       activeRepo: undefined,
-      updatedAt: deps.now()
+      updatedAt: deps.now(),
     });
 
     const envSource = deps.resolveEnvSource ? await deps.resolveEnvSource() : await loadCliEnvSource();
     const envResolution = deps.resolveSandboxCreateEnv
       ? deps.resolveSandboxCreateEnv(config, envSource)
       : {
-          envs: {}
+          envs: {},
         };
     const ghRuntimeEnv = await resolveGhRuntimeEnv(config, envSource, deps.resolveHostGhToken);
     const runtimeEnv = removeOpenCodeServerPassword({
       ...envResolution.envs,
       ...tunnelRuntimeEnv,
-      ...ghRuntimeEnv
+      ...ghRuntimeEnv,
     });
     const webServerPassword = resolveWebServerPassword(envSource);
     const preferredActiveRepo = await resolvePreferredActiveRepo(config, target.sandboxId, deps, options);
 
-    try {
-      const bootstrapResult = await (deps.bootstrapProjectWorkspace ?? bootstrapProjectWorkspace)(handle, config, {
-        isConnect: true,
-        preferredActiveRepo,
-        runtimeEnv,
-        onProgress: (message) => logger.verbose(`Bootstrap: ${message}`)
-      });
-      logger.verbose(`Selected repos summary: ${formatSelectedReposSummary(bootstrapResult.selectedRepoNames)}.`);
-      logger.verbose(`Setup outcome summary: ${formatSetupOutcomeSummary(bootstrapResult.setup)}.`);
+    const bootstrapResult = await (deps.bootstrapProjectWorkspace ?? bootstrapProjectWorkspace)(handle, config, {
+      isConnect: true,
+      preferredActiveRepo,
+      runtimeEnv,
+      onProgress: (message) => logger.verbose(`Bootstrap: ${message}`),
+    });
+    logger.verbose(`Selected repos summary: ${formatSelectedReposSummary(bootstrapResult.selectedRepoNames)}.`);
+    logger.verbose(`Setup outcome summary: ${formatSetupOutcomeSummary(bootstrapResult.setup)}.`);
 
-      logger.verbose(`Launching startup mode '${mode}'.`);
-      const launched = await deps.launchMode(handle, mode, {
-        workingDirectory: bootstrapResult.workingDirectory,
-        startupEnv: addWebServerPasswordForWebMode(
+    logger.verbose(`Launching startup mode '${mode}'.`);
+    const launched = await deps.launchMode(handle, mode, {
+      workingDirectory: bootstrapResult.workingDirectory,
+      startupEnv: addWebServerPasswordForWebMode(
+        {
+          ...bootstrapResult.startupEnv,
+          ...runtimeEnv,
+        },
+        resolvedMode,
+        webServerPassword,
+      ),
+    });
+
+    const activeRepo =
+      bootstrapResult.selectedRepoNames.length === 1 ? bootstrapResult.selectedRepoNames[0] : undefined;
+
+    await deps.saveLastRunState({
+      sandboxId: handle.sandboxId,
+      mode: launched.mode,
+      activeRepo,
+      updatedAt: deps.now(),
+    });
+
+    if (parsed.json) {
+      return {
+        message: JSON.stringify(
           {
-            ...bootstrapResult.startupEnv,
-            ...runtimeEnv
+            sandboxId: handle.sandboxId,
+            sandboxLabel: targetLabel,
+            mode: launched.mode,
+            command: launched.command,
+            url: launched.url,
+            workingDirectory: bootstrapResult.workingDirectory,
+            activeRepo,
+            setup: bootstrapResult.setup,
           },
-          resolvedMode,
-          webServerPassword
-        )
-      });
-
-      const activeRepo = bootstrapResult.selectedRepoNames.length === 1 ? bootstrapResult.selectedRepoNames[0] : undefined;
-
-      await deps.saveLastRunState({
-        sandboxId: handle.sandboxId,
-        mode: launched.mode,
-        activeRepo,
-        updatedAt: deps.now()
-      });
-
-      if (parsed.json) {
-        return {
-          message: JSON.stringify(
-            {
-              sandboxId: handle.sandboxId,
-              sandboxLabel: targetLabel,
-              mode: launched.mode,
-              command: launched.command,
-              url: launched.url,
-              workingDirectory: bootstrapResult.workingDirectory,
-              activeRepo,
-              setup: bootstrapResult.setup
-            },
-            null,
-            2
-          ),
-          exitCode: 0
-        };
-      }
-
-      return {
-        message: `Connected to sandbox ${targetLabel}. ${launched.message}`,
-        exitCode: 0
+          null,
+          2,
+        ),
+        exitCode: 0,
       };
-    } catch (error) {
-      throw error;
-    }
-  });
-}
-
-async function resolveGhRuntimeEnv(
-  config: Awaited<ReturnType<typeof loadConfig>>,
-  envSource: Record<string, string | undefined>,
-  resolveToken?: (env: NodeJS.ProcessEnv) => Promise<string | undefined>
-): Promise<Record<string, string>> {
-  if (!config.gh.enabled) {
-    return {};
-  }
-
-  logger.verbose("GitHub auth: resolving token.");
-  const resolver = resolveToken ?? resolveHostGhToken;
-  const token = await resolver(envSource);
-  if (!token) {
-    logger.verbose("GitHub auth: token not found; continuing without GH_TOKEN/GITHUB_TOKEN.");
-    return {};
-  }
-
-  logger.verbose("GitHub auth: token found; injecting GH_TOKEN/GITHUB_TOKEN.");
-  return {
-    GH_TOKEN: token,
-    GITHUB_TOKEN: token
-  };
-}
-
-async function resolvePreferredActiveRepo(
-  config: Awaited<ReturnType<typeof loadConfig>>,
-  targetSandboxId: string,
-  deps: ConnectCommandDeps,
-  options: ConnectCommandOptions
-): Promise<string | undefined> {
-  if (options.skipLastRun) {
-    return undefined;
-  }
-
-  if (config.project.mode !== "single" || config.project.active !== "prompt" || config.project.repos.length <= 1) {
-    return undefined;
-  }
-
-  const lastRun = await deps.loadLastRunState();
-  if (!lastRun || lastRun.sandboxId !== targetSandboxId) {
-    return undefined;
-  }
-
-  const preferred = lastRun.activeRepo?.trim();
-  return preferred ? preferred : undefined;
-}
-
-async function resolveSandboxTarget(
-  sandboxIdArg: string | undefined,
-  deps: ConnectCommandDeps,
-  options: ConnectCommandOptions
-): Promise<{ sandboxId: string; label?: string }> {
-  if (sandboxIdArg) {
-    return { sandboxId: sandboxIdArg };
-  }
-
-  const sandboxes = await deps.listSandboxes();
-  const firstSandbox = sandboxes[0];
-  if (!firstSandbox) {
-    throw new Error("No sandboxes are available to connect.");
-  }
-
-  if (sandboxes.length === 1) {
-    const fallbackLabel = formatSandboxDisplayLabel(firstSandbox.sandboxId, firstSandbox.metadata);
-    if (fallbackLabel !== firstSandbox.sandboxId) {
-      logger.verbose(`Selected fallback sandbox: ${fallbackLabel}.`);
     }
 
     return {
-      sandboxId: firstSandbox.sandboxId,
-      label: fallbackLabel === firstSandbox.sandboxId ? undefined : fallbackLabel
-    };
-  }
-
-  const isInteractiveTerminal = deps.isInteractiveTerminal ?? (() => Boolean(process.stdin.isTTY && process.stdout.isTTY));
-  if (isInteractiveTerminal()) {
-    return promptForSandboxTargetSelection(sandboxes, deps);
-  }
-
-  if (!options.skipLastRun) {
-    const lastRun = await deps.loadLastRunState();
-    const matchedSandbox =
-      lastRun?.sandboxId === undefined ? undefined : sandboxes.find((sandbox) => sandbox.sandboxId === lastRun.sandboxId);
-    if (matchedSandbox) {
-      const fallbackLabel = formatSandboxDisplayLabel(matchedSandbox.sandboxId, matchedSandbox.metadata);
-      if (fallbackLabel !== matchedSandbox.sandboxId) {
-        logger.verbose(`Selected fallback sandbox: ${fallbackLabel}.`);
-      }
-
-      return {
-        sandboxId: matchedSandbox.sandboxId,
-        label: fallbackLabel === matchedSandbox.sandboxId ? undefined : fallbackLabel
-      };
-    }
-  }
-
-  throw new Error(
-    "Multiple sandboxes are available but no interactive terminal was detected. Re-run with --sandbox-id <sandbox-id>."
-  );
-}
-
-async function promptForSandboxTargetSelection(
-  sandboxes: SandboxListItem[],
-  deps: ConnectCommandDeps
-): Promise<{ sandboxId: string; label?: string }> {
-  const prompt = deps.promptInput ?? promptInput;
-  const options = sandboxes.map((sandbox, index) => {
-    const label = formatSandboxDisplayLabel(sandbox.sandboxId, sandbox.metadata);
-    return {
-      index: index + 1,
-      sandboxId: sandbox.sandboxId,
-      label
+      message: `Connected to sandbox ${targetLabel}. ${launched.message}`,
+      exitCode: 0,
     };
   });
-
-  const question = [
-    "Multiple sandboxes available. Select one:",
-    ...options.map((option) => formatPromptChoice(option.index, option.label)),
-    `Enter choice [1-${options.length}]: `
-  ].join("\n");
-  const selectedIndex = Number.parseInt((await prompt(question)).trim(), 10);
-  const selected = Number.isNaN(selectedIndex) ? undefined : options[selectedIndex - 1];
-  if (!selected) {
-    throw new Error(
-      `Invalid sandbox selection. Enter a number between 1 and ${options.length}, or use --sandbox-id <sandbox-id>.`
-    );
-  }
-
-  return {
-    sandboxId: selected.sandboxId,
-    label: selected.label === selected.sandboxId ? undefined : selected.label
-  };
-}
-
-async function promptInput(question: string): Promise<string> {
-  return promptWithReadline(question);
-}
-
-function parseConnectArgs(args: string[]): { sandboxId?: string; mode?: StartupMode; json: boolean } {
-  let sandboxId: string | undefined;
-  let mode: StartupMode | undefined;
-  let json = false;
-
-  for (let index = 0; index < args.length; index += 1) {
-    const token = args[index];
-
-    if (token === "--sandbox-id") {
-      const next = args[index + 1];
-      if (!next || next.startsWith("--")) {
-        throw new Error("Missing value for --sandbox-id.");
-      }
-      sandboxId = next;
-      index += 1;
-      continue;
-    }
-
-    if (token === "--mode") {
-      const next = args[index + 1];
-      mode = parseStartupModeValue(next);
-      index += 1;
-      continue;
-    }
-
-    if (token === "--json") {
-      json = true;
-      continue;
-    }
-
-    if (token.startsWith("--")) {
-      throw new Error(`Unknown option for connect: '${token}'. Use --help for usage.`);
-    }
-    throw new Error(`Unexpected positional argument for connect: '${token}'. Use --help for usage.`);
-  }
-
-  return { sandboxId, mode, json };
 }

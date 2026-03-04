@@ -15,7 +15,7 @@ export async function cleanupSshBridgeSession(handle: SandboxHandle, session: Ss
       artifacts.sshdConfigPath,
       artifacts.websockifyLogPath,
       artifacts.websockifyPidPath,
-      artifacts.sshdPidPath
+      artifacts.sshdPidPath,
     ];
 
     if (session.startupEnvScriptPath) {
@@ -24,15 +24,15 @@ export async function cleanupSshBridgeSession(handle: SandboxHandle, session: Ss
 
     await runBestEffortRemoteCleanup(
       handle,
-      `if [ -f ${quoteShellArg(artifacts.websockifyPidPath)} ]; then pid=$(cat ${quoteShellArg(artifacts.websockifyPidPath)}); if [ -n "$pid" ]; then kill "$pid" >/dev/null 2>&1 || true; fi; fi`
+      `if [ -f ${quoteShellArg(artifacts.websockifyPidPath)} ]; then pid=$(cat ${quoteShellArg(artifacts.websockifyPidPath)}); if [ -n "$pid" ]; then kill "$pid" >/dev/null 2>&1 || true; fi; fi`,
     );
     await runBestEffortRemoteCleanup(
       handle,
-      `if [ -f ${quoteShellArg(artifacts.sshdPidPath)} ]; then pid=$(cat ${quoteShellArg(artifacts.sshdPidPath)}); if [ -n "$pid" ]; then sudo kill "$pid" >/dev/null 2>&1 || true; fi; fi`
+      `if [ -f ${quoteShellArg(artifacts.sshdPidPath)} ]; then pid=$(cat ${quoteShellArg(artifacts.sshdPidPath)}); if [ -n "$pid" ]; then sudo kill "$pid" >/dev/null 2>&1 || true; fi; fi`,
     );
     await runBestEffortRemoteCleanup(
       handle,
-      `for path in ${removePaths.map(quoteShellArg).join(" ")} ; do rm -f "$path"; done; rm -rf ${quoteShellArg(artifacts.sessionDir)}`
+      `for path in ${removePaths.map(quoteShellArg).join(" ")} ; do rm -f "$path"; done; rm -rf ${quoteShellArg(artifacts.sessionDir)}`,
     );
   }
 
@@ -60,7 +60,7 @@ async function runBestEffortLocalCleanup(tempDir: string): Promise<void> {
   try {
     await rm(tempDir, {
       recursive: true,
-      force: true
+      force: true,
     });
   } catch {
     // Ignore cleanup failures.

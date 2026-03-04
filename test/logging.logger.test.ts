@@ -5,7 +5,7 @@ function setTty(stream: NodeJS.WriteStream, value: boolean): () => void {
   const descriptor = Object.getOwnPropertyDescriptor(stream, "isTTY");
   Object.defineProperty(stream, "isTTY", {
     configurable: true,
-    value
+    value,
   });
 
   return () => {
@@ -16,7 +16,7 @@ function setTty(stream: NodeJS.WriteStream, value: boolean): () => void {
 
     Object.defineProperty(stream, "isTTY", {
       configurable: true,
-      value: undefined
+      value: undefined,
     });
   };
 }
@@ -75,9 +75,7 @@ describe("logger formatting", () => {
     process.env.NO_COLOR = "1";
     process.env.FORCE_COLOR = "1";
     const restoreStderr = setTty(process.stderr, true);
-    const errorSpy = vi
-      .spyOn(console, "error")
-      .mockImplementation(() => undefined);
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
 
     try {
       logger.error("boom");

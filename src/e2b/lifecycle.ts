@@ -1,4 +1,5 @@
 import type { ResolvedLauncherConfig } from "../config/schema.js";
+import { redactSensitiveText } from "../security/redaction.js";
 import {
   createE2BClient,
   type E2BClient,
@@ -6,10 +7,9 @@ import {
   type E2BSandbox,
   type E2BSandboxSummary,
   type SandboxCommandRunOptions,
-  type SandboxCommandRunResult
+  type SandboxCommandRunResult,
 } from "./client.js";
 import { normalizeTimeoutMs } from "./timeout.js";
-import { redactSensitiveText } from "../security/redaction.js";
 
 export interface SandboxHandle {
   sandboxId: string;
@@ -82,18 +82,16 @@ export async function createSandbox(config: LifecycleConfig, opts?: CreateSandbo
   const timeoutMs = normalizeTimeoutMs(config.sandbox.timeout_ms);
   const metadata = {
     ...buildMetadataTags(opts?.tags),
-    ...(opts?.metadata ?? {})
+    ...(opts?.metadata ?? {}),
   };
 
-  const sandbox = await withLifecycleError(
-    `Failed to create sandbox from template '${config.sandbox.template}'`,
-    () =>
-      client.create(config.sandbox.template, {
-        timeoutMs,
-        metadata,
-        envs: opts?.envs,
-        requestTimeoutMs: opts?.requestTimeoutMs
-      })
+  const sandbox = await withLifecycleError(`Failed to create sandbox from template '${config.sandbox.template}'`, () =>
+    client.create(config.sandbox.template, {
+      timeoutMs,
+      metadata,
+      envs: opts?.envs,
+      requestTimeoutMs: opts?.requestTimeoutMs,
+    }),
   );
 
   return createSandboxHandle(sandbox);
@@ -102,14 +100,14 @@ export async function createSandbox(config: LifecycleConfig, opts?: CreateSandbo
 export async function connectSandbox(
   sandboxId: string,
   _config: LifecycleConfig,
-  opts?: LifecycleOperationOptions
+  opts?: LifecycleOperationOptions,
 ): Promise<SandboxHandle> {
   const client = opts?.client ?? createE2BClient();
 
   const sandbox = await withLifecycleError(`Failed to connect to sandbox '${sandboxId}'`, () =>
     client.connect(sandboxId, {
-      requestTimeoutMs: opts?.requestTimeoutMs
-    })
+      requestTimeoutMs: opts?.requestTimeoutMs,
+    }),
   );
 
   return createSandboxHandle(sandbox);
@@ -122,8 +120,8 @@ export async function listSandboxes(opts?: ListSandboxesOptions): Promise<Sandbo
   const sandboxes = await withLifecycleError("Failed to list sandboxes", () =>
     client.list({
       metadata: Object.keys(metadata).length === 0 ? undefined : metadata,
-      requestTimeoutMs: opts?.requestTimeoutMs
-    })
+      requestTimeoutMs: opts?.requestTimeoutMs,
+    }),
   );
 
   return sandboxes.map(mapSandboxSummary);
@@ -134,8 +132,8 @@ export async function killSandbox(sandboxId: string, opts?: LifecycleOperationOp
 
   await withLifecycleError(`Failed to kill sandbox '${sandboxId}'`, () =>
     client.kill(sandboxId, {
-      requestTimeoutMs: opts?.requestTimeoutMs
-    })
+      requestTimeoutMs: opts?.requestTimeoutMs,
+    }),
   );
 }
 
@@ -148,33 +146,31 @@ function createSandboxHandle(sandbox: E2BSandbox): SandboxHandle {
   return {
     sandboxId: sandbox.sandboxId,
     async run(command, opts) {
-      const result = await withLifecycleError(
-        `Failed to run command in sandbox '${sandbox.sandboxId}'`,
-        () => sandbox.commands.run(command, opts)
+      const result = await withLifecycleError(`Failed to run command in sandbox '${sandbox.sandboxId}'`, () =>
+        sandbox.commands.run(command, opts),
       );
 
       return mapCommandResult(result);
     },
     async writeFile(path, data) {
       await withLifecycleError(`Failed to write file in sandbox '${sandbox.sandboxId}' at '${path}'`, () =>
-        sandbox.files.write(path, data)
+        sandbox.files.write(path, data),
       );
     },
     async getHost(port) {
-      return withLifecycleError(
-        `Failed to resolve host for sandbox '${sandbox.sandboxId}' on port ${port}`,
-        async () => sandbox.getHost(port)
+      return withLifecycleError(`Failed to resolve host for sandbox '${sandbox.sandboxId}' on port ${port}`, async () =>
+        sandbox.getHost(port),
       );
     },
     async setTimeout(timeoutMs) {
       const normalizedTimeoutMs = normalizeTimeoutMs(timeoutMs);
       await withLifecycleError(`Failed to set timeout for sandbox '${sandbox.sandboxId}'`, () =>
-        sandbox.setTimeout(normalizedTimeoutMs)
+        sandbox.setTimeout(normalizedTimeoutMs),
       );
     },
     async kill() {
       await withLifecycleError(`Failed to kill sandbox '${sandbox.sandboxId}'`, () => sandbox.kill());
-    }
+    },
   };
 }
 
@@ -182,7 +178,7 @@ function mapSandboxSummary(summary: E2BSandboxSummary): SandboxListItem {
   return {
     sandboxId: summary.sandboxId,
     state: summary.state,
-    metadata: summary.metadata
+    metadata: summary.metadata,
   };
 }
 
@@ -190,7 +186,7 @@ function mapCommandResult(result: SandboxCommandRunResult): { stdout: string; st
   return {
     stdout: result.stdout,
     stderr: result.stderr,
-    exitCode: result.exitCode
+    exitCode: result.exitCode,
   };
 }
 
@@ -229,14 +225,15 @@ function formatLifecycleError(message: string, cause: unknown): string {
 }
 
 function getCommandLikeError(
-  cause: unknown
+  cause: unknown,
 ): { message?: string; exitCode?: number; stdout?: string; stderr?: string } | null {
   if (typeof cause !== "object" || cause === null) {
     return null;
   }
 
   const record = cause as Record<string, unknown>;
-  const message = typeof record.message === "string" && record.message.trim() !== "" ? record.message.trim() : undefined;
+  const message =
+    typeof record.message === "string" && record.message.trim() !== "" ? record.message.trim() : undefined;
   const exitCode = typeof record.exitCode === "number" ? record.exitCode : undefined;
   const stdout = typeof record.stdout === "string" && record.stdout.trim() !== "" ? record.stdout.trim() : undefined;
   const stderr = typeof record.stderr === "string" && record.stderr.trim() !== "" ? record.stderr.trim() : undefined;
@@ -249,6 +246,6 @@ function getCommandLikeError(
     message,
     exitCode,
     stdout,
-    stderr
+    stderr,
   };
 }

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildSandboxDisplayName,
   formatSandboxDisplayLabel,
-  resolveSandboxDisplayName
+  resolveSandboxDisplayName,
 } from "../src/cli/sandbox-display-name.js";
 
 describe("sandbox display naming", () => {
@@ -16,11 +16,11 @@ describe("sandbox display naming", () => {
             branch: "canary",
             setup_command: "",
             setup_env: {},
-            startup_env: {}
-          }
+            startup_env: {},
+          },
         ],
-        "2026-02-01T12:34:56.789Z"
-      )
+        "2026-02-01T12:34:56.789Z",
+      ),
     ).toBe("next.js canary 2026-02-01 12:34:56 UTC");
   });
 
@@ -38,7 +38,7 @@ describe("sandbox display naming", () => {
             branch: "canary",
             setup_command: "",
             setup_env: {},
-            startup_env: {}
+            startup_env: {},
           },
           {
             name: "react",
@@ -46,11 +46,11 @@ describe("sandbox display naming", () => {
             branch: "main",
             setup_command: "",
             setup_env: {},
-            startup_env: {}
-          }
+            startup_env: {},
+          },
         ],
-        "2026-02-01T12:34:56.789Z"
-      )
+        "2026-02-01T12:34:56.789Z",
+      ),
     ).toBe("2026-02-01 12:34:56 UTC");
   });
 
@@ -65,11 +65,11 @@ describe("sandbox display naming", () => {
             branch: "canary",
             setup_command: "",
             setup_env: {},
-            startup_env: {}
-          }
+            startup_env: {},
+          },
         ],
-        "  "
-      )
+        "  ",
+      ),
     ).toBe("next.js canary unknown-time");
   });
 

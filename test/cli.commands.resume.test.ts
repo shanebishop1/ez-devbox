@@ -5,22 +5,22 @@ describe("runResumeCommand", () => {
   it("reuses last sandbox id and mode through connect", async () => {
     const runConnectCommand = vi.fn().mockResolvedValue({
       message: "Connected to sandbox sbx-123.",
-      exitCode: 0
+      exitCode: 0,
     });
 
     const result = await runResumeCommand([], {
       loadLastRunState: vi.fn().mockResolvedValue({
         sandboxId: "sbx-123",
         mode: "ssh-codex",
-        updatedAt: "2026-02-01T00:00:00.000Z"
+        updatedAt: "2026-02-01T00:00:00.000Z",
       }),
-      runConnectCommand
+      runConnectCommand,
     });
 
     expect(runConnectCommand).toHaveBeenCalledWith(["--sandbox-id", "sbx-123", "--mode", "ssh-codex"]);
     expect(result).toEqual({
       message: "Connected to sandbox sbx-123.",
-      exitCode: 0
+      exitCode: 0,
     });
   });
 
@@ -31,9 +31,9 @@ describe("runResumeCommand", () => {
       loadLastRunState: vi.fn().mockResolvedValue({
         sandboxId: "sbx-123",
         mode: "prompt",
-        updatedAt: "2026-02-01T00:00:00.000Z"
+        updatedAt: "2026-02-01T00:00:00.000Z",
       }),
-      runConnectCommand
+      runConnectCommand,
     });
 
     expect(runConnectCommand).toHaveBeenCalledWith(["--sandbox-id", "sbx-123", "--mode", "ssh-opencode"]);
@@ -43,8 +43,8 @@ describe("runResumeCommand", () => {
     await expect(
       runResumeCommand([], {
         loadLastRunState: vi.fn().mockResolvedValue(null),
-        runConnectCommand: vi.fn()
-      })
+        runConnectCommand: vi.fn(),
+      }),
     ).rejects.toThrow("No last-run state found");
   });
 
@@ -52,8 +52,8 @@ describe("runResumeCommand", () => {
     await expect(
       runResumeCommand(["--mode", "ssh-opencode"], {
         loadLastRunState: vi.fn().mockResolvedValue(null),
-        runConnectCommand: vi.fn()
-      })
+        runConnectCommand: vi.fn(),
+      }),
     ).rejects.toThrow("Unknown option for resume: '--mode'. Use --help for usage.");
   });
 });

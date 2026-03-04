@@ -3,7 +3,7 @@ const URL_REGEX = /https:\/\/[a-z0-9.-]+/gi;
 export function attachLogStream(
   stream: NodeJS.ReadableStream | null,
   recentLogs: string[],
-  onUrl: (url: string) => void
+  onUrl: (url: string) => void,
 ): void {
   if (!stream) {
     return;
@@ -63,9 +63,7 @@ function extractTunnelUrl(value: string): string | null {
       if (hostname === "trycloudflare.com" || hostname.endsWith(".trycloudflare.com")) {
         return candidate;
       }
-    } catch {
-      continue;
-    }
+    } catch {}
   }
 
   return null;
