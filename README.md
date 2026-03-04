@@ -1,4 +1,4 @@
-# ez-devbox
+# 🤖 ez-devbox 📦
 
 Run OpenCode/Codex agents in disposable E2B sandboxes with fast reconnects, repeatable repo setup, and your own local toolchain/auth flow.
 
@@ -11,7 +11,7 @@ Run OpenCode/Codex agents in disposable E2B sandboxes with fast reconnects, repe
   - `ssh-codex`
   - `web` (starts `opencode serve` and returns URL)
   - `ssh-shell`
-- Sets up configured repo(s) during sandbox creation process (clone, branch/checkout, custom bootstrap command)
+- Automatic repo set-up/bootstrapping during sandbox creation (clone, branch, initialize)
 - Starts tools in the expected directory (`project.working_dir = "auto"` picks repo or workspace)
 - Syncs local tool auth/config (OpenCode, Codex, GitHub CLI) into sandbox during `create`
 - Supports optional auto-managed local port tunneling for sandbox access of MCP servers, Docker containers, etc.
@@ -22,6 +22,37 @@ Run OpenCode/Codex agents in disposable E2B sandboxes with fast reconnects, repe
 - `E2B_API_KEY` set in `.env` or shell env
 - `launcher.config.toml` available either locally (cwd) or globally (user config dir)
 - Docker (and optionally `cloudflared`) installed if you want to use automatic port tunneling with the `[tunnel].ports` config
+
+## Why This Approach
+
+This tool is for a workflow where you want disposable cloud sandboxes without giving up local control over setup and credentials:
+
+- Repeatable repo bootstrapping on sandbox creation, instead of manual shell setup each time.
+- Fast reconnect/resume behavior with saved sandbox + mode state.
+- Controlled env pass-through and auth/config sync (OpenCode/Codex/GitHub) rather than ad-hoc copying.
+- Optional local port tunnel mapping for MCP servers and local services.
+
+## Install
+
+Choose one:
+
+```bash
+npx ez-devbox --help
+```
+
+or install in your project:
+
+```bash
+npm install --save-dev ez-devbox
+npx ez-devbox --help
+```
+
+or global install:
+
+```bash
+npm install -g ez-devbox
+ez-devbox --help
+```
 
 ## Environment variables
 
@@ -47,33 +78,6 @@ Common optional vars:
 Template file:
 
 - `.env.example` includes the expected keys.
-
-## Install
-
-Use one of these:
-
-```bash
-npx ez-devbox --help
-```
-
-or
-
-```bash
-pnpm dlx ez-devbox --help
-```
-
-or
-
-```bash
-npm install -g ez-devbox
-ez-devbox --help
-```
-
-If you are developing this repo locally (not just using the CLI), then run:
-
-```bash
-npm install
-```
 
 ## Quick start
 
