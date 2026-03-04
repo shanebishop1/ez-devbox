@@ -9,65 +9,44 @@ Use SSH agent modes when you want an interactive terminal session for OpenCode o
 
 ## Step-by-step
 
-1. Make sure `.env` is loaded:
+1. Ensure `.env` exists with `E2B_API_KEY` set.
 
-```bash
-set -a && source .env && set +a
-```
-
-2. Create and launch OpenCode mode:
+2. Create and launch one mode:
+OpenCode mode:
 
 ```bash
 npx ez-devbox create --mode ssh-opencode
 ```
 
-3. Create and launch Codex mode:
+Codex mode:
 
 ```bash
 npx ez-devbox create --mode ssh-codex
 ```
 
-4. Reconnect later to a specific sandbox and mode:
+3. Reconnect to a specific sandbox and mode:
 
 ```bash
 npx ez-devbox connect --sandbox-id <sandbox-id> --mode ssh-opencode
 npx ez-devbox connect --sandbox-id <sandbox-id> --mode ssh-codex
 ```
 
-## Prompt behavior
+4. Resume the last saved sandbox/mode:
 
-If you use prompt mode:
-
-- Startup prompt asks for one of: `ssh-opencode`, `ssh-codex`, `web`, `ssh-shell`.
-- Accepts numeric choice (`1-4`) or mode name.
-- After 3 invalid attempts, the command exits with an error.
-- In non-interactive terminals, prompt mode falls back to `ssh-opencode`.
-
-## Useful flags
-
-For `create`:
-
-- `--mode <mode>`: `prompt|ssh-opencode|ssh-codex|web|ssh-shell`
-- `--json`
-- `--verbose`
-
-For `connect`:
-
-- `--sandbox-id <id>`
-- `--mode <mode>`
-- `--json`
-- `--verbose`
+```bash
+npx ez-devbox resume
+```
 
 ## Quick examples
 
-Create with Codex and structured output:
+Create with Codex:
 
 ```bash
-npx ez-devbox create --mode ssh-codex --json
+npx ez-devbox create --mode ssh-codex
 ```
 
-Connect with OpenCode and verbose logs:
+Connect with OpenCode:
 
 ```bash
-npx ez-devbox connect --sandbox-id <sandbox-id> --mode ssh-opencode --verbose
+npx ez-devbox connect --sandbox-id <sandbox-id> --mode ssh-opencode
 ```

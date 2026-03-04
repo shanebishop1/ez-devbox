@@ -86,13 +86,7 @@ cp .env.example .env
 E2B_API_KEY=your_key_here
 ```
 
-2. Load the `.env` values into your shell before running commands:
-
-```bash
-set -a && source .env && set +a
-```
-
-3. Create/edit `launcher.config.toml`.
+2. Create/edit `launcher.config.toml`.
 
 Config lookup order:
 
@@ -124,7 +118,7 @@ EOF
 
 Then set each repo's `setup_command` as needed. For the full field reference, see `docs/launcher-config-reference.md`.
 
-4. Run commands (`npx` if not globally installed):
+3. Run commands (`npx` if not globally installed):
 
 ```bash
 npx ez-devbox create
@@ -194,8 +188,7 @@ On `create`, ez-devbox prints a warning that tunnel URLs are effectively bearer 
 ## Troubleshooting
 
 - `authorization header is missing` / 401 errors:
-  - your shell likely does not have `E2B_API_KEY` loaded.
-  - `set -a && source .env && set +a` (bash/zsh) before running CLI commands.
+  - make sure `.env` exists and contains `E2B_API_KEY`.
 - `wipe-all requires --yes in non-interactive terminals`:
   - add `--yes` in CI/scripts.
 - Multiple sandboxes in non-interactive runs:
