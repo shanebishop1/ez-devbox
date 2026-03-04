@@ -9,10 +9,10 @@ const baseConfig: ResolvedLauncherConfig = {
     reuse: true,
     name: "ez-devbox",
     timeout_ms: 1_800_000,
-    delete_on_exit: false
+    delete_on_exit: false,
   },
   startup: {
-    mode: "prompt"
+    mode: "prompt",
   },
   project: {
     mode: "single",
@@ -23,26 +23,26 @@ const baseConfig: ResolvedLauncherConfig = {
     setup_retries: 0,
     setup_concurrency: 1,
     setup_continue_on_error: false,
-    repos: []
+    repos: [],
   },
   env: {
-    pass_through: []
+    pass_through: [],
   },
   opencode: {
     config_dir: "~/.config/opencode",
-    auth_path: "~/.local/share/opencode/auth.json"
+    auth_path: "~/.local/share/opencode/auth.json",
   },
   codex: {
     config_dir: "~/.codex",
-    auth_path: "~/.codex/auth.json"
+    auth_path: "~/.codex/auth.json",
   },
   gh: {
     enabled: false,
-    config_dir: "~/.config/gh"
+    config_dir: "~/.config/gh",
   },
   tunnel: {
-    ports: []
-  }
+    ports: [],
+  },
 };
 
 describe("runCommandCommand", () => {
@@ -52,8 +52,8 @@ describe("runCommandCommand", () => {
         loadConfig: vi.fn().mockResolvedValue(baseConfig),
         listSandboxes: vi.fn().mockResolvedValue([]),
         connectSandbox: vi.fn(),
-        loadLastRunState: vi.fn().mockResolvedValue(null)
-      })
+        loadLastRunState: vi.fn().mockResolvedValue(null),
+      }),
     ).rejects.toThrow("Unknown option for command: '--bad'. Use --help for usage.");
   });
 
@@ -63,8 +63,8 @@ describe("runCommandCommand", () => {
         loadConfig: vi.fn().mockResolvedValue(baseConfig),
         listSandboxes: vi.fn().mockResolvedValue([]),
         connectSandbox: vi.fn(),
-        loadLastRunState: vi.fn().mockResolvedValue(null)
-      })
+        loadLastRunState: vi.fn().mockResolvedValue(null),
+      }),
     ).rejects.toThrow("Missing remote command. Provide a command after options (use -- when needed).");
   });
 
@@ -77,16 +77,18 @@ describe("runCommandCommand", () => {
       loadConfig: vi.fn().mockResolvedValue(baseConfig),
       listSandboxes: vi.fn().mockResolvedValue([
         { sandboxId: "sbx-1", state: "running", metadata: { "launcher.name": "Alpha" } },
-        { sandboxId: "sbx-2", state: "running", metadata: { "launcher.name": "Beta" } }
+        { sandboxId: "sbx-2", state: "running", metadata: { "launcher.name": "Beta" } },
       ]),
       connectSandbox,
       loadLastRunState: vi.fn().mockResolvedValue(null),
       isInteractiveTerminal: () => true,
-      promptInput
+      promptInput,
     });
 
     expect(promptInput).toHaveBeenCalledWith(
-      ["Multiple sandboxes available. Select one:", "1) Alpha (sbx-1)", "2) Beta (sbx-2)", "Enter choice [1-2]: "].join("\n")
+      ["Multiple sandboxes available. Select one:", "1) Alpha (sbx-1)", "2) Beta (sbx-2)", "Enter choice [1-2]: "].join(
+        "\n",
+      ),
     );
     expect(connectSandbox).toHaveBeenCalledWith("sbx-2", baseConfig);
     expect(result.message).toContain("Ran command in sandbox Beta (sbx-2).");
@@ -95,18 +97,20 @@ describe("runCommandCommand", () => {
   it("uses last-run sandbox in non-interactive mode when still present", async () => {
     const connectSandbox = vi.fn().mockResolvedValue({
       sandboxId: "sbx-2",
-      run: vi.fn().mockResolvedValue({ stdout: "ok", stderr: "", exitCode: 0 })
+      run: vi.fn().mockResolvedValue({ stdout: "ok", stderr: "", exitCode: 0 }),
     });
 
     await runCommandCommand(["echo", "hello"], {
       loadConfig: vi.fn().mockResolvedValue(baseConfig),
       listSandboxes: vi.fn().mockResolvedValue([
         { sandboxId: "sbx-1", state: "running" },
-        { sandboxId: "sbx-2", state: "running" }
+        { sandboxId: "sbx-2", state: "running" },
       ]),
       connectSandbox,
-      loadLastRunState: vi.fn().mockResolvedValue({ sandboxId: "sbx-2", mode: "web", updatedAt: "2026-01-01T00:00:00.000Z" }),
-      isInteractiveTerminal: () => false
+      loadLastRunState: vi
+        .fn()
+        .mockResolvedValue({ sandboxId: "sbx-2", mode: "web", updatedAt: "2026-01-01T00:00:00.000Z" }),
+      isInteractiveTerminal: () => false,
     });
 
     expect(connectSandbox).toHaveBeenCalledWith("sbx-2", baseConfig);
@@ -118,12 +122,14 @@ describe("runCommandCommand", () => {
         loadConfig: vi.fn().mockResolvedValue(baseConfig),
         listSandboxes: vi.fn().mockResolvedValue([
           { sandboxId: "sbx-1", state: "running" },
-          { sandboxId: "sbx-2", state: "running" }
+          { sandboxId: "sbx-2", state: "running" },
         ]),
         connectSandbox: vi.fn(),
-        loadLastRunState: vi.fn().mockResolvedValue({ sandboxId: "sbx-missing", mode: "web", updatedAt: "2026-01-01T00:00:00.000Z" }),
-        isInteractiveTerminal: () => false
-      })
+        loadLastRunState: vi
+          .fn()
+          .mockResolvedValue({ sandboxId: "sbx-missing", mode: "web", updatedAt: "2026-01-01T00:00:00.000Z" }),
+        isInteractiveTerminal: () => false,
+      }),
     ).rejects.toThrow("Re-run with --sandbox-id <sandbox-id>");
   });
 
@@ -135,12 +141,21 @@ describe("runCommandCommand", () => {
         project: {
           ...baseConfig.project,
           mode: "single",
-          repos: [{ name: "repo-one", url: "https://example.com/repo-one.git", branch: "main", setup_command: "", setup_env: {}, startup_env: {} }]
-        }
+          repos: [
+            {
+              name: "repo-one",
+              url: "https://example.com/repo-one.git",
+              branch: "main",
+              setup_command: "",
+              setup_env: {},
+              startup_env: {},
+            },
+          ],
+        },
       }),
       listSandboxes: vi.fn().mockResolvedValue([]),
       connectSandbox: vi.fn().mockResolvedValue({ sandboxId: "sbx-1", run }),
-      loadLastRunState: vi.fn().mockResolvedValue(null)
+      loadLastRunState: vi.fn().mockResolvedValue(null),
     });
 
     expect(run).toHaveBeenCalledWith("pwd", { cwd: "/workspace/repo-one" });
@@ -157,15 +172,29 @@ describe("runCommandCommand", () => {
           active: "name",
           active_name: "repo-two",
           repos: [
-            { name: "repo-one", url: "https://example.com/repo-one.git", branch: "main", setup_command: "", setup_env: {}, startup_env: {} },
-            { name: "repo-two", url: "https://example.com/repo-two.git", branch: "main", setup_command: "", setup_env: {}, startup_env: {} }
-          ]
-        }
+            {
+              name: "repo-one",
+              url: "https://example.com/repo-one.git",
+              branch: "main",
+              setup_command: "",
+              setup_env: {},
+              startup_env: {},
+            },
+            {
+              name: "repo-two",
+              url: "https://example.com/repo-two.git",
+              branch: "main",
+              setup_command: "",
+              setup_env: {},
+              startup_env: {},
+            },
+          ],
+        },
       }),
       listSandboxes: vi.fn().mockResolvedValue([]),
       connectSandbox: vi.fn().mockResolvedValue({ sandboxId: "sbx-1", run }),
       loadLastRunState: vi.fn().mockResolvedValue(null),
-      isInteractiveTerminal: () => false
+      isInteractiveTerminal: () => false,
     });
 
     expect(run).toHaveBeenCalledWith("pwd", { cwd: "/workspace/repo-two" });
@@ -182,15 +211,29 @@ describe("runCommandCommand", () => {
           active: "index",
           active_index: 1,
           repos: [
-            { name: "repo-one", url: "https://example.com/repo-one.git", branch: "main", setup_command: "", setup_env: {}, startup_env: {} },
-            { name: "repo-two", url: "https://example.com/repo-two.git", branch: "main", setup_command: "", setup_env: {}, startup_env: {} }
-          ]
-        }
+            {
+              name: "repo-one",
+              url: "https://example.com/repo-one.git",
+              branch: "main",
+              setup_command: "",
+              setup_env: {},
+              startup_env: {},
+            },
+            {
+              name: "repo-two",
+              url: "https://example.com/repo-two.git",
+              branch: "main",
+              setup_command: "",
+              setup_env: {},
+              startup_env: {},
+            },
+          ],
+        },
       }),
       listSandboxes: vi.fn().mockResolvedValue([]),
       connectSandbox: vi.fn().mockResolvedValue({ sandboxId: "sbx-1", run }),
       loadLastRunState: vi.fn().mockResolvedValue(null),
-      isInteractiveTerminal: () => true
+      isInteractiveTerminal: () => true,
     });
 
     expect(run).toHaveBeenCalledWith("pwd", { cwd: "/workspace/repo-two" });
@@ -205,14 +248,28 @@ describe("runCommandCommand", () => {
           ...baseConfig.project,
           mode: "all",
           repos: [
-            { name: "repo-one", url: "https://example.com/repo-one.git", branch: "main", setup_command: "", setup_env: {}, startup_env: {} },
-            { name: "repo-two", url: "https://example.com/repo-two.git", branch: "main", setup_command: "", setup_env: {}, startup_env: {} }
-          ]
-        }
+            {
+              name: "repo-one",
+              url: "https://example.com/repo-one.git",
+              branch: "main",
+              setup_command: "",
+              setup_env: {},
+              startup_env: {},
+            },
+            {
+              name: "repo-two",
+              url: "https://example.com/repo-two.git",
+              branch: "main",
+              setup_command: "",
+              setup_env: {},
+              startup_env: {},
+            },
+          ],
+        },
       }),
       listSandboxes: vi.fn().mockResolvedValue([]),
       connectSandbox: vi.fn().mockResolvedValue({ sandboxId: "sbx-1", run }),
-      loadLastRunState: vi.fn().mockResolvedValue(null)
+      loadLastRunState: vi.fn().mockResolvedValue(null),
     });
 
     expect(run).toHaveBeenCalledWith("pwd", { cwd: "/workspace" });
@@ -229,14 +286,28 @@ describe("runCommandCommand", () => {
           active: "name",
           active_name: "repo-two",
           repos: [
-            { name: "repo-one", url: "https://example.com/repo-one.git", branch: "main", setup_command: "", setup_env: {}, startup_env: {} },
-            { name: "repo-two", url: "https://example.com/repo-two.git", branch: "main", setup_command: "", setup_env: {}, startup_env: {} }
-          ]
-        }
+            {
+              name: "repo-one",
+              url: "https://example.com/repo-one.git",
+              branch: "main",
+              setup_command: "",
+              setup_env: {},
+              startup_env: {},
+            },
+            {
+              name: "repo-two",
+              url: "https://example.com/repo-two.git",
+              branch: "main",
+              setup_command: "",
+              setup_env: {},
+              startup_env: {},
+            },
+          ],
+        },
       }),
       listSandboxes: vi.fn().mockResolvedValue([]),
       connectSandbox: vi.fn().mockResolvedValue({ sandboxId: "sbx-1", run }),
-      loadLastRunState: vi.fn().mockResolvedValue(null)
+      loadLastRunState: vi.fn().mockResolvedValue(null),
     });
 
     expect(run).toHaveBeenCalledWith("pwd", { cwd: "/workspace/repo-two" });
@@ -253,14 +324,28 @@ describe("runCommandCommand", () => {
           active: "index",
           active_index: 1,
           repos: [
-            { name: "repo-one", url: "https://example.com/repo-one.git", branch: "main", setup_command: "", setup_env: {}, startup_env: {} },
-            { name: "repo-two", url: "https://example.com/repo-two.git", branch: "main", setup_command: "", setup_env: {}, startup_env: {} }
-          ]
-        }
+            {
+              name: "repo-one",
+              url: "https://example.com/repo-one.git",
+              branch: "main",
+              setup_command: "",
+              setup_env: {},
+              startup_env: {},
+            },
+            {
+              name: "repo-two",
+              url: "https://example.com/repo-two.git",
+              branch: "main",
+              setup_command: "",
+              setup_env: {},
+              startup_env: {},
+            },
+          ],
+        },
       }),
       listSandboxes: vi.fn().mockResolvedValue([]),
       connectSandbox: vi.fn().mockResolvedValue({ sandboxId: "sbx-1", run }),
-      loadLastRunState: vi.fn().mockResolvedValue(null)
+      loadLastRunState: vi.fn().mockResolvedValue(null),
     });
 
     expect(run).toHaveBeenCalledWith("pwd", { cwd: "/workspace/repo-two" });
@@ -272,7 +357,7 @@ describe("runCommandCommand", () => {
       loadConfig: vi.fn().mockResolvedValue(baseConfig),
       listSandboxes: vi.fn().mockResolvedValue([]),
       connectSandbox: vi.fn().mockResolvedValue({ sandboxId: "sbx-1", run }),
-      loadLastRunState: vi.fn().mockResolvedValue(null)
+      loadLastRunState: vi.fn().mockResolvedValue(null),
     });
 
     expect(run).toHaveBeenCalledWith("pwd", { cwd: "/workspace" });
@@ -285,7 +370,7 @@ describe("runCommandCommand", () => {
       loadConfig: vi.fn().mockResolvedValue(baseConfig),
       listSandboxes: vi.fn().mockResolvedValue([]),
       connectSandbox: vi.fn().mockResolvedValue({ sandboxId: "sbx-1", run }),
-      loadLastRunState: vi.fn().mockResolvedValue(null)
+      loadLastRunState: vi.fn().mockResolvedValue(null),
     });
 
     expect(run).toHaveBeenCalledWith("npm test", { cwd: "/workspace" });
@@ -303,7 +388,7 @@ describe("runCommandCommand", () => {
       loadConfig: vi.fn().mockResolvedValue(baseConfig),
       listSandboxes: vi.fn().mockResolvedValue([]),
       connectSandbox: vi.fn().mockResolvedValue({ sandboxId: "sbx-1", run }),
-      loadLastRunState: vi.fn().mockResolvedValue(null)
+      loadLastRunState: vi.fn().mockResolvedValue(null),
     });
 
     expect(result.message).toBe(
@@ -315,11 +400,11 @@ describe("runCommandCommand", () => {
           cwd: "/workspace",
           stdout: "ok\n",
           stderr: "",
-          exitCode: 0
+          exitCode: 0,
         },
         null,
-        2
-      )
+        2,
+      ),
     );
     expect(result.exitCode).toBe(0);
   });
@@ -335,14 +420,14 @@ describe("runCommandCommand", () => {
       resolveSandboxCreateEnv: vi
         .fn()
         .mockReturnValue({ envs: { FIRECRAWL_API_KEY: "fc-test", OPENCODE_SERVER_PASSWORD: "abcd" } }),
-      loadLastRunState: vi.fn().mockResolvedValue(null)
+      loadLastRunState: vi.fn().mockResolvedValue(null),
     });
 
     expect(run).toHaveBeenCalledWith("env", {
       cwd: "/workspace",
       envs: {
-        FIRECRAWL_API_KEY: "fc-test"
-      }
+        FIRECRAWL_API_KEY: "fc-test",
+      },
     });
   });
 
@@ -356,11 +441,11 @@ describe("runCommandCommand", () => {
         config: baseConfig,
         configPath: "/tmp/launcher.config.toml",
         createdConfig: false,
-        scope: "local"
+        scope: "local",
       }),
       listSandboxes: vi.fn().mockResolvedValue([]),
       connectSandbox: vi.fn().mockResolvedValue({ sandboxId: "sbx-1", run }),
-      loadLastRunState: vi.fn().mockResolvedValue(null)
+      loadLastRunState: vi.fn().mockResolvedValue(null),
     });
 
     expect(infoSpy).toHaveBeenCalledWith("Using launcher config: /tmp/launcher.config.toml");

@@ -5,24 +5,24 @@ describe("resolveGitToken", () => {
   it("prefers GITHUB_TOKEN over GH_TOKEN and trims whitespace", async () => {
     const result = await resolveGitToken({
       GITHUB_TOKEN: "  github-token  ",
-      GH_TOKEN: "  gh-token  "
+      GH_TOKEN: "  gh-token  ",
     });
 
     expect(result).toEqual({
       token: "github-token",
-      source: "env_github"
+      source: "env_github",
     });
   });
 
   it("uses GH_TOKEN when GITHUB_TOKEN is empty after trimming", async () => {
     const result = await resolveGitToken({
       GITHUB_TOKEN: "   ",
-      GH_TOKEN: "  gh-token  "
+      GH_TOKEN: "  gh-token  ",
     });
 
     expect(result).toEqual({
       token: "gh-token",
-      source: "env_gh"
+      source: "env_gh",
     });
   });
 
@@ -33,7 +33,7 @@ describe("resolveGitToken", () => {
 
     expect(result).toEqual({
       token: "host-token",
-      source: "host"
+      source: "host",
     });
     expect(resolveHostToken).toHaveBeenCalledWith({});
   });

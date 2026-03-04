@@ -2,12 +2,7 @@ import type { ResolvedLauncherConfig } from "../config/schema.js";
 
 type EnvSource = Record<string, string | undefined>;
 
-const BUILTIN_PASSTHROUGH_VARS = [
-  "OPENAI_API_KEY",
-  "ANTHROPIC_API_KEY",
-  "GITHUB_TOKEN",
-  "GH_TOKEN"
-] as const;
+const BUILTIN_PASSTHROUGH_VARS = ["OPENAI_API_KEY", "ANTHROPIC_API_KEY", "GITHUB_TOKEN", "GH_TOKEN"] as const;
 
 export interface SandboxCreateEnvResolution {
   envs: Record<string, string>;
@@ -15,7 +10,7 @@ export interface SandboxCreateEnvResolution {
 
 export function resolveSandboxCreateEnv(
   config: Pick<ResolvedLauncherConfig, "env">,
-  envSource: EnvSource = process.env
+  envSource: EnvSource = process.env,
 ): SandboxCreateEnvResolution {
   const resolved: Record<string, string> = {};
   const allowlist = new Set<string>([...config.env.pass_through, ...BUILTIN_PASSTHROUGH_VARS]);
@@ -28,7 +23,7 @@ export function resolveSandboxCreateEnv(
   }
 
   return {
-    envs: resolved
+    envs: resolved,
   };
 }
 

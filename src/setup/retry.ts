@@ -5,7 +5,7 @@ export interface RetryPolicy {
 
 export const defaultRetryPolicy: RetryPolicy = {
   attempts: 1,
-  delayMs: 0
+  delayMs: 0,
 };
 
 export type SleepFn = (delayMs: number) => Promise<void>;
@@ -25,7 +25,7 @@ export function validateRetryPolicy(policy: RetryPolicy): RetryPolicy {
 export function resolveRetryPolicy(policy?: Partial<RetryPolicy>): RetryPolicy {
   return validateRetryPolicy({
     attempts: policy?.attempts ?? defaultRetryPolicy.attempts,
-    delayMs: policy?.delayMs ?? defaultRetryPolicy.delayMs
+    delayMs: policy?.delayMs ?? defaultRetryPolicy.delayMs,
   });
 }
 
@@ -35,7 +35,7 @@ export async function withRetry<T>(
   options?: {
     sleep?: SleepFn;
     onRetry?: (error: unknown, attempt: number, nextAttempt: number) => void;
-  }
+  },
 ): Promise<T> {
   const validated = validateRetryPolicy(policy);
   const sleep = options?.sleep ?? defaultSleep;

@@ -23,7 +23,7 @@ describe("loadCliEnvSource", () => {
 
     await rm(tempDir, {
       recursive: true,
-      force: true
+      force: true,
     });
   });
 

@@ -218,8 +218,11 @@ See `docs/launcher-config-reference.md`.
 
 ```bash
 npm run check:complexity
+npm run check:style
 npm run test
 npm run build
+npm run lint
+npm run format
 npm run validate
 npm run pack:check
 ```

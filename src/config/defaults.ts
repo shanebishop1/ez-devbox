@@ -6,10 +6,10 @@ export const defaultConfig: ResolvedLauncherConfig = {
     reuse: true,
     name: "ez-devbox",
     timeout_ms: 60 * 60 * 1000,
-    delete_on_exit: false
+    delete_on_exit: false,
   },
   startup: {
-    mode: "prompt"
+    mode: "prompt",
   },
   project: {
     mode: "single",
@@ -22,25 +22,25 @@ export const defaultConfig: ResolvedLauncherConfig = {
     setup_retries: 2,
     setup_concurrency: 1,
     setup_continue_on_error: false,
-    repos: []
+    repos: [],
   },
   env: {
-    pass_through: []
+    pass_through: [],
   },
   opencode: {
     config_dir: "~/.config/opencode",
-    auth_path: "~/.local/share/opencode/auth.json"
+    auth_path: "~/.local/share/opencode/auth.json",
   },
   codex: {
     config_dir: "~/.codex",
-    auth_path: "~/.codex/auth.json"
+    auth_path: "~/.codex/auth.json",
   },
   gh: {
     enabled: false,
-    config_dir: "~/.config/gh"
+    config_dir: "~/.config/gh",
   },
   tunnel: {
     ports: [],
-    targets: {}
-  }
+    targets: {},
+  },
 };

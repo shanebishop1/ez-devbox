@@ -36,7 +36,7 @@ export function buildSshClientArgs(session: SshBridgeSession, remoteCommand: str
     "-i",
     session.privateKeyPath,
     `${sshUser}@${SSH_HOST}`,
-    remoteCommand
+    remoteCommand,
   ];
 }
 
@@ -45,7 +45,7 @@ export async function runInteractiveSshSession(session: SshBridgeSession, remote
 
   await new Promise<void>((resolvePromise, rejectPromise) => {
     const child = spawn("ssh", sshArgs, {
-      stdio: "inherit"
+      stdio: "inherit",
     });
 
     child.once("error", (error) => {
@@ -68,7 +68,11 @@ export async function runInteractiveSshSession(session: SshBridgeSession, remote
   });
 }
 
-export function buildInteractiveRemoteCommand(options: { cwd?: string; envScriptPath?: string; command: string }): string {
+export function buildInteractiveRemoteCommand(options: {
+  cwd?: string;
+  envScriptPath?: string;
+  command: string;
+}): string {
   const steps: string[] = [];
 
   if (options.cwd) {
@@ -104,14 +108,14 @@ export function buildSshdConfig(artifacts: SshBridgeSessionArtifacts): string {
     "GatewayPorts no",
     "PermitTunnel no",
     "PrintMotd no",
-    "Subsystem sftp internal-sftp"
+    "Subsystem sftp internal-sftp",
   ].join("\n");
 }
 
 export async function runLocalCommand(
   command: string,
   args: string[],
-  timeoutMs: number
+  timeoutMs: number,
 ): Promise<{ stdout: string; stderr: string }> {
   return new Promise((resolvePromise, rejectPromise) => {
     execFile(
@@ -120,7 +124,7 @@ export async function runLocalCommand(
       {
         timeout: timeoutMs,
         encoding: "utf8",
-        maxBuffer: 1024 * 1024
+        maxBuffer: 1024 * 1024,
       },
       (error, stdout, stderr) => {
         if (error) {
@@ -131,9 +135,9 @@ export async function runLocalCommand(
 
         resolvePromise({
           stdout: stdout ?? "",
-          stderr: stderr ?? ""
+          stderr: stderr ?? "",
         });
-      }
+      },
     );
   });
 }
@@ -141,7 +145,7 @@ export async function runLocalCommand(
 function resolveWsSshProxyScriptPath(): string {
   const candidates = [
     fileURLToPath(new URL("../../scripts/ws-ssh-proxy.mjs", import.meta.url)),
-    fileURLToPath(new URL("../../../scripts/ws-ssh-proxy.mjs", import.meta.url))
+    fileURLToPath(new URL("../../../scripts/ws-ssh-proxy.mjs", import.meta.url)),
   ];
 
   for (const candidate of candidates) {
@@ -151,6 +155,6 @@ function resolveWsSshProxyScriptPath(): string {
   }
 
   throw new Error(
-    "Unable to locate ws-ssh-proxy.mjs. Ensure scripts/ws-ssh-proxy.mjs is included with the ez-devbox package."
+    "Unable to locate ws-ssh-proxy.mjs. Ensure scripts/ws-ssh-proxy.mjs is included with the ez-devbox package.",
   );
 }

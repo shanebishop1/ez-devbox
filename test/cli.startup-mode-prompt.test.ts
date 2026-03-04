@@ -7,7 +7,7 @@ describe("resolvePromptStartupMode", () => {
 
     const result = await resolvePromptStartupMode("ssh-shell", {
       isInteractiveTerminal: () => true,
-      promptInput
+      promptInput,
     });
 
     expect(result).toBe("ssh-shell");
@@ -19,7 +19,7 @@ describe("resolvePromptStartupMode", () => {
 
     const result = await resolvePromptStartupMode("prompt", {
       isInteractiveTerminal: () => false,
-      promptInput
+      promptInput,
     });
 
     expect(result).toBe("ssh-opencode");
@@ -41,14 +41,11 @@ describe("resolvePromptStartupMode", () => {
   });
 
   it("reprompts in interactive mode until a valid selection is provided", async () => {
-    const promptInput = vi
-      .fn()
-      .mockResolvedValueOnce("5")
-      .mockResolvedValueOnce("ssh-codex");
+    const promptInput = vi.fn().mockResolvedValueOnce("5").mockResolvedValueOnce("ssh-codex");
 
     const result = await resolvePromptStartupMode("prompt", {
       isInteractiveTerminal: () => true,
-      promptInput
+      promptInput,
     });
 
     expect(result).toBe("ssh-codex");
@@ -65,8 +62,8 @@ describe("resolvePromptStartupMode", () => {
     await expect(
       resolvePromptStartupMode("prompt", {
         isInteractiveTerminal: () => true,
-        promptInput
-      })
+        promptInput,
+      }),
     ).rejects.toThrow("Invalid startup mode selection after 3 attempts");
   });
 
@@ -75,7 +72,7 @@ describe("resolvePromptStartupMode", () => {
 
     await resolvePromptStartupMode("prompt", {
       isInteractiveTerminal: () => true,
-      promptInput
+      promptInput,
     });
 
     expect(promptInput).toHaveBeenCalledWith(
@@ -86,16 +83,19 @@ describe("resolvePromptStartupMode", () => {
         "2) ssh-codex",
         "3) web",
         "4) ssh-shell",
-        "Enter choice [1/ssh-opencode]: "
-      ].join("\n")
+        "Enter choice [1/ssh-opencode]: ",
+      ].join("\n"),
     );
   });
 });
 
-async function expectResolvedMode(input: string, expected: "ssh-opencode" | "ssh-codex" | "web" | "ssh-shell"): Promise<void> {
+async function expectResolvedMode(
+  input: string,
+  expected: "ssh-opencode" | "ssh-codex" | "web" | "ssh-shell",
+): Promise<void> {
   const result = await resolvePromptStartupMode("prompt", {
     isInteractiveTerminal: () => true,
-    promptInput: vi.fn().mockResolvedValue(input)
+    promptInput: vi.fn().mockResolvedValue(input),
   });
 
   expect(result).toBe(expected);

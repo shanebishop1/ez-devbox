@@ -1,13 +1,13 @@
 import { describe, expect, it, vi } from "vitest";
+import type { ResolvedLauncherConfig } from "../src/config/schema.js";
+import type { E2BClient, E2BSandbox } from "../src/e2b/client.js";
 import {
   connectSandbox,
   createSandbox,
   listSandboxes,
   refreshTimeout,
-  type SandboxHandle
+  type SandboxHandle,
 } from "../src/e2b/lifecycle.js";
-import type { ResolvedLauncherConfig } from "../src/config/schema.js";
-import type { E2BClient, E2BSandbox } from "../src/e2b/client.js";
 
 describe("e2b lifecycle adapter", () => {
   const baseConfig: ResolvedLauncherConfig = {
@@ -16,10 +16,10 @@ describe("e2b lifecycle adapter", () => {
       reuse: true,
       name: "ez-devbox",
       timeout_ms: 1800_000,
-      delete_on_exit: false
+      delete_on_exit: false,
     },
     startup: {
-      mode: "prompt"
+      mode: "prompt",
     },
     project: {
       mode: "single",
@@ -30,39 +30,39 @@ describe("e2b lifecycle adapter", () => {
       setup_retries: 2,
       setup_concurrency: 1,
       setup_continue_on_error: false,
-      repos: []
+      repos: [],
     },
     env: {
-      pass_through: []
+      pass_through: [],
     },
     opencode: {
       config_dir: "~/.config/opencode",
-      auth_path: "~/.local/share/opencode/auth.json"
+      auth_path: "~/.local/share/opencode/auth.json",
     },
     codex: {
       config_dir: "~/.codex",
-      auth_path: "~/.codex/auth.json"
+      auth_path: "~/.codex/auth.json",
     },
     gh: {
       enabled: false,
-      config_dir: "~/.config/gh"
+      config_dir: "~/.config/gh",
     },
     tunnel: {
-      ports: []
-    }
+      ports: [],
+    },
   };
 
   it("createSandbox invokes SDK create with template/timeout/env metadata", async () => {
     const sdkSandbox = createMockSandbox("sbx-create");
     const client = createMockClient({
-      create: vi.fn().mockResolvedValue(sdkSandbox)
+      create: vi.fn().mockResolvedValue(sdkSandbox),
     });
 
     await createSandbox(baseConfig, {
       client,
       envs: { GITHUB_TOKEN: "token" },
       metadata: { source: "test" },
-      tags: { project: "ez-devbox", mode: "web", user: "shane" }
+      tags: { project: "ez-devbox", mode: "web", user: "shane" },
     });
 
     expect(client.create).toHaveBeenCalledWith("base", {
@@ -72,9 +72,9 @@ describe("e2b lifecycle adapter", () => {
         "launcher.project": "ez-devbox",
         "launcher.mode": "web",
         "launcher.user": "shane",
-        source: "test"
+        source: "test",
       },
-      requestTimeoutMs: undefined
+      requestTimeoutMs: undefined,
     });
   });
 
@@ -82,22 +82,22 @@ describe("e2b lifecycle adapter", () => {
     const run = vi.fn().mockResolvedValue({
       stdout: "ok",
       stderr: "",
-      exitCode: 0
+      exitCode: 0,
     });
     const sdkSandbox = createMockSandbox("sbx-connect", run);
     const client = createMockClient({
-      connect: vi.fn().mockResolvedValue(sdkSandbox)
+      connect: vi.fn().mockResolvedValue(sdkSandbox),
     });
 
     const handle = await connectSandbox("sbx-connect", baseConfig, { client });
     const result = await handle.run("pwd", {
       cwd: "/workspace",
       envs: { A: "1" },
-      timeoutMs: 8_000
+      timeoutMs: 8_000,
     });
 
     expect(client.connect).toHaveBeenCalledWith("sbx-connect", {
-      requestTimeoutMs: undefined
+      requestTimeoutMs: undefined,
     });
     expect(run).toHaveBeenCalledWith("pwd", { cwd: "/workspace", envs: { A: "1" }, timeoutMs: 8_000 });
     expect(result).toEqual({ stdout: "ok", stderr: "", exitCode: 0 });
@@ -109,33 +109,33 @@ describe("e2b lifecycle adapter", () => {
         {
           sandboxId: "sbx-1",
           state: "running",
-          metadata: { "launcher.project": "ez-devbox" }
+          metadata: { "launcher.project": "ez-devbox" },
         },
         {
           sandboxId: "sbx-2",
           state: "paused",
-          metadata: undefined
-        }
-      ])
+          metadata: undefined,
+        },
+      ]),
     });
 
     const listed = await listSandboxes({ client, tags: { project: "ez-devbox" } });
 
     expect(client.list).toHaveBeenCalledWith({
       metadata: { "launcher.project": "ez-devbox" },
-      requestTimeoutMs: undefined
+      requestTimeoutMs: undefined,
     });
     expect(listed).toEqual([
       {
         sandboxId: "sbx-1",
         state: "running",
-        metadata: { "launcher.project": "ez-devbox" }
+        metadata: { "launcher.project": "ez-devbox" },
       },
       {
         sandboxId: "sbx-2",
         state: "paused",
-        metadata: undefined
-      }
+        metadata: undefined,
+      },
     ]);
   });
 
@@ -147,7 +147,7 @@ describe("e2b lifecycle adapter", () => {
       writeFile: vi.fn(),
       getHost: vi.fn(),
       setTimeout,
-      kill: vi.fn()
+      kill: vi.fn(),
     };
 
     await refreshTimeout(handle, 12_000.75);
@@ -158,31 +158,29 @@ describe("e2b lifecycle adapter", () => {
   it("converts SDK failures to readable launcher errors", async () => {
     const sdkSandbox = createMockSandbox("sbx-error", vi.fn().mockRejectedValue(new Error("command crashed")));
     const client = createMockClient({
-      connect: vi.fn().mockResolvedValue(sdkSandbox)
+      connect: vi.fn().mockResolvedValue(sdkSandbox),
     });
 
     const handle = await connectSandbox("sbx-error", baseConfig, { client });
 
-    await expect(handle.run("false")).rejects.toThrow(
-      "Failed to run command in sandbox 'sbx-error': command crashed"
-    );
+    await expect(handle.run("false")).rejects.toThrow("Failed to run command in sandbox 'sbx-error': command crashed");
   });
 
   it("includes stderr details for command exit errors", async () => {
     const commandExitError = Object.assign(new Error("exit status 128"), {
       exitCode: 128,
       stdout: "",
-      stderr: "fatal: repository 'https://github.com/org/private.git/' not found"
+      stderr: "fatal: repository 'https://github.com/org/private.git/' not found",
     });
     const sdkSandbox = createMockSandbox("sbx-exit", vi.fn().mockRejectedValue(commandExitError));
     const client = createMockClient({
-      connect: vi.fn().mockResolvedValue(sdkSandbox)
+      connect: vi.fn().mockResolvedValue(sdkSandbox),
     });
 
     const handle = await connectSandbox("sbx-exit", baseConfig, { client });
 
     await expect(handle.run("git clone https://github.com/org/private.git")).rejects.toThrow(
-      "stderr=fatal: repository 'https://github.com/org/private.git/' not found"
+      "stderr=fatal: repository 'https://github.com/org/private.git/' not found",
     );
   });
 
@@ -191,34 +189,34 @@ describe("e2b lifecycle adapter", () => {
       exitCode: 1,
       stdout: "Authorization: Bearer super-secret-token",
       stderr:
-        "fatal: https://x-access-token:ghp_very_secret@github.com/org/private.git not found Authorization: Bearer super-secret-token"
+        "fatal: https://x-access-token:ghp_very_secret@github.com/org/private.git not found Authorization: Bearer super-secret-token",
     });
     const sdkSandbox = createMockSandbox("sbx-redact", vi.fn().mockRejectedValue(commandExitError));
     const client = createMockClient({
-      connect: vi.fn().mockResolvedValue(sdkSandbox)
+      connect: vi.fn().mockResolvedValue(sdkSandbox),
     });
 
     const handle = await connectSandbox("sbx-redact", baseConfig, { client });
 
     await expect(handle.run("git clone https://github.com/org/private.git")).rejects.toThrow(
-      /GH_TOKEN=\[REDACTED\].*https:\/\/x-access-token:\[REDACTED\]@github\.com.*Bearer \[REDACTED\]/
+      /GH_TOKEN=\[REDACTED\].*https:\/\/x-access-token:\[REDACTED\]@github\.com.*Bearer \[REDACTED\]/,
     );
   });
 });
 
 function createMockSandbox(
   sandboxId: string,
-  run: E2BSandbox["commands"]["run"] = vi.fn().mockResolvedValue({ stdout: "", stderr: "", exitCode: 0 })
+  run: E2BSandbox["commands"]["run"] = vi.fn().mockResolvedValue({ stdout: "", stderr: "", exitCode: 0 }),
 ): E2BSandbox {
   return {
     sandboxId,
     commands: { run },
     files: {
-      write: vi.fn().mockResolvedValue({})
+      write: vi.fn().mockResolvedValue({}),
     },
     getHost: vi.fn().mockReturnValue(`${sandboxId}.host`),
     setTimeout: vi.fn().mockResolvedValue(undefined),
-    kill: vi.fn().mockResolvedValue(undefined)
+    kill: vi.fn().mockResolvedValue(undefined),
   };
 }
 
@@ -227,6 +225,6 @@ function createMockClient(overrides: Partial<E2BClient>): E2BClient {
     create: overrides.create ?? vi.fn().mockRejectedValue(new Error("create not stubbed")),
     connect: overrides.connect ?? vi.fn().mockRejectedValue(new Error("connect not stubbed")),
     list: overrides.list ?? vi.fn().mockResolvedValue([]),
-    kill: overrides.kill ?? vi.fn().mockResolvedValue(true)
+    kill: overrides.kill ?? vi.fn().mockResolvedValue(true),
   };
 }

@@ -6,7 +6,7 @@ export interface ResolveHostGhTokenOptions {
 
 export async function resolveHostGhToken(
   env: NodeJS.ProcessEnv,
-  options: ResolveHostGhTokenOptions = {}
+  options: ResolveHostGhTokenOptions = {},
 ): Promise<string | undefined> {
   const ghToken = normalizeToken(env.GH_TOKEN);
   if (ghToken) {
@@ -40,7 +40,7 @@ async function runLocalCommand(command: string, args: string[]): Promise<{ stdou
       {
         encoding: "utf8",
         timeout: 10_000,
-        maxBuffer: 1024 * 1024
+        maxBuffer: 1024 * 1024,
       },
       (error, stdout) => {
         if (error) {
@@ -49,7 +49,7 @@ async function runLocalCommand(command: string, args: string[]): Promise<{ stdou
         }
 
         resolvePromise({ stdout });
-      }
+      },
     );
   });
 }

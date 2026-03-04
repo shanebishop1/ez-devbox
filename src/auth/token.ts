@@ -13,14 +13,14 @@ export interface ResolveGitTokenOptions {
 
 export async function resolveGitToken(
   env: NodeJS.ProcessEnv,
-  options: ResolveGitTokenOptions = {}
+  options: ResolveGitTokenOptions = {},
 ): Promise<GitTokenResolution> {
   for (const key of tokenEnvPriority) {
     const value = normalizeValue(env[key]);
     if (value) {
       return {
         token: value,
-        source: key === "GITHUB_TOKEN" ? "env_github" : "env_gh"
+        source: key === "GITHUB_TOKEN" ? "env_github" : "env_gh",
       };
     }
   }
@@ -29,12 +29,12 @@ export async function resolveGitToken(
   if (hostToken) {
     return {
       token: hostToken,
-      source: "host"
+      source: "host",
     };
   }
 
   return {
-    source: "none"
+    source: "none",
   };
 }
 

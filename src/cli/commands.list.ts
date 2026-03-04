@@ -1,4 +1,4 @@
-import { listSandboxes, type ListSandboxesOptions, type SandboxListItem } from "../e2b/lifecycle.js";
+import { type ListSandboxesOptions, listSandboxes, type SandboxListItem } from "../e2b/lifecycle.js";
 import type { CommandResult } from "../types/index.js";
 import { formatSandboxDisplayLabel } from "./sandbox-display-name.js";
 
@@ -7,7 +7,7 @@ export interface ListCommandDeps {
 }
 
 const defaultDeps: ListCommandDeps = {
-  listSandboxes
+  listSandboxes,
 };
 
 export async function runListCommand(_args: string[], deps: ListCommandDeps = defaultDeps): Promise<CommandResult> {
@@ -18,20 +18,20 @@ export async function runListCommand(_args: string[], deps: ListCommandDeps = de
     sandboxId: sandbox.sandboxId,
     label: formatSandboxDisplayLabel(sandbox.sandboxId, sandbox.metadata),
     state: sandbox.state,
-    metadata: sandbox.metadata ?? {}
+    metadata: sandbox.metadata ?? {},
   }));
 
   if (parsed.json) {
     return {
       message: JSON.stringify({ sandboxes: formattedSandboxes }, null, 2),
-      exitCode: 0
+      exitCode: 0,
     };
   }
 
   if (sandboxes.length === 0) {
     return {
       message: "No sandboxes found.",
-      exitCode: 0
+      exitCode: 0,
     };
   }
 
@@ -42,7 +42,7 @@ export async function runListCommand(_args: string[], deps: ListCommandDeps = de
 
   return {
     message: lines.join("\n"),
-    exitCode: 0
+    exitCode: 0,
   };
 }
 

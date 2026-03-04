@@ -11,10 +11,10 @@ const baseConfig: ResolvedLauncherConfig = {
     reuse: true,
     name: "ez-devbox",
     timeout_ms: 1_800_000,
-    delete_on_exit: false
+    delete_on_exit: false,
   },
   startup: {
-    mode: "prompt"
+    mode: "prompt",
   },
   project: {
     mode: "single",
@@ -25,26 +25,26 @@ const baseConfig: ResolvedLauncherConfig = {
     setup_retries: 0,
     setup_concurrency: 1,
     setup_continue_on_error: false,
-    repos: []
+    repos: [],
   },
   env: {
-    pass_through: []
+    pass_through: [],
   },
   opencode: {
     config_dir: "~/.config/opencode",
-    auth_path: "~/.local/share/opencode/auth.json"
+    auth_path: "~/.local/share/opencode/auth.json",
   },
   codex: {
     config_dir: "~/.codex",
-    auth_path: "~/.codex/auth.json"
+    auth_path: "~/.codex/auth.json",
   },
   gh: {
     enabled: false,
-    config_dir: "~/.config/gh"
+    config_dir: "~/.config/gh",
   },
   tunnel: {
-    ports: []
-  }
+    ports: [],
+  },
 };
 
 describe("CLI JSON output contracts", () => {
@@ -54,13 +54,13 @@ describe("CLI JSON output contracts", () => {
         {
           sandboxId: "sbx-1",
           state: "running",
-          metadata: { "launcher.name": "Alpha", "launcher.project": "demo" }
+          metadata: { "launcher.name": "Alpha", "launcher.project": "demo" },
         },
         {
           sandboxId: "sbx-2",
-          state: "paused"
-        }
-      ])
+          state: "paused",
+        },
+      ]),
     });
 
     const parsed = JSON.parse(result.message) as {
@@ -74,13 +74,13 @@ describe("CLI JSON output contracts", () => {
       sandboxId: "sbx-1",
       label: "Alpha (sbx-1)",
       state: "running",
-      metadata: { "launcher.name": "Alpha", "launcher.project": "demo" }
+      metadata: { "launcher.name": "Alpha", "launcher.project": "demo" },
     });
     expect(parsed.sandboxes[1]).toEqual({
       sandboxId: "sbx-2",
       label: "sbx-2",
       state: "paused",
-      metadata: {}
+      metadata: {},
     });
   });
 
@@ -88,20 +88,28 @@ describe("CLI JSON output contracts", () => {
     const run = vi.fn().mockResolvedValue({
       stdout: "ok\n",
       stderr: "",
-      exitCode: 0
+      exitCode: 0,
     });
 
     const result = await runCommandCommand(["--sandbox-id", "sbx-1", "--json", "--", "npm", "test"], {
       loadConfig: vi.fn().mockResolvedValue(baseConfig),
       listSandboxes: vi.fn().mockResolvedValue([]),
       connectSandbox: vi.fn().mockResolvedValue({ sandboxId: "sbx-1", run }),
-      loadLastRunState: vi.fn().mockResolvedValue(null)
+      loadLastRunState: vi.fn().mockResolvedValue(null),
     });
 
     const parsed = JSON.parse(result.message) as Record<string, unknown>;
 
     expect(result.exitCode).toBe(0);
-    expect(Object.keys(parsed)).toEqual(["sandboxId", "sandboxLabel", "command", "cwd", "stdout", "stderr", "exitCode"]);
+    expect(Object.keys(parsed)).toEqual([
+      "sandboxId",
+      "sandboxLabel",
+      "command",
+      "cwd",
+      "stdout",
+      "stderr",
+      "exitCode",
+    ]);
     expect(parsed.sandboxId).toBe("sbx-1");
     expect(parsed.sandboxLabel).toBe("sbx-1");
     expect(parsed.command).toBe("npm test");
@@ -123,7 +131,7 @@ describe("CLI JSON output contracts", () => {
       codexConfigSynced: false,
       codexAuthSynced: false,
       ghEnabled: false,
-      ghConfigSynced: false
+      ghConfigSynced: false,
     };
 
     const result = await runCreateCommand(["--mode", "web", "--json"], {
@@ -138,18 +146,28 @@ describe("CLI JSON output contracts", () => {
         workingDirectory: "/workspace/alpha",
         startupEnv: {},
         provisionedRepos: [],
-        setup: null
+        setup: null,
       }),
       syncToolingToSandbox: vi.fn().mockResolvedValue(syncSummary),
       saveLastRunState: vi.fn().mockResolvedValue(undefined),
-      now: () => "2026-02-01T00:00:00.000Z"
+      now: () => "2026-02-01T00:00:00.000Z",
     });
 
     const parsed = JSON.parse(result.message) as Record<string, unknown>;
 
     expect(result.exitCode).toBe(0);
     expect(Object.keys(parsed).sort()).toEqual(
-      ["activeRepo", "mode", "sandboxId", "sandboxLabel", "setup", "template", "toolingSync", "url", "workingDirectory"].sort()
+      [
+        "activeRepo",
+        "mode",
+        "sandboxId",
+        "sandboxLabel",
+        "setup",
+        "template",
+        "toolingSync",
+        "url",
+        "workingDirectory",
+      ].sort(),
     );
     expect(parsed.sandboxId).toBe("sbx-created");
     expect(parsed.mode).toBe("web");
@@ -175,17 +193,17 @@ describe("CLI JSON output contracts", () => {
         workingDirectory: "/workspace",
         startupEnv: {},
         provisionedRepos: [],
-        setup: null
+        setup: null,
       }),
       saveLastRunState: vi.fn().mockResolvedValue(undefined),
-      now: () => "2026-02-01T00:00:00.000Z"
+      now: () => "2026-02-01T00:00:00.000Z",
     });
 
     const parsed = JSON.parse(result.message) as Record<string, unknown>;
 
     expect(result.exitCode).toBe(0);
     expect(Object.keys(parsed).sort()).toEqual(
-      ["command", "mode", "sandboxId", "sandboxLabel", "setup", "workingDirectory"].sort()
+      ["command", "mode", "sandboxId", "sandboxLabel", "setup", "workingDirectory"].sort(),
     );
     expect(parsed.sandboxId).toBe("sbx-1");
     expect(parsed.mode).toBe("ssh-opencode");

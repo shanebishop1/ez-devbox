@@ -2,8 +2,8 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { loadConfig, loadConfigWithMetadata } from "../src/config/load.js";
 import { defaultConfig } from "../src/config/defaults.js";
+import { loadConfig, loadConfigWithMetadata } from "../src/config/load.js";
 
 describe("loadConfig", () => {
   let tempDir = "";
@@ -44,8 +44,8 @@ describe("loadConfig", () => {
         "",
         "[[project.repos]]",
         'name = "ez-devbox"',
-        'url = "https://github.com/shanebishop1/ez-devbox.git"'
-      ].join("\n")
+        'url = "https://github.com/shanebishop1/ez-devbox.git"',
+      ].join("\n"),
     );
 
     await writeFile(envPath, "E2B_API_KEY=test-e2b-key\n");
@@ -73,15 +73,15 @@ describe("loadConfig", () => {
     expect(resolved.env.pass_through).toEqual([]);
     expect(resolved.opencode).toEqual({
       config_dir: "~/.config/opencode",
-      auth_path: "~/.local/share/opencode/auth.json"
+      auth_path: "~/.local/share/opencode/auth.json",
     });
     expect(resolved.codex).toEqual({
       config_dir: "~/.codex",
-      auth_path: "~/.codex/auth.json"
+      auth_path: "~/.codex/auth.json",
     });
     expect(resolved.gh).toEqual({
       enabled: false,
-      config_dir: "~/.config/gh"
+      config_dir: "~/.config/gh",
     });
     expect(resolved.tunnel.ports).toEqual([]);
   });
@@ -99,8 +99,8 @@ describe("loadConfig", () => {
         "",
         "[codex]",
         'config_dir = "/tmp/codex-config"',
-        'auth_path = "/tmp/codex-auth.json"'
-      ].join("\n")
+        'auth_path = "/tmp/codex-auth.json"',
+      ].join("\n"),
     );
     await writeFile(envPath, "E2B_API_KEY=test-e2b-key\n");
 
@@ -108,11 +108,11 @@ describe("loadConfig", () => {
 
     expect(resolved.opencode).toEqual({
       config_dir: "/tmp/opencode-config",
-      auth_path: "/tmp/opencode-auth.json"
+      auth_path: "/tmp/opencode-auth.json",
     });
     expect(resolved.codex).toEqual({
       config_dir: "/tmp/codex-config",
-      auth_path: "/tmp/codex-auth.json"
+      auth_path: "/tmp/codex-auth.json",
     });
   });
 
@@ -120,17 +120,14 @@ describe("loadConfig", () => {
     const configPath = join(tempDir, "launcher.config.toml");
     const envPath = join(tempDir, ".env");
 
-    await writeFile(
-      configPath,
-      ["[gh]", "enabled = true", 'config_dir = "/tmp/gh-config"'].join("\n")
-    );
+    await writeFile(configPath, ["[gh]", "enabled = true", 'config_dir = "/tmp/gh-config"'].join("\n"));
     await writeFile(envPath, "E2B_API_KEY=test-e2b-key\n");
 
     const resolved = await loadConfig({ configPath, envPath });
 
     expect(resolved.gh).toEqual({
       enabled: true,
-      config_dir: "/tmp/gh-config"
+      config_dir: "/tmp/gh-config",
     });
   });
 
@@ -148,25 +145,17 @@ describe("loadConfig", () => {
     const configPath = join(tempDir, "launcher.config.toml");
     const envPath = join(tempDir, ".env");
 
-    await writeFile(
-      configPath,
-      ["[startup]", 'mode = "bad-mode"'].join("\n")
-    );
+    await writeFile(configPath, ["[startup]", 'mode = "bad-mode"'].join("\n"));
     await writeFile(envPath, "E2B_API_KEY=test-e2b-key\n");
 
-    await expect(loadConfig({ configPath, envPath })).rejects.toThrow(
-      "startup.mode"
-    );
+    await expect(loadConfig({ configPath, envPath })).rejects.toThrow("startup.mode");
   });
 
   it("accepts project.working_dir path override", async () => {
     const configPath = join(tempDir, "launcher.config.toml");
     const envPath = join(tempDir, ".env");
 
-    await writeFile(
-      configPath,
-      ["[project]", 'working_dir = "./custom-cwd"'].join("\n")
-    );
+    await writeFile(configPath, ["[project]", 'working_dir = "./custom-cwd"'].join("\n"));
     await writeFile(envPath, "E2B_API_KEY=test-e2b-key\n");
 
     const resolved = await loadConfig({ configPath, envPath });
@@ -178,15 +167,10 @@ describe("loadConfig", () => {
     const configPath = join(tempDir, "launcher.config.toml");
     const envPath = join(tempDir, ".env");
 
-    await writeFile(
-      configPath,
-      ["[project]", 'working_dir = ""'].join("\n")
-    );
+    await writeFile(configPath, ["[project]", 'working_dir = ""'].join("\n"));
     await writeFile(envPath, "E2B_API_KEY=test-e2b-key\n");
 
-    await expect(loadConfig({ configPath, envPath })).rejects.toThrow(
-      "project.working_dir"
-    );
+    await expect(loadConfig({ configPath, envPath })).rejects.toThrow("project.working_dir");
   });
 
   it("accepts project.setup_concurrency override", async () => {
@@ -214,25 +198,23 @@ describe("loadConfig", () => {
     const configPath = join(tempDir, "launcher.config.toml");
     const envPath = join(tempDir, ".env");
 
-    await writeFile(configPath, "[startup]\nmode = \"prompt\"\n");
+    await writeFile(configPath, '[startup]\nmode = "prompt"\n');
     await writeFile(envPath, "FIRECRAWL_API_KEY=secret\n");
 
-    await expect(loadConfig({ configPath, envPath })).rejects.toThrow(
-      "E2B_API_KEY"
-    );
+    await expect(loadConfig({ configPath, envPath })).rejects.toThrow("E2B_API_KEY");
   });
 
   it("uses options.env when provided even if process env is empty", async () => {
     const configPath = join(tempDir, "launcher.config.toml");
     const envPath = join(tempDir, ".env");
 
-    await writeFile(configPath, "[startup]\nmode = \"prompt\"\n");
+    await writeFile(configPath, '[startup]\nmode = "prompt"\n');
     await writeFile(envPath, "FIRECRAWL_API_KEY=secret\n");
 
     const resolved = await loadConfig({
       configPath,
       envPath,
-      env: { E2B_API_KEY: "from-options-env" }
+      env: { E2B_API_KEY: "from-options-env" },
     });
 
     expect(resolved.startup.mode).toBe("prompt");
@@ -243,15 +225,15 @@ describe("loadConfig", () => {
     const envPath = join(tempDir, ".env");
     process.env.E2B_API_KEY = "from-process-env";
 
-    await writeFile(configPath, "[startup]\nmode = \"prompt\"\n");
+    await writeFile(configPath, '[startup]\nmode = "prompt"\n');
     await writeFile(envPath, "FIRECRAWL_API_KEY=secret\n");
 
     await expect(
       loadConfig({
         configPath,
         envPath,
-        env: {}
-      })
+        env: {},
+      }),
     ).rejects.toThrow("E2B_API_KEY");
   });
 
@@ -260,15 +242,15 @@ describe("loadConfig", () => {
     const envPath = join(tempDir, ".env");
 
     process.env.E2B_API_KEY = "from-process";
-    await writeFile(configPath, "[startup]\nmode = \"prompt\"\n");
+    await writeFile(configPath, '[startup]\nmode = "prompt"\n');
     await writeFile(envPath, "FIRECRAWL_API_KEY=secret\n");
 
     await expect(
       loadConfig({
         configPath,
         envPath,
-        env: {}
-      })
+        env: {},
+      }),
     ).rejects.toThrow("E2B_API_KEY");
 
     await expect(
@@ -276,9 +258,9 @@ describe("loadConfig", () => {
         configPath,
         envPath,
         env: {
-          E2B_API_KEY: "from-options"
-        }
-      })
+          E2B_API_KEY: "from-options",
+        },
+      }),
     ).resolves.toBeDefined();
   });
 
@@ -286,15 +268,15 @@ describe("loadConfig", () => {
     const configPath = join(tempDir, "launcher.config.toml");
     const envPath = join(tempDir, ".env");
 
-    await writeFile(configPath, "[startup]\nmode = \"prompt\"\n");
+    await writeFile(configPath, '[startup]\nmode = "prompt"\n');
     await writeFile(envPath, "E2B_API_KEY=from-dotenv\n");
 
     await expect(
       loadConfig({
         configPath,
         envPath,
-        env: {}
-      })
+        env: {},
+      }),
     ).resolves.toBeDefined();
 
     await expect(
@@ -302,9 +284,9 @@ describe("loadConfig", () => {
         configPath,
         envPath,
         env: {
-          E2B_API_KEY: ""
-        }
-      })
+          E2B_API_KEY: "",
+        },
+      }),
     ).rejects.toThrow("E2B_API_KEY");
   });
 
@@ -325,8 +307,8 @@ describe("loadConfig", () => {
         "",
         "[[project.repos]]",
         'name = "beta"',
-        'url = "https://example.com/beta.git"'
-      ].join("\n")
+        'url = "https://example.com/beta.git"',
+      ].join("\n"),
     );
     await writeFile(envPath, "E2B_API_KEY=test-e2b-key\n");
 
@@ -339,7 +321,7 @@ describe("loadConfig", () => {
     const configPath = join(tempDir, "launcher.config.toml");
     const envPath = join(tempDir, ".env");
 
-    await writeFile(configPath, ['[project]', 'active = "name"'].join("\n"));
+    await writeFile(configPath, ["[project]", 'active = "name"'].join("\n"));
     await writeFile(envPath, "E2B_API_KEY=test-e2b-key\n");
 
     await expect(loadConfig({ configPath, envPath })).rejects.toThrow("project.active_name");
@@ -362,8 +344,8 @@ describe("loadConfig", () => {
         "",
         "[[project.repos]]",
         'name = "beta"',
-        'url = "https://example.com/beta.git"'
-      ].join("\n")
+        'url = "https://example.com/beta.git"',
+      ].join("\n"),
     );
     await writeFile(envPath, "E2B_API_KEY=test-e2b-key\n");
 
@@ -385,8 +367,8 @@ describe("loadConfig", () => {
         "",
         "[[project.repos]]",
         'name = "alpha"',
-        'url = "https://example.com/alpha.git"'
-      ].join("\n")
+        'url = "https://example.com/alpha.git"',
+      ].join("\n"),
     );
     await writeFile(envPath, "E2B_API_KEY=test-e2b-key\n");
 
@@ -397,10 +379,7 @@ describe("loadConfig", () => {
     const configPath = join(tempDir, "launcher.config.toml");
     const envPath = join(tempDir, ".env");
 
-    await writeFile(
-      configPath,
-      ["[tunnel]", "ports = [3002, 8080]"].join("\n")
-    );
+    await writeFile(configPath, ["[tunnel]", "ports = [3002, 8080]"].join("\n"));
     await writeFile(envPath, "E2B_API_KEY=test-e2b-key\n");
 
     const resolved = await loadConfig({ configPath, envPath });
@@ -411,21 +390,13 @@ describe("loadConfig", () => {
     const configPath = join(tempDir, "launcher.config.toml");
     const envPath = join(tempDir, ".env");
 
-    await writeFile(
-      configPath,
-      [
-        "[tunnel]",
-        "",
-        "[tunnel.targets]",
-        '"3002" = "http://10.0.0.20:3002"'
-      ].join("\n")
-    );
+    await writeFile(configPath, ["[tunnel]", "", "[tunnel.targets]", '"3002" = "http://10.0.0.20:3002"'].join("\n"));
     await writeFile(envPath, "E2B_API_KEY=test-e2b-key\n");
 
     const resolved = await loadConfig({ configPath, envPath });
     expect(resolved.tunnel.ports).toEqual([3002]);
     expect(resolved.tunnel.targets).toEqual({
-      "3002": "http://10.0.0.20:3002"
+      "3002": "http://10.0.0.20:3002",
     });
   });
 
@@ -435,20 +406,14 @@ describe("loadConfig", () => {
 
     await writeFile(
       configPath,
-      [
-        "[tunnel]",
-        "ports = [8080]",
-        "",
-        "[tunnel.targets]",
-        '"3002" = "http://10.0.0.20:3002"'
-      ].join("\n")
+      ["[tunnel]", "ports = [8080]", "", "[tunnel.targets]", '"3002" = "http://10.0.0.20:3002"'].join("\n"),
     );
     await writeFile(envPath, "E2B_API_KEY=test-e2b-key\n");
 
     const resolved = await loadConfig({ configPath, envPath });
     expect(resolved.tunnel.ports).toEqual([3002]);
     expect(resolved.tunnel.targets).toEqual({
-      "3002": "http://10.0.0.20:3002"
+      "3002": "http://10.0.0.20:3002",
     });
   });
 
@@ -458,12 +423,7 @@ describe("loadConfig", () => {
 
     await writeFile(
       configPath,
-      [
-        "[tunnel]",
-        "",
-        "[tunnel.targets]",
-        'not_a_port = "http://10.0.0.20:3002"'
-      ].join("\n")
+      ["[tunnel]", "", "[tunnel.targets]", 'not_a_port = "http://10.0.0.20:3002"'].join("\n"),
     );
     await writeFile(envPath, "E2B_API_KEY=test-e2b-key\n");
 
@@ -474,15 +434,7 @@ describe("loadConfig", () => {
     const configPath = join(tempDir, "launcher.config.toml");
     const envPath = join(tempDir, ".env");
 
-    await writeFile(
-      configPath,
-      [
-        "[tunnel]",
-        "",
-        "[tunnel.targets]",
-        '"3002" = "not-a-url"'
-      ].join("\n")
-    );
+    await writeFile(configPath, ["[tunnel]", "", "[tunnel.targets]", '"3002" = "not-a-url"'].join("\n"));
     await writeFile(envPath, "E2B_API_KEY=test-e2b-key\n");
 
     await expect(loadConfig({ configPath, envPath })).rejects.toThrow("tunnel.targets");
@@ -492,20 +444,12 @@ describe("loadConfig", () => {
     const configPath = join(tempDir, "launcher.config.toml");
     const envPath = join(tempDir, ".env");
 
-    await writeFile(
-      configPath,
-      [
-        "[tunnel]",
-        "",
-        "[tunnel.targets]",
-        '"3002" = "http://127.0.0.1:3002"'
-      ].join("\n")
-    );
+    await writeFile(configPath, ["[tunnel]", "", "[tunnel.targets]", '"3002" = "http://127.0.0.1:3002"'].join("\n"));
     await writeFile(envPath, "E2B_API_KEY=test-e2b-key\n");
 
     const resolved = await loadConfig({ configPath, envPath });
     expect(resolved.tunnel.targets).toEqual({
-      "3002": "http://127.0.0.1:3002"
+      "3002": "http://127.0.0.1:3002",
     });
   });
 
@@ -513,20 +457,12 @@ describe("loadConfig", () => {
     const configPath = join(tempDir, "launcher.config.toml");
     const envPath = join(tempDir, ".env");
 
-    await writeFile(
-      configPath,
-      [
-        "[tunnel]",
-        "",
-        "[tunnel.targets]",
-        '"3002" = "http://[::1]:3002"'
-      ].join("\n")
-    );
+    await writeFile(configPath, ["[tunnel]", "", "[tunnel.targets]", '"3002" = "http://[::1]:3002"'].join("\n"));
     await writeFile(envPath, "E2B_API_KEY=test-e2b-key\n");
 
     const resolved = await loadConfig({ configPath, envPath });
     expect(resolved.tunnel.targets).toEqual({
-      "3002": "http://[::1]:3002"
+      "3002": "http://[::1]:3002",
     });
   });
 
@@ -536,12 +472,7 @@ describe("loadConfig", () => {
 
     await writeFile(
       configPath,
-      [
-        "[tunnel]",
-        "",
-        "[tunnel.targets]",
-        '"3002" = "http://user:pass@10.0.0.20:3002"'
-      ].join("\n")
+      ["[tunnel]", "", "[tunnel.targets]", '"3002" = "http://user:pass@10.0.0.20:3002"'].join("\n"),
     );
     await writeFile(envPath, "E2B_API_KEY=test-e2b-key\n");
 
@@ -554,12 +485,7 @@ describe("loadConfig", () => {
 
     await writeFile(
       configPath,
-      [
-        "[tunnel]",
-        "",
-        "[tunnel.targets]",
-        '"3002" = "http://10.0.0.20:3002/path?x=1#frag"'
-      ].join("\n")
+      ["[tunnel]", "", "[tunnel.targets]", '"3002" = "http://10.0.0.20:3002/path?x=1#frag"'].join("\n"),
     );
     await writeFile(envPath, "E2B_API_KEY=test-e2b-key\n");
 
@@ -592,15 +518,15 @@ describe("loadConfig", () => {
     const globalConfigPath = join(globalConfigRoot, "ez-devbox", "launcher.config.toml");
     const envPath = join(tempDir, ".env");
 
-    await writeFile(localConfigPath, "[sandbox]\nname = \"local\"\n");
+    await writeFile(localConfigPath, '[sandbox]\nname = "local"\n');
     await mkdir(join(globalConfigRoot, "ez-devbox"), { recursive: true });
-    await writeFile(globalConfigPath, "[sandbox]\nname = \"global\"\n");
+    await writeFile(globalConfigPath, '[sandbox]\nname = "global"\n');
     await writeFile(envPath, "E2B_API_KEY=test-e2b-key\n");
 
     const loaded = await loadConfigWithMetadata({
       cwd: tempDir,
       envPath,
-      env: { XDG_CONFIG_HOME: globalConfigRoot }
+      env: { XDG_CONFIG_HOME: globalConfigRoot },
     });
 
     expect(loaded.scope).toBe("local");
@@ -614,13 +540,13 @@ describe("loadConfig", () => {
     const envPath = join(tempDir, ".env");
 
     await mkdir(join(globalConfigRoot, "ez-devbox"), { recursive: true });
-    await writeFile(globalConfigPath, "[sandbox]\nname = \"global\"\n");
+    await writeFile(globalConfigPath, '[sandbox]\nname = "global"\n');
     await writeFile(envPath, "E2B_API_KEY=test-e2b-key\n");
 
     const loaded = await loadConfigWithMetadata({
       cwd: tempDir,
       envPath,
-      env: { XDG_CONFIG_HOME: globalConfigRoot }
+      env: { XDG_CONFIG_HOME: globalConfigRoot },
     });
 
     expect(loaded.scope).toBe("global");
@@ -639,7 +565,7 @@ describe("loadConfig", () => {
       envPath,
       isInteractiveTerminal: () => true,
       promptInput: async () => "1",
-      env: { XDG_CONFIG_HOME: join(tempDir, "xdg") }
+      env: { XDG_CONFIG_HOME: join(tempDir, "xdg") },
     });
 
     expect(loaded.scope).toBe("local");
@@ -661,7 +587,7 @@ describe("loadConfig", () => {
       envPath,
       isInteractiveTerminal: () => true,
       promptInput: async () => "2",
-      env: { XDG_CONFIG_HOME: globalConfigRoot }
+      env: { XDG_CONFIG_HOME: globalConfigRoot },
     });
 
     expect(loaded.scope).toBe("global");
@@ -681,8 +607,10 @@ describe("loadConfig", () => {
         cwd: tempDir,
         envPath,
         isInteractiveTerminal: () => false,
-        env: { XDG_CONFIG_HOME: globalConfigRoot }
-      })
-    ).rejects.toThrow(`Create one at '${join(tempDir, "launcher.config.toml")}' or '${join(globalConfigRoot, "ez-devbox", "launcher.config.toml")}'.`);
+        env: { XDG_CONFIG_HOME: globalConfigRoot },
+      }),
+    ).rejects.toThrow(
+      `Create one at '${join(tempDir, "launcher.config.toml")}' or '${join(globalConfigRoot, "ez-devbox", "launcher.config.toml")}'.`,
+    );
   });
 });

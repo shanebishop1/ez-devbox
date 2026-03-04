@@ -17,31 +17,35 @@ export interface BootstrapCommandResult {
 export async function runCommand(
   handle: SandboxHandle,
   command: string,
-  options: BootstrapCommandOptions
+  options: BootstrapCommandOptions,
 ): Promise<BootstrapCommandResult> {
   try {
     return await handle.run(command, {
       timeoutMs: options.timeoutMs,
       cwd: options.cwd,
-      envs: options.envs
+      envs: options.envs,
     });
   } catch (error) {
-    throw new Error(redactSensitiveText(`Bootstrap command failed (${options.commandLabel}): ${toErrorMessage(error)}`));
+    throw new Error(
+      redactSensitiveText(`Bootstrap command failed (${options.commandLabel}): ${toErrorMessage(error)}`),
+    );
   }
 }
 
 export async function runRequiredCommand(
   handle: SandboxHandle,
   command: string,
-  options: { timeoutMs: number; commandLabel: string; envs?: Record<string, string> }
+  options: { timeoutMs: number; commandLabel: string; envs?: Record<string, string> },
 ): Promise<BootstrapCommandResult> {
   const result = await runCommand(handle, command, {
     timeoutMs: options.timeoutMs,
     envs: options.envs,
-    commandLabel: options.commandLabel
+    commandLabel: options.commandLabel,
   });
   if (result.exitCode !== 0) {
-    throw new Error(redactSensitiveText(`Command failed: ${command}: ${result.stderr || result.stdout || "unknown error"}`));
+    throw new Error(
+      redactSensitiveText(`Command failed: ${command}: ${result.stderr || result.stdout || "unknown error"}`),
+    );
   }
   return result;
 }
@@ -49,14 +53,16 @@ export async function runRequiredCommand(
 export async function runBoolCheck(
   handle: SandboxHandle,
   command: string,
-  options: { timeoutMs: number; commandLabel: string }
+  options: { timeoutMs: number; commandLabel: string },
 ): Promise<boolean> {
   const result = await runCommand(handle, command, {
     timeoutMs: options.timeoutMs,
-    commandLabel: options.commandLabel
+    commandLabel: options.commandLabel,
   });
   if (result.exitCode !== 0) {
-    throw new Error(redactSensitiveText(`Command failed: ${command}: ${result.stderr || result.stdout || "unknown error"}`));
+    throw new Error(
+      redactSensitiveText(`Command failed: ${command}: ${result.stderr || result.stdout || "unknown error"}`),
+    );
   }
 
   const marker = result.stdout.trim();
