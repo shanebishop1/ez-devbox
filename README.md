@@ -1,6 +1,6 @@
 # ez-devbox
 
-Lightweight TypeScript CLI for running OpenCode/Codex agents with E2B sandboxes.
+Run OpenCode/Codex agents in disposable E2B sandboxes with fast reconnects, repeatable repo setup, and your own local toolchain/auth flow.
 
 ## What it does
 
@@ -19,12 +19,19 @@ Lightweight TypeScript CLI for running OpenCode/Codex agents with E2B sandboxes.
 ## Requirements
 
 - Node.js 20+
-- npm
 - `E2B_API_KEY` set in `.env` or shell env
 - `launcher.config.toml` available either locally (cwd) or globally (user config dir)
 - Docker (and optionally `cloudflared`) installed if you want to use automatic port tunneling with the `[tunnel].ports` config
 
 ## Environment variables
+
+You can set variables in your shell or put them in a local `.env` file.
+
+Quick start:
+
+```bash
+cp .env.example .env
+```
 
 Minimum required:
 
@@ -43,44 +50,47 @@ Template file:
 
 ## Install
 
-Recommended (local clone/workspace):
+Use one of these:
 
 ```bash
-npm install
+npx ez-devbox --help
 ```
 
-Optional global install:
+or
+
+```bash
+pnpm dlx ez-devbox --help
+```
+
+or
 
 ```bash
 npm install -g ez-devbox
-```
-
-Global install is a first-class flow. If no launcher config exists yet, `ez-devbox` can create one for you on first run.
-
-Then run locally:
-
-```bash
-npm run dev -- --help
-```
-
-If you installed globally, you can also run:
-
-```bash
 ez-devbox --help
+```
+
+If you are developing this repo locally (not just using the CLI), then run:
+
+```bash
+npm install
 ```
 
 ## Quick start
 
-1. Install local deps:
+1. Create `.env` and set at least:
 
 ```bash
-npm install
+cp .env.example .env
 ```
-
-2. Create `.env` (or copy from `.env.example`) and set at least:
 
 ```env
 E2B_API_KEY=your_key_here
+```
+
+2. Load the `.env` values into your shell before running commands:
+
+```bash
+set -a && source .env && set +a
 ```
 
 3. Create/edit `launcher.config.toml`.
@@ -115,49 +125,40 @@ EOF
 
 Then set each repo's `setup_command` as needed. For the full field reference, see `docs/launcher-config-reference.md`.
 
-4. Run commands:
+4. Run commands (`npx` if not globally installed):
 
 ```bash
-npm run create
-npm run connect
-# optional, if globally installed:
-ez-devbox create
-ez-devbox connect
+npx ez-devbox create
+npx ez-devbox connect
 ```
 
 ## Common commands
 
+Use `npx ez-devbox ...` if the CLI is not globally installed.
+
 - Show CLI help:
   - `ez-devbox --help`
-  - `npm run dev -- --help`
 - Create with explicit mode:
-  - `ez-devbox create -- --mode web`
-  - `npm run create -- --mode web`
+  - `ez-devbox create --mode web`
 - Connect to specific sandbox:
-  - `ez-devbox connect -- --sandbox-id <sandbox-id>`
-  - `npm run connect -- --sandbox-id <sandbox-id>`
+  - `ez-devbox connect --sandbox-id <sandbox-id>`
 - Resume last saved sandbox + mode:
   - `ez-devbox resume`
-  - `npm run resume`
   - Reuses the last selected repo for that sandbox when `project.active = "prompt"` and the repo still exists.
 - Enable verbose startup/provisioning logs:
-  - `ez-devbox create -- --verbose`
-  - `ez-devbox connect -- --verbose`
-  - `npm run connect -- --verbose`
+  - `ez-devbox create --verbose`
+  - `ez-devbox connect --verbose`
 - List available sandboxes:
   - `ez-devbox list`
-  - `npm run list`
 - Machine-readable JSON output (automation):
-  - `ez-devbox list -- --json`
-  - `ez-devbox command -- --sandbox-id <sandbox-id> --json -- pwd`
-  - `ez-devbox create -- --mode web --json`
-  - `ez-devbox connect -- --mode web --json`
+  - `ez-devbox list --json`
+  - `ez-devbox command --sandbox-id <sandbox-id> --json -- pwd`
+  - `ez-devbox create --mode web --json`
+  - `ez-devbox connect --mode web --json`
 - Wipe one sandbox (interactive picker or `--sandbox-id`):
   - `ez-devbox wipe`
-  - `npm run wipe`
 - Wipe all sandboxes (use `--yes` in non-interactive terminals):
-  - `ez-devbox wipe-all -- --yes`
-  - `npm run wipe-all -- --yes`
+  - `ez-devbox wipe-all --yes`
 
 ## JSON output contracts
 
@@ -213,26 +214,3 @@ On `create`, ez-devbox prints a warning that tunnel URLs are effectively bearer 
 ## launcher.config.toml reference
 
 See `docs/launcher-config-reference.md`.
-
-## Dev checks
-
-```bash
-npm run check:complexity
-npm run check:style
-npm run test
-npm run build
-npm run lint
-npm run format
-npm run validate
-npm run pack:check
-```
-
-Release process details: `docs/release-checklist.md`.
-
-Quick release command set:
-
-```bash
-npm run validate
-npm run pack:check
-gh release create vX.Y.Z --generate-notes
-```
