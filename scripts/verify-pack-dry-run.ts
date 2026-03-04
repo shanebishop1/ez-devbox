@@ -1,5 +1,5 @@
 import { execSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { readFileSync, statSync } from "node:fs";
 
 const REQUIRED_PATHS = [
   "package.json",
@@ -57,6 +57,11 @@ function assertBinTarget(filesSet: ReadonlySet<string>): void {
   for (const relativePath of binEntries) {
     if (!filesSet.has(relativePath)) {
       throw new Error(`Pack dry-run is missing bin target '${relativePath}'.`);
+    }
+
+    const mode = statSync(relativePath).mode;
+    if ((mode & 0o111) === 0) {
+      throw new Error(`Bin target '${relativePath}' is not executable. Run build to restore executable mode.`);
     }
   }
 }
