@@ -17,3 +17,6 @@ Run this checklist before publishing a new `ez-devbox` version.
    - `scripts/ws-ssh-proxy.mjs`
    - `README.md`, `LICENSE`, `package.json`
 4. Publish using your standard npm release flow.
+   - verify auth/session: `npm whoami`
+   - publish: `npm publish --access public`
+   - if npm 2FA is enabled: `npm publish --access public --otp <code>`
