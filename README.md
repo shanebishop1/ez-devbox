@@ -24,6 +24,23 @@ Lightweight TypeScript CLI for running OpenCode/Codex agents with E2B sandboxes.
 - `launcher.config.toml` available either locally (cwd) or globally (user config dir)
 - Docker (and optionally `cloudflared`) installed if you want to use automatic port tunneling with the `[tunnel].ports` config
 
+## Environment variables
+
+Minimum required:
+
+- `E2B_API_KEY`: required for any real sandbox operation (`create`, `connect`, `list`, `wipe`, live e2e).
+
+Common optional vars:
+
+- `FIRECRAWL_API_URL`: used by your own tooling/workloads inside the sandbox (for example tunneled MCP/API endpoints).
+- `FIRECRAWL_API_KEY`: forwarded only if configured through `env.pass_through`.
+- `GITHUB_TOKEN` / `GH_TOKEN`: used for GitHub auth flows (especially when `[gh].enabled = true`).
+- `OPENCODE_SERVER_PASSWORD`: used for `web` mode auth.
+
+Template file:
+
+- `.env.example` includes the expected keys.
+
 ## Install
 
 Recommended (local clone/workspace):
@@ -142,6 +159,16 @@ ez-devbox connect
   - `ez-devbox wipe-all -- --yes`
   - `npm run wipe-all -- --yes`
 
+## JSON output contracts
+
+Use `--json` on automation-facing commands for stable machine-readable output:
+
+- `list`: `{ "sandboxes": [...] }`
+- `command`: command result envelope (`sandboxId`, `command`, `cwd`, `stdout`, `stderr`, `exitCode`)
+- `create` / `connect`: launch result envelope (mode, command/url when present, workingDirectory, setup summary)
+
+Tip: optional fields are omitted when undefined (for example `url` is absent for SSH modes).
+
 ## Verbose mode
 
 - Use `--verbose` to show detailed operational logs during `create/connect` (startup mode resolution, sandbox lifecycle steps, create-time tooling sync progress, bootstrap progress, SSH/tunnel setup details).
@@ -171,6 +198,18 @@ When `tunnel.targets` is present, its keys are the authoritative tunneled ports 
 Target URLs cannot include credentials, path, query, or fragment.
 On `create`, ez-devbox prints a warning that tunnel URLs are effectively bearer links: anyone with the URL can reach the forwarded service.
 
+## Troubleshooting
+
+- `authorization header is missing` / 401 errors:
+  - your shell likely does not have `E2B_API_KEY` loaded.
+  - `set -a && source .env && set +a` (bash/zsh) before running CLI commands.
+- `wipe-all requires --yes in non-interactive terminals`:
+  - add `--yes` in CI/scripts.
+- Multiple sandboxes in non-interactive runs:
+  - pass `--sandbox-id <id>` explicitly.
+- Tunnel command issues:
+  - ensure `cloudflared` is installed, or Docker is available for fallback.
+
 ## launcher.config.toml reference
 
 See `docs/launcher-config-reference.md`.
@@ -186,3 +225,11 @@ npm run pack:check
 ```
 
 Release process details: `docs/release-checklist.md`.
+
+Quick release command set:
+
+```bash
+npm run validate
+npm run pack:check
+gh release create vX.Y.Z --generate-notes
+```
