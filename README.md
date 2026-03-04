@@ -16,13 +16,6 @@ Run OpenCode/Codex agents in disposable E2B sandboxes with fast reconnects, repe
 - Syncs local tool auth/config (OpenCode, Codex, GitHub CLI) into sandbox during `create`
 - Supports optional auto-managed local port tunneling for sandbox access of MCP servers, Docker containers, etc.
 
-## Requirements
-
-- Node.js 20+
-- `E2B_API_KEY` set in `.env` or shell env
-- `launcher.config.toml` available either locally (cwd) or globally (user config dir)
-- Docker (and optionally `cloudflared`) installed if you want to use automatic port tunneling with the `[tunnel].ports` config
-
 ## Why This Approach
 
 This tool is for a workflow where you want disposable cloud sandboxes without giving up local control over setup and credentials:
@@ -34,16 +27,18 @@ This tool is for a workflow where you want disposable cloud sandboxes without gi
 
 ## Install
 
+Prereqs: Node.js 20+, `E2B_API_KEY`, and a `launcher.config.toml` (local or global). Docker/`cloudflared` only if you use tunnel features.
+
 Choose one:
 
 ```bash
+npm install --save-dev ez-devbox
 npx ez-devbox --help
 ```
 
-or install in your project:
+or one-off run without install:
 
 ```bash
-npm install --save-dev ez-devbox
 npx ez-devbox --help
 ```
 
@@ -136,33 +131,26 @@ npx ez-devbox create
 npx ez-devbox connect
 ```
 
+## Mode guides
+
+- [Web mode (OpenCode in browser)](docs/modes-web.md)
+- [SSH agent modes (OpenCode and Codex)](docs/modes-ssh-agents.md)
+
 ## Common commands
 
 Use `npx ez-devbox ...` if the CLI is not globally installed.
 
-- Show CLI help:
-  - `ez-devbox --help`
-- Create with explicit mode:
-  - `ez-devbox create --mode web`
-- Connect to specific sandbox:
-  - `ez-devbox connect --sandbox-id <sandbox-id>`
-- Resume last saved sandbox + mode:
-  - `ez-devbox resume`
-  - Reuses the last selected repo for that sandbox when `project.active = "prompt"` and the repo still exists.
-- Enable verbose startup/provisioning logs:
-  - `ez-devbox create --verbose`
-  - `ez-devbox connect --verbose`
-- List available sandboxes:
-  - `ez-devbox list`
-- Machine-readable JSON output (automation):
-  - `ez-devbox list --json`
-  - `ez-devbox command --sandbox-id <sandbox-id> --json -- pwd`
-  - `ez-devbox create --mode web --json`
-  - `ez-devbox connect --mode web --json`
-- Wipe one sandbox (interactive picker or `--sandbox-id`):
-  - `ez-devbox wipe`
-- Wipe all sandboxes (use `--yes` in non-interactive terminals):
-  - `ez-devbox wipe-all --yes`
+| Goal | Command |
+| --- | --- |
+| Help | `ez-devbox --help` |
+| Create sandbox + launch mode | `ez-devbox create --mode web` |
+| Connect to existing sandbox | `ez-devbox connect --sandbox-id <sandbox-id>` |
+| Resume last sandbox/mode | `ez-devbox resume` |
+| List sandboxes | `ez-devbox list` |
+| Run command in sandbox | `ez-devbox command --sandbox-id <sandbox-id> -- pwd` |
+| JSON output for automation | `ez-devbox list --json` |
+| Wipe one sandbox | `ez-devbox wipe` |
+| Wipe all sandboxes | `ez-devbox wipe-all --yes` |
 
 ## JSON output contracts
 
