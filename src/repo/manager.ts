@@ -48,7 +48,9 @@ export async function provisionRepos(input: ProvisionReposInput): Promise<Provis
     } else {
       const gitRepo = await input.git.isGitRepo(path);
       if (!gitRepo) {
-        throw new Error(`Cannot provision repo '${repo.name}' at '${path}': directory exists but is not a git repository.`);
+        throw new Error(
+          `Cannot provision repo '${repo.name}' at '${path}': directory exists but is not a git repository.`,
+        );
       }
       reused = true;
     }
@@ -68,7 +70,7 @@ export async function provisionRepos(input: ProvisionReposInput): Promise<Provis
       path,
       cloned,
       reused,
-      branchSwitched
+      branchSwitched,
     });
   }
 

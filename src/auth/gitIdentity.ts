@@ -3,8 +3,9 @@ export interface GitIdentity {
   email: string;
 }
 
-export type GitIdentityProvider =
-  (env: NodeJS.ProcessEnv) => Promise<Partial<GitIdentity> | undefined> | Partial<GitIdentity> | undefined;
+export type GitIdentityProvider = (
+  env: NodeJS.ProcessEnv,
+) => Promise<Partial<GitIdentity> | undefined> | Partial<GitIdentity> | undefined;
 
 export interface ResolveGitIdentityOptions {
   fallbackProviders?: GitIdentityProvider[];
@@ -21,14 +22,14 @@ export interface ApplyGitIdentityOptions {
 
 export async function resolveGitIdentity(
   env: NodeJS.ProcessEnv,
-  options: ResolveGitIdentityOptions = {}
+  options: ResolveGitIdentityOptions = {},
 ): Promise<GitIdentity> {
   const explicitName = normalizeValue(env.GIT_AUTHOR_NAME);
   const explicitEmail = normalizeValue(env.GIT_AUTHOR_EMAIL);
 
   if (explicitEmail && !isValidEmail(explicitEmail)) {
     throw new Error(
-      `Invalid GIT_AUTHOR_EMAIL '${explicitEmail}'. Set a valid email (for example 'dev@example.com') or unset GIT_AUTHOR_EMAIL.`
+      `Invalid GIT_AUTHOR_EMAIL '${explicitEmail}'. Set a valid email (for example 'dev@example.com') or unset GIT_AUTHOR_EMAIL.`,
     );
   }
 
@@ -61,14 +62,14 @@ export async function resolveGitIdentity(
 
   return {
     name: name ?? defaultIdentity.name,
-    email: email ?? defaultIdentity.email
+    email: email ?? defaultIdentity.email,
   };
 }
 
 export async function applyGitIdentity(
   identity: GitIdentity,
   executor: GitConfigExecutor,
-  options: ApplyGitIdentityOptions = {}
+  options: ApplyGitIdentityOptions = {},
 ): Promise<void> {
   await executor.run("git", ["config", "user.name", identity.name], { cwd: options.cwd });
   await executor.run("git", ["config", "user.email", identity.email], { cwd: options.cwd });
@@ -77,7 +78,7 @@ export async function applyGitIdentity(
 export function getDefaultGitIdentity(): GitIdentity {
   return {
     name: "E2B Launcher",
-    email: "launcher@example.local"
+    email: "launcher@example.local",
   };
 }
 

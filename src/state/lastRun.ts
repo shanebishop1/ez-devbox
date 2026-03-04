@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
-import { basename, dirname, join, resolve } from "node:path";
 import { tmpdir } from "node:os";
+import { basename, dirname, join, resolve } from "node:path";
 import type { StartupMode } from "../types/index.js";
 
 export interface LastRunState {
@@ -75,9 +75,9 @@ function resolveLastRunPath(path?: string): { resolvedPath: string; usedDefaultP
     resolvedPath: resolve(
       DEFAULT_LAST_RUN_DIR,
       createHash("sha1").update(process.cwd()).digest("hex"),
-      DEFAULT_LAST_RUN_FILENAME
+      DEFAULT_LAST_RUN_FILENAME,
     ),
-    usedDefaultPath: true
+    usedDefaultPath: true,
   };
 }
 
@@ -107,7 +107,7 @@ function normalizeLastRunState(value: unknown): LastRunState | null {
     sandboxId: payload.sandboxId,
     mode: payload.mode,
     activeRepo: payload.activeRepo,
-    updatedAt: payload.updatedAt
+    updatedAt: payload.updatedAt,
   };
 }
 

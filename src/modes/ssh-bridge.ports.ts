@@ -1,11 +1,16 @@
 import type { SandboxHandle } from "../e2b/lifecycle.js";
-import { PORT_ALLOCATION_ATTEMPTS, SSH_SHORT_TIMEOUT_MS, SSHD_PORT_MAX, SSHD_PORT_MIN } from "./ssh-bridge.constants.js";
+import {
+  PORT_ALLOCATION_ATTEMPTS,
+  SSH_SHORT_TIMEOUT_MS,
+  SSHD_PORT_MAX,
+  SSHD_PORT_MIN,
+} from "./ssh-bridge.constants.js";
 import type { SshBridgePorts } from "./ssh-bridge.types.js";
 
 export async function allocateSshBridgePorts(
   handle: Pick<SandboxHandle, "run">,
   sessionId: string,
-  attempts = PORT_ALLOCATION_ATTEMPTS
+  attempts = PORT_ALLOCATION_ATTEMPTS,
 ): Promise<SshBridgePorts> {
   const seed = calculateSessionPortSeed(sessionId);
   for (let attempt = 0; attempt < attempts; attempt += 1) {
@@ -14,16 +19,14 @@ export async function allocateSshBridgePorts(
     try {
       const result = await handle.run(
         `bash -lc 'sshd_port=${sshdPort}; websockify_port=${websockifyPort}; if (echo >/dev/tcp/127.0.0.1/$sshd_port) >/dev/null 2>&1; then exit 1; fi; if (echo >/dev/tcp/127.0.0.1/$websockify_port) >/dev/null 2>&1; then exit 1; fi; printf "%s %s" "$sshd_port" "$websockify_port"'`,
-        { timeoutMs: SSH_SHORT_TIMEOUT_MS }
+        { timeoutMs: SSH_SHORT_TIMEOUT_MS },
       );
 
       const parsed = parseAllocatedPorts(result.stdout);
       if (parsed) {
         return parsed;
       }
-    } catch {
-      continue;
-    }
+    } catch {}
   }
 
   throw new Error(`Unable to allocate SSH bridge ports after ${attempts} attempts.`);
@@ -59,6 +62,6 @@ function parseAllocatedPorts(stdout: string): SshBridgePorts | null {
 
   return {
     sshdPort,
-    websockifyPort
+    websockifyPort,
   };
 }

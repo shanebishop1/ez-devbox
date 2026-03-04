@@ -1,5 +1,5 @@
-import { isHelpFlag } from "../utils/argv.js";
 import type { CliCommandName } from "../types/index.js";
+import { isHelpFlag } from "../utils/argv.js";
 
 export interface ResolvedCliCommand {
   command: CliCommandName;
@@ -11,7 +11,16 @@ export interface GlobalCliOptions {
   verbose: boolean;
 }
 
-const commands = new Set<CliCommandName>(["create", "connect", "resume", "list", "command", "wipe", "wipe-all", "help"]);
+const commands = new Set<CliCommandName>([
+  "create",
+  "connect",
+  "resume",
+  "list",
+  "command",
+  "wipe",
+  "wipe-all",
+  "help",
+]);
 
 export function parseGlobalCliOptions(argv: string[]): GlobalCliOptions {
   let verbose = false;
@@ -22,7 +31,13 @@ export function parseGlobalCliOptions(argv: string[]): GlobalCliOptions {
 
   for (let index = 0; index < argv.length; index += 1) {
     const token = argv[index];
-    if (firstCommandIndex > 0 && index < firstCommandIndex && token.startsWith("-") && token !== "--verbose" && !isHelpFlag(token)) {
+    if (
+      firstCommandIndex > 0 &&
+      index < firstCommandIndex &&
+      token.startsWith("-") &&
+      token !== "--verbose" &&
+      !isHelpFlag(token)
+    ) {
       throw new Error(`Unknown global option: ${token}. Use --help for usage.`);
     }
 
@@ -88,6 +103,6 @@ export function renderHelp(): string {
     "  --json                Structured JSON output (list, command, create, connect)",
     "  --yes                 Skip wipe-all confirmation prompt",
     "  --verbose             Show detailed startup/provisioning logs",
-    "  -h, --help            Show help"
+    "  -h, --help            Show help",
   ].join("\n");
 }

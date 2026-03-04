@@ -1,13 +1,13 @@
 import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
-import { provisionRepos, type GitAdapter, type RepoExecutor } from "../src/repo/manager.js";
+import { type GitAdapter, provisionRepos, type RepoExecutor } from "../src/repo/manager.js";
 import { selectReposForProvisioning } from "../src/repo/selection.js";
 
 describe("repo selection", () => {
   const repos = [
     { name: "alpha", url: "https://example.com/alpha.git", branch: "main" },
     { name: "beta", url: "https://example.com/beta.git", branch: "main" },
-    { name: "gamma", url: "https://example.com/gamma.git", branch: "main" }
+    { name: "gamma", url: "https://example.com/gamma.git", branch: "main" },
   ];
 
   it("selects repos for all mode and all single active styles", () => {
@@ -15,8 +15,8 @@ describe("repo selection", () => {
       selectReposForProvisioning({
         mode: "all",
         active: "prompt",
-        repos
-      })
+        repos,
+      }),
     ).toEqual(repos);
 
     expect(
@@ -24,8 +24,8 @@ describe("repo selection", () => {
         mode: "single",
         active: "name",
         activeName: "beta",
-        repos
-      })
+        repos,
+      }),
     ).toEqual([repos[1]]);
 
     expect(
@@ -33,8 +33,8 @@ describe("repo selection", () => {
         mode: "single",
         active: "index",
         activeIndex: 0,
-        repos
-      })
+        repos,
+      }),
     ).toEqual([repos[0]]);
 
     expect(
@@ -42,8 +42,8 @@ describe("repo selection", () => {
         mode: "single",
         active: "prompt",
         promptIndex: 2,
-        repos
-      })
+        repos,
+      }),
     ).toEqual([repos[2]]);
   });
 
@@ -53,8 +53,8 @@ describe("repo selection", () => {
         mode: "single",
         active: "name",
         activeName: "missing",
-        repos
-      })
+        repos,
+      }),
     ).toThrow("Invalid active repo name 'missing'");
 
     expect(() =>
@@ -62,8 +62,8 @@ describe("repo selection", () => {
         mode: "single",
         active: "index",
         activeIndex: 7,
-        repos
-      })
+        repos,
+      }),
     ).toThrow("out of range");
   });
 });
@@ -72,22 +72,22 @@ describe("repo manager", () => {
   it("clones missing repo and reuses existing repo", async () => {
     const git: GitAdapter = {
       exists: vi.fn(async (path: string) => path.endsWith("missing")),
-      isGitRepo: vi.fn(async (path: string) => path.endsWith("missing"))
+      isGitRepo: vi.fn(async (path: string) => path.endsWith("missing")),
     };
     const executor: RepoExecutor = {
       clone: vi.fn().mockResolvedValue(undefined),
       getCurrentBranch: vi.fn().mockResolvedValue("main"),
-      checkoutBranch: vi.fn().mockResolvedValue(undefined)
+      checkoutBranch: vi.fn().mockResolvedValue(undefined),
     };
 
     const result = await provisionRepos({
       projectDir: "/workspace",
       repos: [
         { name: "new", url: "https://example.com/new.git" },
-        { name: "missing", url: "https://example.com/missing.git" }
+        { name: "missing", url: "https://example.com/missing.git" },
       ],
       git,
-      executor
+      executor,
     });
 
     expect(executor.clone).toHaveBeenCalledTimes(1);
@@ -98,34 +98,34 @@ describe("repo manager", () => {
         path: join("/workspace", "new"),
         cloned: true,
         reused: false,
-        branchSwitched: false
+        branchSwitched: false,
       },
       {
         repo: "missing",
         path: join("/workspace", "missing"),
         cloned: false,
         reused: true,
-        branchSwitched: false
-      }
+        branchSwitched: false,
+      },
     ]);
   });
 
   it("switches branch when current branch mismatches configured branch", async () => {
     const git: GitAdapter = {
       exists: vi.fn().mockResolvedValue(true),
-      isGitRepo: vi.fn().mockResolvedValue(true)
+      isGitRepo: vi.fn().mockResolvedValue(true),
     };
     const executor: RepoExecutor = {
       clone: vi.fn().mockResolvedValue(undefined),
       getCurrentBranch: vi.fn().mockResolvedValue("develop"),
-      checkoutBranch: vi.fn().mockResolvedValue(undefined)
+      checkoutBranch: vi.fn().mockResolvedValue(undefined),
     };
 
     const result = await provisionRepos({
       projectDir: "/workspace",
       repos: [{ name: "app", url: "https://example.com/app.git", branch: "main" }],
       git,
-      executor
+      executor,
     });
 
     expect(executor.checkoutBranch).toHaveBeenCalledWith(join("/workspace", "app"), "main");

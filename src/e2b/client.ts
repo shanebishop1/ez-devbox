@@ -59,30 +59,30 @@ export function createE2BClient(): E2BClient {
         timeoutMs: opts.timeoutMs,
         metadata: opts.metadata,
         envs: opts.envs,
-        requestTimeoutMs: opts.requestTimeoutMs
+        requestTimeoutMs: opts.requestTimeoutMs,
       });
     },
     async connect(sandboxId, opts) {
       return Sandbox.connect(sandboxId, {
-        requestTimeoutMs: opts?.requestTimeoutMs
+        requestTimeoutMs: opts?.requestTimeoutMs,
       });
     },
     async list(opts) {
       const sandboxes = await Sandbox.list({
         query: opts?.metadata === undefined ? undefined : { metadata: opts.metadata },
-        requestTimeoutMs: opts?.requestTimeoutMs
+        requestTimeoutMs: opts?.requestTimeoutMs,
       });
 
       return sandboxes.map((sandbox) => ({
         sandboxId: sandbox.sandboxId,
         state: sandbox.state,
-        metadata: sandbox.metadata
+        metadata: sandbox.metadata,
       }));
     },
     async kill(sandboxId, opts) {
       return Sandbox.kill(sandboxId, {
-        requestTimeoutMs: opts?.requestTimeoutMs
+        requestTimeoutMs: opts?.requestTimeoutMs,
       });
-    }
+    },
   };
 }

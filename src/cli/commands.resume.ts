@@ -1,4 +1,4 @@
-import { loadLastRunState, type LastRunState } from "../state/lastRun.js";
+import { type LastRunState, loadLastRunState } from "../state/lastRun.js";
 import type { CommandResult, StartupMode } from "../types/index.js";
 import { runConnectCommand } from "./commands.connect.js";
 
@@ -9,7 +9,7 @@ export interface ResumeCommandDeps {
 
 const defaultDeps: ResumeCommandDeps = {
   loadLastRunState,
-  runConnectCommand
+  runConnectCommand,
 };
 
 export async function runResumeCommand(args: string[], deps: ResumeCommandDeps = defaultDeps): Promise<CommandResult> {

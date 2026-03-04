@@ -15,7 +15,7 @@ export function isPromptCancelledError(error: unknown): error is PromptCancelled
 
 export function normalizePromptCancelledError(
   error: unknown,
-  message = "Prompt cancelled."
+  message = "Prompt cancelled.",
 ): PromptCancelledError | undefined {
   if (isPromptCancelledError(error)) {
     return error;

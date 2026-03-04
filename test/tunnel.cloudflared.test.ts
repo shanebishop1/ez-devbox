@@ -6,7 +6,7 @@ const spawnMock = vi.hoisted(() => vi.fn());
 
 vi.mock("node:child_process", () => {
   return {
-    spawn: spawnMock
+    spawn: spawnMock,
   };
 });
 
@@ -45,9 +45,9 @@ describe("withConfiguredTunnel", () => {
     const result = await withConfiguredTunnel({ tunnel: { ports: [3002] } }, async (runtimeEnv) => {
       expect(runtimeEnv).toEqual({
         EZ_DEVBOX_TUNNEL_3002_URL: "https://demo.trycloudflare.com",
-        EZ_DEVBOX_TUNNELS_JSON: "{\"3002\":\"https://demo.trycloudflare.com\"}",
+        EZ_DEVBOX_TUNNELS_JSON: '{"3002":"https://demo.trycloudflare.com"}',
         EZ_DEVBOX_TUNNEL_PORTS: "3002",
-        EZ_DEVBOX_TUNNEL_URL: "https://demo.trycloudflare.com"
+        EZ_DEVBOX_TUNNEL_URL: "https://demo.trycloudflare.com",
       });
       expect(process.env.EZ_DEVBOX_TUNNEL_3002_URL).toBe("original");
       expect(process.env.EZ_DEVBOX_TUNNEL_URL).toBe("original-single");
@@ -58,7 +58,7 @@ describe("withConfiguredTunnel", () => {
     expect(spawnMock).toHaveBeenCalledWith(
       "cloudflared",
       ["tunnel", "--no-autoupdate", "--url", "http://127.0.0.1:3002"],
-      { stdio: ["ignore", "pipe", "pipe"] }
+      { stdio: ["ignore", "pipe", "pipe"] },
     );
     expect(child.kill).toHaveBeenCalledWith("SIGTERM");
     expect(process.env.EZ_DEVBOX_TUNNEL_3002_URL).toBe("original");
@@ -87,7 +87,7 @@ describe("withConfiguredTunnel", () => {
       1,
       "cloudflared",
       ["tunnel", "--no-autoupdate", "--url", "http://127.0.0.1:3002"],
-      { stdio: ["ignore", "pipe", "pipe"] }
+      { stdio: ["ignore", "pipe", "pipe"] },
     );
     expect(spawnMock).toHaveBeenNthCalledWith(
       2,
@@ -100,9 +100,9 @@ describe("withConfiguredTunnel", () => {
         "tunnel",
         "--no-autoupdate",
         "--url",
-        "http://host.docker.internal:3002"
+        "http://host.docker.internal:3002",
       ]),
-      { stdio: ["ignore", "pipe", "pipe"] }
+      { stdio: ["ignore", "pipe", "pipe"] },
     );
   });
 
@@ -113,7 +113,7 @@ describe("withConfiguredTunnel", () => {
 
     queueMicrotask(() => {
       localChild.stderr.write(
-        'ERR Error unmarshaling QuickTunnel response: error code: 1015 status_code="429 Too Many Requests"\n'
+        'ERR Error unmarshaling QuickTunnel response: error code: 1015 status_code="429 Too Many Requests"\n',
       );
       localChild.emitExit(1, null);
       dockerChild.stderr.write("INF | Tunnel URL https://docker-rate-limit.trycloudflare.com\n");
@@ -129,7 +129,7 @@ describe("withConfiguredTunnel", () => {
       1,
       "cloudflared",
       ["tunnel", "--no-autoupdate", "--url", "http://127.0.0.1:3002"],
-      { stdio: ["ignore", "pipe", "pipe"] }
+      { stdio: ["ignore", "pipe", "pipe"] },
     );
     expect(spawnMock).toHaveBeenNthCalledWith(
       2,
@@ -142,9 +142,9 @@ describe("withConfiguredTunnel", () => {
         "tunnel",
         "--no-autoupdate",
         "--url",
-        "http://host.docker.internal:3002"
+        "http://host.docker.internal:3002",
       ]),
-      { stdio: ["ignore", "pipe", "pipe"] }
+      { stdio: ["ignore", "pipe", "pipe"] },
     );
   });
 
@@ -182,17 +182,17 @@ describe("withConfiguredTunnel", () => {
         tunnel: {
           ports: [3002],
           targets: {
-            "3002": "http://10.0.0.20:3002"
-          }
-        }
+            "3002": "http://10.0.0.20:3002",
+          },
+        },
       },
-      async () => undefined
+      async () => undefined,
     );
 
     expect(spawnMock).toHaveBeenCalledWith(
       "cloudflared",
       ["tunnel", "--no-autoupdate", "--url", "http://10.0.0.20:3002"],
-      { stdio: ["ignore", "pipe", "pipe"] }
+      { stdio: ["ignore", "pipe", "pipe"] },
     );
   });
 
@@ -209,20 +209,20 @@ describe("withConfiguredTunnel", () => {
         tunnel: {
           ports: [],
           targets: {
-            "3002": "http://10.0.0.20:3002"
-          }
-        }
+            "3002": "http://10.0.0.20:3002",
+          },
+        },
       },
       async (runtimeEnv) => {
         expect(runtimeEnv.EZ_DEVBOX_TUNNEL_3002_URL).toBe("https://targets-only.trycloudflare.com");
         expect(runtimeEnv.EZ_DEVBOX_TUNNEL_PORTS).toBe("3002");
-      }
+      },
     );
 
     expect(spawnMock).toHaveBeenCalledWith(
       "cloudflared",
       ["tunnel", "--no-autoupdate", "--url", "http://10.0.0.20:3002"],
-      { stdio: ["ignore", "pipe", "pipe"] }
+      { stdio: ["ignore", "pipe", "pipe"] },
     );
   });
 
@@ -241,11 +241,11 @@ describe("withConfiguredTunnel", () => {
         tunnel: {
           ports: [3002],
           targets: {
-            "3002": "http://127.0.0.1:3002"
-          }
-        }
+            "3002": "http://127.0.0.1:3002",
+          },
+        },
       },
-      async () => undefined
+      async () => undefined,
     );
 
     expect(spawnMock).toHaveBeenNthCalledWith(
@@ -259,9 +259,9 @@ describe("withConfiguredTunnel", () => {
         "tunnel",
         "--no-autoupdate",
         "--url",
-        "http://host.docker.internal:3002"
+        "http://host.docker.internal:3002",
       ]),
-      { stdio: ["ignore", "pipe", "pipe"] }
+      { stdio: ["ignore", "pipe", "pipe"] },
     );
   });
 
@@ -280,11 +280,11 @@ describe("withConfiguredTunnel", () => {
         tunnel: {
           ports: [3002],
           targets: {
-            "3002": "http://10.0.0.20:3002"
-          }
-        }
+            "3002": "http://10.0.0.20:3002",
+          },
+        },
       },
-      async () => undefined
+      async () => undefined,
     );
 
     expect(spawnMock).toHaveBeenNthCalledWith(
@@ -298,9 +298,9 @@ describe("withConfiguredTunnel", () => {
         "tunnel",
         "--no-autoupdate",
         "--url",
-        "http://10.0.0.20:3002"
+        "http://10.0.0.20:3002",
       ]),
-      { stdio: ["ignore", "pipe", "pipe"] }
+      { stdio: ["ignore", "pipe", "pipe"] },
     );
   });
 
@@ -319,11 +319,11 @@ describe("withConfiguredTunnel", () => {
         tunnel: {
           ports: [3002],
           targets: {
-            "3002": "http://[::1]:3002"
-          }
-        }
+            "3002": "http://[::1]:3002",
+          },
+        },
       },
-      async () => undefined
+      async () => undefined,
     );
 
     expect(spawnMock).toHaveBeenNthCalledWith(
@@ -337,9 +337,9 @@ describe("withConfiguredTunnel", () => {
         "tunnel",
         "--no-autoupdate",
         "--url",
-        "http://host.docker.internal:3002"
+        "http://host.docker.internal:3002",
       ]),
-      { stdio: ["ignore", "pipe", "pipe"] }
+      { stdio: ["ignore", "pipe", "pipe"] },
     );
   });
 });
@@ -405,6 +405,6 @@ function createMockCloudflaredProcess(): {
     off(eventName: string, listener: (...args: unknown[]) => void) {
       emitter.off(eventName, listener);
       return emitter;
-    }
+    },
   };
 }

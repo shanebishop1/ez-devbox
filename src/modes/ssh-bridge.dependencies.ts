@@ -5,7 +5,7 @@ import {
   APT_LOCK_RETRY_ATTEMPTS,
   APT_LOCK_RETRY_DELAY_MS,
   SSH_SETUP_TIMEOUT_MS,
-  SSH_SHORT_TIMEOUT_MS
+  SSH_SHORT_TIMEOUT_MS,
 } from "./ssh-bridge.constants.js";
 
 export async function ensureSshBridgeDependencies(handle: Pick<SandboxHandle, "run">): Promise<void> {
@@ -29,7 +29,7 @@ export async function ensureSshBridgeDependencies(handle: Pick<SandboxHandle, "r
       }
 
       logger.verbose(
-        `SSH bridge: apt/dpkg lock detected while installing dependencies (attempt ${attempt}/${APT_LOCK_RETRY_ATTEMPTS}); retrying in ${APT_LOCK_RETRY_DELAY_MS}ms.`
+        `SSH bridge: apt/dpkg lock detected while installing dependencies (attempt ${attempt}/${APT_LOCK_RETRY_ATTEMPTS}); retrying in ${APT_LOCK_RETRY_DELAY_MS}ms.`,
       );
       await sleep(APT_LOCK_RETRY_DELAY_MS);
     }
@@ -39,7 +39,7 @@ export async function ensureSshBridgeDependencies(handle: Pick<SandboxHandle, "r
 async function hasSshBridgeDependencies(handle: Pick<SandboxHandle, "run">): Promise<boolean> {
   const result = await handle.run(
     "bash -lc 'if [ -x /usr/sbin/sshd ] && command -v websockify >/dev/null 2>&1 && command -v ssh-keygen >/dev/null 2>&1; then printf READY; else printf MISSING; fi'",
-    { timeoutMs: SSH_SHORT_TIMEOUT_MS }
+    { timeoutMs: SSH_SHORT_TIMEOUT_MS },
   );
 
   return result.stdout.trim() === "READY";

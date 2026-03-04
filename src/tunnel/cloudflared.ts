@@ -1,13 +1,18 @@
 import type { ResolvedLauncherConfig } from "../config/schema.js";
 import { logger } from "../logging/logger.js";
 import { attachLogStream, formatRecentLogs } from "./cloudflared.parse.js";
-import { isSpawnEnoentError, stopCloudflaredProcess, stopTunnelSessions, toErrorMessage } from "./cloudflared.process.js";
+import {
+  isSpawnEnoentError,
+  stopCloudflaredProcess,
+  stopTunnelSessions,
+  toErrorMessage,
+} from "./cloudflared.process.js";
 import {
   getCloudflaredInstallHint,
   resolveTunnelPorts,
   resolveTunnelUpstreamUrl,
   spawnDockerCloudflared,
-  spawnLocalCloudflared
+  spawnLocalCloudflared,
 } from "./cloudflared.spawn.js";
 import type { CloudflaredProcess, CloudflaredTunnelSession } from "./cloudflared.types.js";
 
@@ -16,16 +21,16 @@ export { CLOUDFLARED_DOCKER_FALLBACK_IMAGE } from "./cloudflared.spawn.js";
 const CLOUDFLARED_START_TIMEOUT_MS = 20_000;
 const CLOUDFLARED_DOCKER_START_TIMEOUT_MS = 60_000;
 const SIGNALS: NodeJS.Signals[] = ["SIGINT", "SIGTERM", "SIGHUP"];
-const RATE_LIMIT_SNIPPETS = ["429 too many requests", "error code: 1015", "status_code=\"429"];
+const RATE_LIMIT_SNIPPETS = ["429 too many requests", "error code: 1015", 'status_code="429'];
 
 export type WithConfiguredTunnel = <T>(
   config: Pick<ResolvedLauncherConfig, "tunnel">,
-  operation: (runtimeEnv: Record<string, string>) => Promise<T>
+  operation: (runtimeEnv: Record<string, string>) => Promise<T>,
 ) => Promise<T>;
 
 export async function withConfiguredTunnel<T>(
   config: Pick<ResolvedLauncherConfig, "tunnel">,
-  operation: (runtimeEnv: Record<string, string>) => Promise<T>
+  operation: (runtimeEnv: Record<string, string>) => Promise<T>,
 ): Promise<T> {
   const activePorts = resolveTunnelPorts(config.tunnel.ports, config.tunnel.targets);
 
@@ -111,9 +116,7 @@ async function startCloudflaredTunnel(port: number, upstreamUrl: string): Promis
     }
 
     if (shouldFallbackForMissingBinary) {
-      logger.warn(
-        `Tunnel: local 'cloudflared' not found; trying Docker fallback. Install hint: ${installHint}`
-      );
+      logger.warn(`Tunnel: local 'cloudflared' not found; trying Docker fallback. Install hint: ${installHint}`);
     } else {
       logger.warn("Tunnel: quick tunnel is rate-limited (HTTP 429/1015); trying Docker fallback.");
     }
@@ -126,7 +129,7 @@ async function startCloudflaredTunnel(port: number, upstreamUrl: string): Promis
     } catch (dockerError) {
       const detail = toErrorMessage(dockerError);
       throw new Error(
-        `Failed to start tunnel with local cloudflared or Docker fallback. Install hint: ${installHint}. Or ensure Docker is available. ${detail}`
+        `Failed to start tunnel with local cloudflared or Docker fallback. Install hint: ${installHint}. Or ensure Docker is available. ${detail}`,
       );
     }
   }
@@ -139,7 +142,7 @@ async function startCloudflaredTunnel(port: number, upstreamUrl: string): Promis
     stop: async () => {
       logger.verbose("Tunnel: stopping cloudflared.");
       await stopCloudflaredProcess(processHandle);
-    }
+    },
   };
 }
 
@@ -169,7 +172,7 @@ function buildRuntimeEnv(sessions: CloudflaredTunnelSession[]): Record<string, s
 async function waitForTunnelUrl(
   processHandle: CloudflaredProcess,
   recentLogs: string[],
-  timeoutMs: number
+  timeoutMs: number,
 ): Promise<string> {
   return new Promise((resolve, reject) => {
     let settled = false;
@@ -214,7 +217,7 @@ async function waitForTunnelUrl(
 
     processHandle.once("exit", (code: number | null, signal: NodeJS.Signals | null) => {
       finishWithError(
-        `cloudflared exited before tunnel URL was detected (code=${code === null ? "null" : String(code)}, signal=${signal ?? "none"}).`
+        `cloudflared exited before tunnel URL was detected (code=${code === null ? "null" : String(code)}, signal=${signal ?? "none"}).`,
       );
     });
 

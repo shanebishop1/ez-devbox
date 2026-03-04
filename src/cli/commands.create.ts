@@ -1,63 +1,57 @@
-import type { CommandResult } from "../types/index.js";
-import type { StartupMode } from "../types/index.js";
-import { loadConfig, loadConfigWithMetadata, type LoadConfigOptions } from "../config/load.js";
-import { createSandbox, type CreateSandboxOptions, type SandboxHandle } from "../e2b/lifecycle.js";
+import { type LoadConfigOptions, loadConfig, loadConfigWithMetadata } from "../config/load.js";
 import { resolveSandboxCreateEnv, type SandboxCreateEnvResolution } from "../e2b/env.js";
-import { launchMode, resolveStartupMode, type ConcreteStartupMode, type ModeLaunchResult } from "../modes/index.js";
-import { resolvePromptStartupMode } from "./startup-mode-prompt.js";
-import { buildSandboxDisplayName, formatSandboxDisplayLabel } from "./sandbox-display-name.js";
-import { saveLastRunState, type LastRunState } from "../state/lastRun.js";
+import { type CreateSandboxOptions, createSandbox, type SandboxHandle } from "../e2b/lifecycle.js";
 import { logger } from "../logging/logger.js";
-import { bootstrapProjectWorkspace, type BootstrapProjectWorkspaceResult } from "../project/bootstrap.js";
-import { resolveHostGhToken } from "../auth/gh-host-token.js";
-import { PromptCancelledError, isPromptCancelledError } from "./prompt-cancelled.js";
-import { withConfiguredTunnel, type WithConfiguredTunnel } from "../tunnel/cloudflared.js";
-import {
-  syncCodexAuthFile,
-  syncCodexConfigDir,
-  syncGhConfigDir,
-  syncOpenCodeAuthFile,
-  syncOpenCodeConfigDir,
-  type DirectorySyncProgress,
-  type PathSyncSummary,
-  type ToolingSyncSummary
-} from "../tooling/host-sandbox-sync.js";
-import { loadCliEnvSource } from "./env-source.js";
+import { type ConcreteStartupMode, launchMode, type ModeLaunchResult, resolveStartupMode } from "../modes/index.js";
+import { type BootstrapProjectWorkspaceResult, bootstrapProjectWorkspace } from "../project/bootstrap.js";
+import { type LastRunState, saveLastRunState } from "../state/lastRun.js";
+import type { ToolingSyncSummary } from "../tooling/host-sandbox-sync.js";
+import { type WithConfiguredTunnel, withConfiguredTunnel } from "../tunnel/cloudflared.js";
+import type { CommandResult, StartupMode } from "../types/index.js";
 import {
   addWebServerPasswordForWebMode,
   formatSelectedReposSummary,
   formatSetupOutcomeSummary,
-  parseStartupModeValue,
   removeOpenCodeServerPassword,
-  resolveWebServerPassword
+  resolveWebServerPassword,
 } from "./command-shared.js";
-
-const TOOLING_SYNC_PROGRESS_LOG_INTERVAL = 50;
+import { parseCreateArgs } from "./commands.create.args.js";
+import { formatEnvVarNames, hasPublicTunnelRuntimeEnv, resolveGhRuntimeEnv } from "./commands.create.env.js";
+import { formatToolingSyncSummary, syncToolingForMode } from "./commands.create.sync.js";
+import { resolveTemplateForMode } from "./commands.create.template.js";
+import { loadCliEnvSource } from "./env-source.js";
+import { isPromptCancelledError, PromptCancelledError } from "./prompt-cancelled.js";
+import { buildSandboxDisplayName, formatSandboxDisplayLabel } from "./sandbox-display-name.js";
+import { resolvePromptStartupMode } from "./startup-mode-prompt.js";
 
 export interface CreateCommandDeps {
   loadConfig: (options?: LoadConfigOptions) => ReturnType<typeof loadConfig>;
   loadConfigWithMetadata?: (options?: LoadConfigOptions) => ReturnType<typeof loadConfigWithMetadata>;
   createSandbox: (
     config: Awaited<ReturnType<typeof loadConfig>>,
-    options?: CreateSandboxOptions
+    options?: CreateSandboxOptions,
   ) => Promise<SandboxHandle>;
   resolveEnvSource: () => Promise<Record<string, string | undefined>>;
   resolveSandboxCreateEnv: (
     config: Awaited<ReturnType<typeof loadConfig>>,
-    envSource?: Record<string, string | undefined>
+    envSource?: Record<string, string | undefined>,
   ) => SandboxCreateEnvResolution;
   resolveHostGhToken?: (env: NodeJS.ProcessEnv) => Promise<string | undefined>;
   resolvePromptStartupMode: (requestedMode: StartupMode) => Promise<StartupMode>;
-  launchMode: (handle: SandboxHandle, mode: StartupMode, options?: { workingDirectory?: string; startupEnv?: Record<string, string> }) => Promise<ModeLaunchResult>;
+  launchMode: (
+    handle: SandboxHandle,
+    mode: StartupMode,
+    options?: { workingDirectory?: string; startupEnv?: Record<string, string> },
+  ) => Promise<ModeLaunchResult>;
   bootstrapProjectWorkspace?: (
     handle: SandboxHandle,
     config: Awaited<ReturnType<typeof loadConfig>>,
-    options?: { isConnect?: boolean; runtimeEnv?: Record<string, string>; onProgress?: (message: string) => void }
+    options?: { isConnect?: boolean; runtimeEnv?: Record<string, string>; onProgress?: (message: string) => void },
   ) => Promise<BootstrapProjectWorkspaceResult>;
   syncToolingToSandbox: (
     config: Awaited<ReturnType<typeof loadConfig>>,
     sandbox: Pick<SandboxHandle, "writeFile">,
-    mode: ConcreteStartupMode
+    mode: ConcreteStartupMode,
   ) => Promise<ToolingSyncSummary>;
   saveLastRunState: (state: LastRunState) => Promise<void>;
   now: () => string;
@@ -74,7 +68,7 @@ const defaultDeps: CreateCommandDeps = {
   launchMode,
   syncToolingToSandbox: syncToolingForMode,
   saveLastRunState,
-  now: () => new Date().toISOString()
+  now: () => new Date().toISOString(),
 };
 
 export async function runCreateCommand(args: string[], deps: CreateCommandDeps = defaultDeps): Promise<CommandResult> {
@@ -88,7 +82,7 @@ export async function runCreateCommand(args: string[], deps: CreateCommandDeps =
   return runWithTunnel(config, async (tunnelRuntimeEnv) => {
     if (hasPublicTunnelRuntimeEnv(tunnelRuntimeEnv)) {
       logger.warn(
-        "Tunnel URL warning: anyone with the URL can access the forwarded service/data. Treat tunnel URLs as secrets."
+        "Tunnel URL warning: anyone with the URL can access the forwarded service/data. Treat tunnel URLs as secrets.",
       );
     }
 
@@ -108,8 +102,8 @@ export async function runCreateCommand(args: string[], deps: CreateCommandDeps =
             ...config,
             sandbox: {
               ...config.sandbox,
-              template: templateResolution.template
-            }
+              template: templateResolution.template,
+            },
           };
     const envSource = await deps.resolveEnvSource();
     const envResolution = deps.resolveSandboxCreateEnv(config, envSource);
@@ -117,7 +111,7 @@ export async function runCreateCommand(args: string[], deps: CreateCommandDeps =
     const runtimeEnv = removeOpenCodeServerPassword({
       ...envResolution.envs,
       ...tunnelRuntimeEnv,
-      ...ghRuntimeEnv
+      ...ghRuntimeEnv,
     });
     const webServerPassword = resolveWebServerPassword(envSource);
     const createEnvs = { ...runtimeEnv };
@@ -127,8 +121,8 @@ export async function runCreateCommand(args: string[], deps: CreateCommandDeps =
     const handle = await deps.createSandbox(createConfig, {
       envs: createEnvs,
       metadata: {
-        "launcher.name": displayName
-      }
+        "launcher.name": displayName,
+      },
     });
     const sandboxLabel = formatSandboxDisplayLabel(handle.sandboxId, { "launcher.name": displayName });
     logger.verbose(`Sandbox ready: ${sandboxLabel}.`);
@@ -148,7 +142,7 @@ export async function runCreateCommand(args: string[], deps: CreateCommandDeps =
         sandboxId: handle.sandboxId,
         mode,
         activeRepo: undefined,
-        updatedAt: deps.now()
+        updatedAt: deps.now(),
       });
 
       logger.verbose("Syncing local tooling config/auth.");
@@ -160,7 +154,7 @@ export async function runCreateCommand(args: string[], deps: CreateCommandDeps =
         onProgress: (message) => {
           ensureLoading();
           logger.verbose(`Bootstrap: ${message}`);
-        }
+        },
       });
       stopLoadingIfRunning();
       logger.verbose(`Selected repos summary: ${formatSelectedReposSummary(bootstrapResult.selectedRepoNames)}.`);
@@ -172,26 +166,26 @@ export async function runCreateCommand(args: string[], deps: CreateCommandDeps =
         startupEnv: addWebServerPasswordForWebMode(
           {
             ...bootstrapResult.startupEnv,
-            ...runtimeEnv
+            ...runtimeEnv,
           },
           resolvedMode,
-          webServerPassword
-        )
+          webServerPassword,
+        ),
       });
 
-      const activeRepo = bootstrapResult.selectedRepoNames.length === 1 ? bootstrapResult.selectedRepoNames[0] : undefined;
+      const activeRepo =
+        bootstrapResult.selectedRepoNames.length === 1 ? bootstrapResult.selectedRepoNames[0] : undefined;
 
       await deps.saveLastRunState({
         sandboxId: handle.sandboxId,
         mode: launched.mode,
         activeRepo,
-        updatedAt: deps.now()
+        updatedAt: deps.now(),
       });
 
-      const templateSuffix =
-        templateResolution.autoSelected
-          ? `\nTemplate auto-selected for ${resolvedMode}: ${templateResolution.template}`
-          : "";
+      const templateSuffix = templateResolution.autoSelected
+        ? `\nTemplate auto-selected for ${resolvedMode}: ${templateResolution.template}`
+        : "";
       const syncSuffix = `\nTooling sync: ${formatToolingSyncSummary(syncSummary)}`;
 
       if (parsed.json) {
@@ -207,18 +201,18 @@ export async function runCreateCommand(args: string[], deps: CreateCommandDeps =
               activeRepo,
               template: createConfig.sandbox.template,
               setup: bootstrapResult.setup,
-              toolingSync: syncSummary
+              toolingSync: syncSummary,
             },
             null,
-            2
+            2,
           ),
-          exitCode: 0
+          exitCode: 0,
         };
       }
 
       return {
         message: `Created sandbox ${sandboxLabel}. ${launched.message}${templateSuffix}${syncSuffix}`,
-        exitCode: 0
+        exitCode: 0,
       };
     } catch (error) {
       if (!isPromptCancelledError(error)) {
@@ -231,170 +225,17 @@ export async function runCreateCommand(args: string[], deps: CreateCommandDeps =
       } catch (wipeError) {
         throw new PromptCancelledError(
           `Setup selection cancelled and sandbox '${sandboxLabel}' could not be wiped: ${toErrorMessage(wipeError)}`,
-          { cause: error }
+          { cause: error },
         );
       }
 
       throw new PromptCancelledError(`Setup selection cancelled; sandbox '${sandboxLabel}' was wiped.`, {
-        cause: error
+        cause: error,
       });
     } finally {
       stopLoadingIfRunning();
     }
   });
-}
-
-function hasPublicTunnelRuntimeEnv(runtimeEnv: Record<string, string>): boolean {
-  return Object.keys(runtimeEnv).some(
-    (key) => key.startsWith("EZ_DEVBOX_TUNNEL_") && key.endsWith("_URL")
-  );
-}
-
-async function resolveGhRuntimeEnv(
-  config: Awaited<ReturnType<typeof loadConfig>>,
-  envSource: Record<string, string | undefined>,
-  resolveToken?: (env: NodeJS.ProcessEnv) => Promise<string | undefined>
-): Promise<Record<string, string>> {
-  if (!config.gh.enabled) {
-    return {};
-  }
-
-  logger.verbose("GitHub auth: resolving token.");
-  const resolver = resolveToken ?? resolveHostGhToken;
-  const token = await resolver(envSource);
-  if (!token) {
-    logger.verbose("GitHub auth: token not found; continuing without GH_TOKEN/GITHUB_TOKEN.");
-    return {};
-  }
-
-  logger.verbose("GitHub auth: token found; injecting GH_TOKEN/GITHUB_TOKEN.");
-  return {
-    GH_TOKEN: token,
-    GITHUB_TOKEN: token
-  };
-}
-
-export async function syncToolingForMode(
-  config: Awaited<ReturnType<typeof loadConfig>>,
-  sandbox: Pick<SandboxHandle, "writeFile">,
-  _mode: ConcreteStartupMode
-): Promise<ToolingSyncSummary> {
-  const ghConfig = await maybeSyncGhConfig(config, sandbox);
-
-  const opencodeConfig = await runSyncUnit("OpenCode config", (onProgress) =>
-    syncOpenCodeConfigDir(config, sandbox, { onProgress })
-  );
-  const opencodeAuth = await runSyncUnit("OpenCode auth", () => syncOpenCodeAuthFile(config, sandbox));
-  const codexConfig = await runSyncUnit("Codex config", (onProgress) => syncCodexConfigDir(config, sandbox, { onProgress }));
-  const codexAuth = await runSyncUnit("Codex auth", () => syncCodexAuthFile(config, sandbox));
-  return summarizeToolingSync(opencodeConfig, opencodeAuth, codexConfig, codexAuth, ghConfig, config.gh.enabled);
-}
-
-async function maybeSyncGhConfig(
-  config: Awaited<ReturnType<typeof loadConfig>>,
-  sandbox: Pick<SandboxHandle, "writeFile">
-): Promise<PathSyncSummary | null> {
-  if (!config.gh.enabled) {
-    return null;
-  }
-
-  return runSyncUnit("GitHub CLI config", (onProgress) => syncGhConfigDir(config, sandbox, { onProgress }));
-}
-
-async function runSyncUnit(
-  label: string,
-  syncUnit: (onProgress?: (progress: DirectorySyncProgress) => void) => Promise<PathSyncSummary>
-): Promise<PathSyncSummary> {
-  let lastLoggedCount = 0;
-  const onProgress = (progress: DirectorySyncProgress): void => {
-    if (progress.filesDiscovered === 0) {
-      return;
-    }
-
-    const processedCount = progress.filesWritten + progress.filesUnchanged;
-    const isCompletion = processedCount === progress.filesDiscovered;
-    const reachedInterval = progress.filesWritten - lastLoggedCount >= TOOLING_SYNC_PROGRESS_LOG_INTERVAL;
-    if (!isCompletion && !reachedInterval) {
-      return;
-    }
-
-    lastLoggedCount = progress.filesWritten;
-    logger.verbose(`Tooling sync progress: ${label} ${processedCount}/${progress.filesDiscovered} (written=${progress.filesWritten}, unchanged=${progress.filesUnchanged})`);
-  };
-
-  logger.verbose(`Tooling sync start: ${label}.`);
-  const summary = await syncUnit(onProgress);
-  logger.verbose(
-    `Tooling sync done: ${label} discovered=${summary.filesDiscovered}, written=${summary.filesWritten}, unchanged=${summary.filesUnchanged}, skippedMissing=${summary.skippedMissing}.`
-  );
-  return summary;
-}
-
-function summarizeToolingSync(
-  opencodeConfig: PathSyncSummary | null,
-  opencodeAuth: PathSyncSummary | null,
-  codexConfig: PathSyncSummary | null,
-  codexAuth: PathSyncSummary | null,
-  ghConfig: PathSyncSummary | null,
-  ghEnabled: boolean
-): ToolingSyncSummary {
-  const summaries = [opencodeConfig, opencodeAuth, codexConfig, codexAuth, ghConfig].filter(
-    (item): item is PathSyncSummary => item !== null
-  );
-
-  return {
-    totalDiscovered: summaries.reduce((total, item) => total + item.filesDiscovered, 0),
-    totalWritten: summaries.reduce((total, item) => total + item.filesWritten, 0),
-    totalUnchanged: summaries.reduce((total, item) => total + item.filesUnchanged, 0),
-    totalMissingPaths: summaries.reduce((total, item) => total + Number(item.skippedMissing), 0),
-    skippedMissingPaths: summaries.reduce((total, item) => total + Number(item.skippedMissing), 0),
-    opencodeConfigSynced: opencodeConfig !== null && !opencodeConfig.skippedMissing,
-    opencodeAuthSynced: opencodeAuth !== null && !opencodeAuth.skippedMissing,
-    codexConfigSynced: codexConfig !== null && !codexConfig.skippedMissing,
-    codexAuthSynced: codexAuth !== null && !codexAuth.skippedMissing,
-    ghEnabled,
-    ghConfigSynced: ghConfig !== null && !ghConfig.skippedMissing
-  };
-}
-
-function formatToolingSyncSummary(summary: ToolingSyncSummary): string {
-  const opencodeSynced = summary.opencodeConfigSynced || summary.opencodeAuthSynced;
-  const codexSynced = summary.codexConfigSynced || summary.codexAuthSynced;
-  const ghSynced = summary.ghEnabled && summary.ghConfigSynced;
-  return `discovered=${summary.totalDiscovered}, written=${summary.totalWritten}, unchanged=${summary.totalUnchanged}, missingPaths=${summary.totalMissingPaths}, opencodeSynced=${opencodeSynced}, codexSynced=${codexSynced}, ghSynced=${ghSynced}`;
-}
-
-function formatEnvVarNames(envs: Record<string, string>): string {
-  const names = Object.keys(envs);
-  if (names.length === 0) {
-    return "(none)";
-  }
-  return names.join(", ");
-}
-
-function resolveTemplateForMode(
-  configuredTemplate: string,
-  mode: "ssh-opencode" | "ssh-codex" | "web" | "ssh-shell"
-): { template: string; autoSelected: boolean } {
-  const normalized = configuredTemplate.trim();
-  if (normalized !== "" && normalized !== "base") {
-    return {
-      template: configuredTemplate,
-      autoSelected: false
-    };
-  }
-
-  if (mode === "ssh-codex") {
-    return {
-      template: "codex",
-      autoSelected: true
-    };
-  }
-
-  return {
-    template: "opencode",
-    autoSelected: true
-  };
 }
 
 function toErrorMessage(error: unknown): string {
@@ -403,35 +244,4 @@ function toErrorMessage(error: unknown): string {
   }
   return "unknown error";
 }
-
-function parseCreateArgs(args: string[]): { mode?: StartupMode; json: boolean } {
-  let mode: StartupMode | undefined;
-  let json = false;
-
-  for (let index = 0; index < args.length; index += 1) {
-    const token = args[index];
-
-    if (token === "--mode") {
-      const next = args[index + 1];
-      mode = parseStartupModeValue(next);
-      index += 1;
-      continue;
-    }
-
-    if (token === "--yes-sync") {
-      continue;
-    }
-
-    if (token === "--json") {
-      json = true;
-      continue;
-    }
-
-    if (token.startsWith("--")) {
-      throw new Error(`Unknown option for create: '${token}'. Use --help for usage.`);
-    }
-    throw new Error(`Unexpected positional argument for create: '${token}'. Use --help for usage.`);
-  }
-
-  return { mode, json };
-}
+export { syncToolingForMode };

@@ -1,7 +1,7 @@
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, it, vi, afterEach } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   discoverDirectoryFiles,
   resolveHostPath,
@@ -9,23 +9,25 @@ import {
   syncCodexConfigDir,
   syncOpenCodeAuthFile,
   syncOpenCodeConfigDir,
-  syncToolingToSandbox
+  syncToolingToSandbox,
 } from "../src/tooling/host-sandbox-sync.js";
 
 const tempRoots: string[] = [];
 
 describe("host to sandbox tooling sync", () => {
+  const homeTemplate = "$" + "{HOME}";
+
   afterEach(async () => {
     await Promise.all(tempRoots.map((dir) => rm(dir, { recursive: true, force: true })));
     tempRoots.length = 0;
   });
 
-  it("expands ~, $HOME, and ${HOME} path prefixes", () => {
+  it("expands ~, $HOME, and $\\{HOME\\} path prefixes", () => {
     const homeDir = "/tmp/fake-home";
 
     expect(resolveHostPath("~/.codex", { homeDir })).toBe("/tmp/fake-home/.codex");
     expect(resolveHostPath("$HOME/.codex", { homeDir })).toBe("/tmp/fake-home/.codex");
-    expect(resolveHostPath("${HOME}/.codex", { homeDir })).toBe("/tmp/fake-home/.codex");
+    expect(resolveHostPath(`${homeTemplate}/.codex`, { homeDir })).toBe("/tmp/fake-home/.codex");
   });
 
   it("recursively discovers files while skipping non-config subtrees and artifacts", async () => {
@@ -81,16 +83,16 @@ describe("host to sandbox tooling sync", () => {
     const config = {
       opencode: {
         config_dir: join(root, "missing-opencode-config"),
-        auth_path: join(root, "missing-opencode-auth.json")
+        auth_path: join(root, "missing-opencode-auth.json"),
       },
       codex: {
         config_dir: join(root, "missing-codex-config"),
-        auth_path: join(root, "missing-codex-auth.json")
+        auth_path: join(root, "missing-codex-auth.json"),
       },
       gh: {
         enabled: false,
-        config_dir: join(root, "missing-gh-config")
-      }
+        config_dir: join(root, "missing-gh-config"),
+      },
     };
     const writeFileInSandbox = vi.fn().mockResolvedValue(undefined);
 
@@ -108,7 +110,7 @@ describe("host to sandbox tooling sync", () => {
       codexConfigSynced: false,
       codexAuthSynced: false,
       ghEnabled: false,
-      ghConfigSynced: false
+      ghConfigSynced: false,
     });
   });
 
@@ -127,22 +129,22 @@ describe("host to sandbox tooling sync", () => {
     await writeFile(join(opencodeConfigDir, "node_modules", "x", "skip.json"), "{}", "utf8");
     await writeFile(join(codexConfigDir, "config.json"), "{}", "utf8");
     await writeFile(join(codexConfigDir, "archived_sessions", "2026-01-01.jsonl"), "session", "utf8");
-    await writeFile(opencodeAuthPath, "{\"token\":\"secret\"}", "utf8");
-    await writeFile(codexAuthPath, "{\"token\":\"secret\"}", "utf8");
+    await writeFile(opencodeAuthPath, '{"token":"secret"}', "utf8");
+    await writeFile(codexAuthPath, '{"token":"secret"}', "utf8");
 
     const config = {
       opencode: {
         config_dir: opencodeConfigDir,
-        auth_path: opencodeAuthPath
+        auth_path: opencodeAuthPath,
       },
       codex: {
         config_dir: codexConfigDir,
-        auth_path: codexAuthPath
+        auth_path: codexAuthPath,
       },
       gh: {
         enabled: false,
-        config_dir: join(root, "unused-gh")
-      }
+        config_dir: join(root, "unused-gh"),
+      },
     };
     const writeFileInSandbox = vi.fn().mockResolvedValue(undefined);
 
@@ -151,28 +153,43 @@ describe("host to sandbox tooling sync", () => {
     const codexConfigSummary = await syncCodexConfigDir(config, { writeFile: writeFileInSandbox });
     const codexAuthSummary = await syncCodexAuthFile(config, { writeFile: writeFileInSandbox });
 
-    expect(opencodeConfigSummary).toEqual({ skippedMissing: false, filesDiscovered: 2, filesWritten: 2, filesUnchanged: 0 });
-    expect(opencodeAuthSummary).toEqual({ skippedMissing: false, filesDiscovered: 1, filesWritten: 1, filesUnchanged: 0 });
-    expect(codexConfigSummary).toEqual({ skippedMissing: false, filesDiscovered: 1, filesWritten: 1, filesUnchanged: 0 });
+    expect(opencodeConfigSummary).toEqual({
+      skippedMissing: false,
+      filesDiscovered: 2,
+      filesWritten: 2,
+      filesUnchanged: 0,
+    });
+    expect(opencodeAuthSummary).toEqual({
+      skippedMissing: false,
+      filesDiscovered: 1,
+      filesWritten: 1,
+      filesUnchanged: 0,
+    });
+    expect(codexConfigSummary).toEqual({
+      skippedMissing: false,
+      filesDiscovered: 1,
+      filesWritten: 1,
+      filesUnchanged: 0,
+    });
     expect(codexAuthSummary).toEqual({ skippedMissing: false, filesDiscovered: 1, filesWritten: 1, filesUnchanged: 0 });
 
     expect(writeFileInSandbox).toHaveBeenCalledWith(
       "/home/user/.config/opencode/settings.toml",
-      expect.any(ArrayBuffer)
+      expect.any(ArrayBuffer),
     );
     expect(writeFileInSandbox).toHaveBeenCalledWith(
       "/home/user/.config/opencode/profiles/main.json",
-      expect.any(ArrayBuffer)
+      expect.any(ArrayBuffer),
     );
     expect(writeFileInSandbox).toHaveBeenCalledWith(
       "/home/user/.local/share/opencode/auth.json",
-      expect.any(ArrayBuffer)
+      expect.any(ArrayBuffer),
     );
     expect(writeFileInSandbox).toHaveBeenCalledWith("/home/user/.codex/config.json", expect.any(ArrayBuffer));
     expect(writeFileInSandbox).toHaveBeenCalledWith("/home/user/.codex/auth.json", expect.any(ArrayBuffer));
     expect(writeFileInSandbox).not.toHaveBeenCalledWith(
       "/home/user/.codex/archived_sessions/2026-01-01.jsonl",
-      expect.any(ArrayBuffer)
+      expect.any(ArrayBuffer),
     );
   });
 
@@ -190,16 +207,16 @@ describe("host to sandbox tooling sync", () => {
     const config = {
       opencode: {
         config_dir: join(root, "unused-opencode"),
-        auth_path: join(root, "unused-opencode-auth.json")
+        auth_path: join(root, "unused-opencode-auth.json"),
       },
       codex: {
         config_dir: codexConfigDir,
-        auth_path: codexAuthPath
+        auth_path: codexAuthPath,
       },
       gh: {
         enabled: false,
-        config_dir: join(root, "unused-gh")
-      }
+        config_dir: join(root, "unused-gh"),
+      },
     };
     const writeFileInSandbox = vi.fn().mockResolvedValue(undefined);
     const onProgress = vi.fn();
@@ -223,7 +240,7 @@ describe("host to sandbox tooling sync", () => {
     await mkdir(join(codexConfigDir, "sqlite"), { recursive: true });
     await mkdir(join(codexConfigDir, ".system"), { recursive: true });
     await mkdir(join(codexConfigDir, ".curated"), { recursive: true });
-    await writeFile(join(codexConfigDir, "config.toml"), "model = \"gpt-5\"", "utf8");
+    await writeFile(join(codexConfigDir, "config.toml"), 'model = "gpt-5"', "utf8");
     await writeFile(join(codexConfigDir, "archived_sessions", "last-session.jsonl"), "history", "utf8");
     await writeFile(join(codexConfigDir, "activity.log"), "history", "utf8");
     await writeFile(join(codexConfigDir, "vendor_imports", "registry.json"), "history", "utf8");
@@ -239,16 +256,16 @@ describe("host to sandbox tooling sync", () => {
     const config = {
       opencode: {
         config_dir: join(root, "unused-opencode"),
-        auth_path: join(root, "unused-opencode-auth.json")
+        auth_path: join(root, "unused-opencode-auth.json"),
       },
       codex: {
         config_dir: codexConfigDir,
-        auth_path: join(root, "unused-codex-auth.json")
+        auth_path: join(root, "unused-codex-auth.json"),
       },
       gh: {
         enabled: false,
-        config_dir: join(root, "unused-gh")
-      }
+        config_dir: join(root, "unused-gh"),
+      },
     };
     const writeFileInSandbox = vi.fn().mockResolvedValue(undefined);
 
@@ -258,48 +275,36 @@ describe("host to sandbox tooling sync", () => {
     expect(writeFileInSandbox).toHaveBeenCalledWith("/home/user/.codex/config.toml", expect.any(ArrayBuffer));
     expect(writeFileInSandbox).not.toHaveBeenCalledWith(
       "/home/user/.codex/archived_sessions/last-session.jsonl",
-      expect.any(ArrayBuffer)
+      expect.any(ArrayBuffer),
     );
-    expect(writeFileInSandbox).not.toHaveBeenCalledWith(
-      "/home/user/.codex/activity.log",
-      expect.any(ArrayBuffer)
-    );
+    expect(writeFileInSandbox).not.toHaveBeenCalledWith("/home/user/.codex/activity.log", expect.any(ArrayBuffer));
     expect(writeFileInSandbox).not.toHaveBeenCalledWith(
       "/home/user/.codex/vendor_imports/registry.json",
-      expect.any(ArrayBuffer)
+      expect.any(ArrayBuffer),
     );
     expect(writeFileInSandbox).not.toHaveBeenCalledWith(
       "/home/user/.codex/shell_snapshots/snapshot.json",
-      expect.any(ArrayBuffer)
+      expect.any(ArrayBuffer),
     );
     expect(writeFileInSandbox).not.toHaveBeenCalledWith(
       "/home/user/.codex/sqlite/config.toml",
-      expect.any(ArrayBuffer)
+      expect.any(ArrayBuffer),
     );
     expect(writeFileInSandbox).not.toHaveBeenCalledWith(
       "/home/user/.codex/.system/state.json",
-      expect.any(ArrayBuffer)
+      expect.any(ArrayBuffer),
     );
     expect(writeFileInSandbox).not.toHaveBeenCalledWith(
       "/home/user/.codex/.curated/catalog.json",
-      expect.any(ArrayBuffer)
+      expect.any(ArrayBuffer),
     );
     expect(writeFileInSandbox).not.toHaveBeenCalledWith(
       "/home/user/.codex/.codex-global-state.json",
-      expect.any(ArrayBuffer)
+      expect.any(ArrayBuffer),
     );
-    expect(writeFileInSandbox).not.toHaveBeenCalledWith(
-      "/home/user/.codex/models_cache.json",
-      expect.any(ArrayBuffer)
-    );
-    expect(writeFileInSandbox).not.toHaveBeenCalledWith(
-      "/home/user/.codex/state.db",
-      expect.any(ArrayBuffer)
-    );
-    expect(writeFileInSandbox).not.toHaveBeenCalledWith(
-      "/home/user/.codex/state.sqlite",
-      expect.any(ArrayBuffer)
-    );
+    expect(writeFileInSandbox).not.toHaveBeenCalledWith("/home/user/.codex/models_cache.json", expect.any(ArrayBuffer));
+    expect(writeFileInSandbox).not.toHaveBeenCalledWith("/home/user/.codex/state.db", expect.any(ArrayBuffer));
+    expect(writeFileInSandbox).not.toHaveBeenCalledWith("/home/user/.codex/state.sqlite", expect.any(ArrayBuffer));
   });
 
   it("includes gh config in summary only when enabled", async () => {
@@ -318,16 +323,16 @@ describe("host to sandbox tooling sync", () => {
     const config = {
       opencode: {
         config_dir: join(root, "missing-opencode-config"),
-        auth_path: join(root, "missing-opencode-auth.json")
+        auth_path: join(root, "missing-opencode-auth.json"),
       },
       codex: {
         config_dir: codexConfigDir,
-        auth_path: codexAuthPath
+        auth_path: codexAuthPath,
       },
       gh: {
         enabled: true,
-        config_dir: ghConfigDir
-      }
+        config_dir: ghConfigDir,
+      },
     };
     const writeFileInSandbox = vi.fn().mockResolvedValue(undefined);
 
@@ -344,7 +349,7 @@ describe("host to sandbox tooling sync", () => {
       codexConfigSynced: true,
       codexAuthSynced: true,
       ghEnabled: true,
-      ghConfigSynced: true
+      ghConfigSynced: true,
     });
     expect(writeFileInSandbox).toHaveBeenCalledWith("/home/user/.config/gh/config.yml", expect.any(ArrayBuffer));
     expect(writeFileInSandbox).not.toHaveBeenCalledWith("/home/user/.config/gh/hosts.yml", expect.any(ArrayBuffer));
@@ -359,16 +364,16 @@ describe("host to sandbox tooling sync", () => {
     const config = {
       opencode: {
         config_dir: join(root, "missing-opencode-config"),
-        auth_path: join(root, "missing-opencode-auth.json")
+        auth_path: join(root, "missing-opencode-auth.json"),
       },
       codex: {
         config_dir: codexConfigDir,
-        auth_path: join(root, "missing-codex-auth.json")
+        auth_path: join(root, "missing-codex-auth.json"),
       },
       gh: {
         enabled: false,
-        config_dir: join(root, "missing-gh")
-      }
+        config_dir: join(root, "missing-gh"),
+      },
     };
     const writeFileInSandbox = vi.fn().mockResolvedValue(undefined);
     const sandbox = { writeFile: writeFileInSandbox };

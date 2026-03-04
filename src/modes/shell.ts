@@ -3,11 +3,11 @@ import { logger } from "../logging/logger.js";
 import type { LaunchContextOptions, ModeLaunchResult } from "./index.js";
 import {
   buildInteractiveRemoteCommand,
-  type SshModeDeps,
   cleanupSshBridgeSession,
   prepareSshBridgeSession,
   runInteractiveSshSession,
-  stageInteractiveStartupEnv
+  type SshModeDeps,
+  stageInteractiveStartupEnv,
 } from "./ssh-bridge.js";
 
 const SHELL_SMOKE_COMMAND = "bash -lc 'echo shell-ready'";
@@ -19,13 +19,13 @@ const defaultDeps: ShellModeDeps = {
   isInteractiveTerminal: () => Boolean(process.stdin.isTTY && process.stdout.isTTY),
   prepareSession: prepareSshBridgeSession,
   runInteractiveSession: runInteractiveSshSession,
-  cleanupSession: cleanupSshBridgeSession
+  cleanupSession: cleanupSshBridgeSession,
 };
 
 export async function startShellMode(
   handle: SandboxHandle,
   launchContext: LaunchContextOptions = {},
-  deps: ShellModeDeps = defaultDeps
+  deps: ShellModeDeps = defaultDeps,
 ): Promise<ModeLaunchResult> {
   const commandContext = resolveCommandContext(launchContext);
 
@@ -44,8 +44,8 @@ export async function startShellMode(
       buildInteractiveRemoteCommand({
         cwd: commandContext.cwd,
         envScriptPath,
-        command: "bash -i"
-      })
+        command: "bash -i",
+      }),
     );
   } finally {
     logger.verbose("Cleaning up interactive SSH session.");
@@ -57,20 +57,20 @@ export async function startShellMode(
     command: "bash",
     details: {
       session: "interactive",
-      status: "completed"
+      status: "completed",
     },
-    message: `Shell interactive session ended for sandbox ${handle.sandboxId}`
+    message: `Shell interactive session ended for sandbox ${handle.sandboxId}`,
   };
 }
 
 async function runSmokeCheck(
   handle: SandboxHandle,
-  commandContext: { cwd?: string; envs: Record<string, string> }
+  commandContext: { cwd?: string; envs: Record<string, string> },
 ): Promise<ModeLaunchResult> {
   const result = await handle.run(SHELL_SMOKE_COMMAND, {
     ...(commandContext.cwd ? { cwd: commandContext.cwd } : {}),
     ...(Object.keys(commandContext.envs).length > 0 ? { envs: commandContext.envs } : {}),
-    timeoutMs: COMMAND_TIMEOUT_MS
+    timeoutMs: COMMAND_TIMEOUT_MS,
   });
 
   const output = result.stdout.trim() || "no output";
@@ -81,16 +81,16 @@ async function runSmokeCheck(
     details: {
       smoke: "shell",
       status: output === "shell-ready" ? "ready" : "unexpected-output",
-      output
+      output,
     },
-    message: `Shell smoke check in sandbox ${handle.sandboxId}: ${output}`
+    message: `Shell smoke check in sandbox ${handle.sandboxId}: ${output}`,
   };
 }
 
 function resolveCommandContext(launchContext: LaunchContextOptions): { cwd?: string; envs: Record<string, string> } {
   return {
     cwd: normalizeOptionalValue(launchContext.workingDirectory),
-    envs: launchContext.startupEnv ?? {}
+    envs: launchContext.startupEnv ?? {},
   };
 }
 

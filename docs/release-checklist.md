@@ -4,6 +4,7 @@ Run this checklist before publishing a new `ez-devbox` version.
 
 1. Validate guardrails, tests, and build:
    - `npm run check:complexity`
+   - `npm run check:style`
    - `npm run test`
    - `npm run build`
    - (or run all together) `npm run validate`

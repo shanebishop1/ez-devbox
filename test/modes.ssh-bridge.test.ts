@@ -8,8 +8,8 @@ import {
   buildInteractiveRemoteCommand,
   buildSshClientArgs,
   cleanupSshBridgeSession,
+  type SshBridgeSession,
   stageInteractiveStartupEnv,
-  type SshBridgeSession
 } from "../src/modes/ssh-bridge.js";
 
 describe("ssh bridge security behavior", () => {
@@ -29,7 +29,7 @@ describe("ssh bridge security behavior", () => {
     const run = vi.fn().mockRejectedValue(new Error("occupied"));
 
     await expect(allocateSshBridgePorts({ run } as Pick<SandboxHandle, "run">, "session-abc", 2)).rejects.toThrow(
-      "Unable to allocate SSH bridge ports after 2 attempts."
+      "Unable to allocate SSH bridge ports after 2 attempts.",
     );
     expect(run).toHaveBeenCalledTimes(2);
   });
@@ -40,7 +40,7 @@ describe("ssh bridge security behavior", () => {
       privateKeyPath: "/tmp/ez-devbox-ssh-123/id_ed25519",
       knownHostsPath: "/tmp/ez-devbox-ssh-123/known_hosts",
       wsUrl: "wss://8081-sbx.e2b.app",
-      remoteUser: "sandbox-user"
+      remoteUser: "sandbox-user",
     };
 
     const args = buildSshClientArgs(session, "bash");
@@ -59,7 +59,7 @@ describe("ssh bridge security behavior", () => {
       privateKeyPath: "/tmp/ez-devbox-ssh-123/id_ed25519",
       knownHostsPath: "/tmp/ez-devbox-ssh-123/known_hosts",
       wsUrl: "wss://8081-sbx.e2b.app",
-      remoteUser: "sandbox-user"
+      remoteUser: "sandbox-user",
     };
 
     const originalCwd = process.cwd();
@@ -98,8 +98,8 @@ describe("ssh bridge security behavior", () => {
         sshdConfigPath: "/home/user/.ez-devbox-ssh/ssh-test/sshd_config",
         sshdPidPath: "/home/user/.ez-devbox-ssh/ssh-test/sshd.pid",
         websockifyPidPath: "/home/user/.ez-devbox-ssh/ssh-test/websockify.pid",
-        websockifyLogPath: "/home/user/.ez-devbox-ssh/ssh-test/websockify.log"
-      }
+        websockifyLogPath: "/home/user/.ez-devbox-ssh/ssh-test/websockify.log",
+      },
     };
 
     const run = vi.fn().mockImplementation(async (command: string) => {
@@ -139,13 +139,13 @@ describe("ssh bridge security behavior", () => {
         sshdConfigPath: "/home/user/.ez-devbox-ssh/ssh-test/sshd_config",
         sshdPidPath: "/home/user/.ez-devbox-ssh/ssh-test/sshd.pid",
         websockifyPidPath: "/home/user/.ez-devbox-ssh/ssh-test/websockify.pid",
-        websockifyLogPath: "/home/user/.ez-devbox-ssh/ssh-test/websockify.log"
-      }
+        websockifyLogPath: "/home/user/.ez-devbox-ssh/ssh-test/websockify.log",
+      },
     };
 
     const envScriptPath = await stageInteractiveStartupEnv(handle, session, {
       GOOD_KEY: "value",
-      "NOT-VALID": "ignored"
+      "NOT-VALID": "ignored",
     });
 
     expect(envScriptPath).toBe("/home/user/.ez-devbox-ssh/ssh-test/startup-env.sh");
@@ -154,7 +154,7 @@ describe("ssh bridge security behavior", () => {
     expect(run.mock.calls[0]?.[0]).toContain("for key in 'GOOD_KEY'");
     expect(run.mock.calls[0]?.[1]).toEqual({
       envs: { GOOD_KEY: "value" },
-      timeoutMs: 15_000
+      timeoutMs: 15_000,
     });
     expect(session.startupEnvScriptPath).toBe("/home/user/.ez-devbox-ssh/ssh-test/startup-env.sh");
   });
@@ -163,7 +163,7 @@ describe("ssh bridge security behavior", () => {
     const command = buildInteractiveRemoteCommand({
       cwd: "/workspace/alpha",
       envScriptPath: "/home/user/.ez-devbox-ssh/ssh-test/startup-env.sh",
-      command: "opencode"
+      command: "opencode",
     });
 
     expect(command).toContain("cd");
@@ -182,6 +182,6 @@ function createHandle(overrides: Partial<SandboxHandle>): SandboxHandle {
     writeFile: overrides.writeFile ?? vi.fn().mockResolvedValue(undefined),
     getHost: overrides.getHost ?? vi.fn().mockResolvedValue("https://sbx-ssh-1.e2b.dev"),
     setTimeout: overrides.setTimeout ?? vi.fn().mockResolvedValue(undefined),
-    kill: overrides.kill ?? vi.fn().mockResolvedValue(undefined)
+    kill: overrides.kill ?? vi.fn().mockResolvedValue(undefined),
   };
 }

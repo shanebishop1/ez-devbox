@@ -1,8 +1,14 @@
-import { killSandbox, listSandboxes, type LifecycleOperationOptions, type ListSandboxesOptions, type SandboxListItem } from "../e2b/lifecycle.js";
+import {
+  killSandbox,
+  type LifecycleOperationOptions,
+  type ListSandboxesOptions,
+  listSandboxes,
+  type SandboxListItem,
+} from "../e2b/lifecycle.js";
+import { clearLastRunState, type LastRunState, loadLastRunState } from "../state/lastRun.js";
 import type { CommandResult } from "../types/index.js";
-import { clearLastRunState, loadLastRunState, type LastRunState } from "../state/lastRun.js";
-import { formatSandboxDisplayLabel } from "./sandbox-display-name.js";
 import { promptWithReadline } from "./readline-prompt.js";
+import { formatSandboxDisplayLabel } from "./sandbox-display-name.js";
 
 export interface WipeAllCommandDeps {
   listSandboxes: (options?: ListSandboxesOptions) => Promise<SandboxListItem[]>;
@@ -19,17 +25,20 @@ const defaultDeps: WipeAllCommandDeps = {
   isInteractiveTerminal: () => Boolean(process.stdin.isTTY && process.stdout.isTTY),
   promptInput,
   loadLastRunState,
-  clearLastRunState
+  clearLastRunState,
 };
 
-export async function runWipeAllCommand(args: string[], deps: WipeAllCommandDeps = defaultDeps): Promise<CommandResult> {
+export async function runWipeAllCommand(
+  args: string[],
+  deps: WipeAllCommandDeps = defaultDeps,
+): Promise<CommandResult> {
   const parsed = parseWipeAllArgs(args);
   const sandboxes = await deps.listSandboxes();
 
   if (sandboxes.length === 0) {
     return {
       message: "No sandboxes found. Nothing to wipe.",
-      exitCode: 0
+      exitCode: 0,
     };
   }
 
@@ -38,11 +47,13 @@ export async function runWipeAllCommand(args: string[], deps: WipeAllCommandDeps
       throw new Error("wipe-all requires --yes in non-interactive terminals. Re-run with --yes.");
     }
 
-    const answer = (await deps.promptInput(`Delete ${sandboxes.length} sandbox(s)? Type 'yes' or 'y' to confirm: `)).trim().toLowerCase();
+    const answer = (await deps.promptInput(`Delete ${sandboxes.length} sandbox(s)? Type 'yes' or 'y' to confirm: `))
+      .trim()
+      .toLowerCase();
     if (answer !== "yes" && answer !== "y") {
       return {
         message: "Wipe-all cancelled.",
-        exitCode: 0
+        exitCode: 0,
       };
     }
   }
@@ -80,13 +91,13 @@ export async function runWipeAllCommand(args: string[], deps: WipeAllCommandDeps
   if (messages.length === 0) {
     return {
       message: "No sandboxes were wiped.",
-      exitCode: 0
+      exitCode: 0,
     };
   }
 
   return {
     message: messages.join("\n"),
-    exitCode: failedLabels.length > 0 ? 1 : 0
+    exitCode: failedLabels.length > 0 ? 1 : 0,
   };
 }
 

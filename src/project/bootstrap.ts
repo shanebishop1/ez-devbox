@@ -22,13 +22,13 @@ export interface BootstrapProjectWorkspaceDeps {
     handle: SandboxHandle,
     projectDir: string,
     repos: ResolvedProjectRepoConfig[],
-    options: { timeoutMs: number; runtimeEnv?: Record<string, string>; onProgress?: (message: string) => void }
+    options: { timeoutMs: number; runtimeEnv?: Record<string, string>; onProgress?: (message: string) => void },
   ) => Promise<ProvisionedRepoSummary[]>;
   runSetupForRepos: (
     handle: SandboxHandle,
     repos: ResolvedProjectRepoConfig[],
     provisionedRepos: ProvisionedRepoSummary[],
-    options: RunSetupPipelineOptions & { runtimeEnv?: Record<string, string> }
+    options: RunSetupPipelineOptions & { runtimeEnv?: Record<string, string> },
   ) => Promise<SetupPipelineResult>;
 }
 
@@ -45,17 +45,17 @@ export interface BootstrapProjectWorkspaceOptions {
 const defaultDeps: BootstrapProjectWorkspaceDeps = {
   ensureProjectDirectory,
   provisionSelectedRepos,
-  runSetupForRepos
+  runSetupForRepos,
 };
 
 export async function bootstrapProjectWorkspace(
   handle: SandboxHandle,
   config: ResolvedLauncherConfig,
-  options: BootstrapProjectWorkspaceOptions = {}
+  options: BootstrapProjectWorkspaceOptions = {},
 ): Promise<BootstrapProjectWorkspaceResult> {
   const deps: BootstrapProjectWorkspaceDeps = {
     ...defaultDeps,
-    ...(options.deps ?? {})
+    ...(options.deps ?? {}),
   };
 
   const timeoutMs = config.sandbox.timeout_ms;
@@ -68,18 +68,18 @@ export async function bootstrapProjectWorkspace(
     promptInput: options.promptInput,
     preferredActiveRepo: options.preferredActiveRepo,
     activeName: config.project.active_name,
-    activeIndex: config.project.active_index
+    activeIndex: config.project.active_index,
   });
   options.onProgress?.(
     selectedRepos.length === 0
       ? "Bootstrap repos: none selected"
-      : `Bootstrap repos selected: ${selectedRepos.map((repo) => repo.name).join(", ")}`
+      : `Bootstrap repos selected: ${selectedRepos.map((repo) => repo.name).join(", ")}`,
   );
 
   const provisionedRepos = await deps.provisionSelectedRepos(handle, config.project.dir, selectedRepos, {
     timeoutMs,
     runtimeEnv,
-    onProgress: options.onProgress
+    onProgress: options.onProgress,
   });
   const selectedRepoNames = selectedRepos.map((repo) => repo.name);
   const setup = await maybeRunSetup(
@@ -90,7 +90,7 @@ export async function bootstrapProjectWorkspace(
     options.isConnect ?? false,
     deps,
     setupRuntimeEnv,
-    options.onProgress
+    options.onProgress,
   );
 
   return {
@@ -98,14 +98,14 @@ export async function bootstrapProjectWorkspace(
     workingDirectory: resolveWorkingDirectory(config.project.dir, config.project.working_dir, provisionedRepos),
     startupEnv: resolveStartupEnv(selectedRepos),
     provisionedRepos,
-    setup
+    setup,
   };
 }
 
 function resolveWorkingDirectory(
   projectDir: string,
   workingDirConfig: string,
-  provisionedRepos: ProvisionedRepoSummary[]
+  provisionedRepos: ProvisionedRepoSummary[],
 ): string | undefined {
   if (workingDirConfig === "auto") {
     if (provisionedRepos.length === 0) {
@@ -128,6 +128,6 @@ function resolveStartupEnv(selectedRepos: ResolvedProjectRepoConfig[]): Record<s
   }
 
   return {
-    ...selectedRepos[0].startup_env
+    ...selectedRepos[0].startup_env,
   };
 }

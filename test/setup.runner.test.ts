@@ -8,7 +8,7 @@ describe("setup runner", () => {
     let setupAttempts = 0;
 
     const executor: SetupCommandExecutor = {
-      run: vi.fn().mockImplementation(async (command, options) => {
+      run: vi.fn().mockImplementation(async (_command, options) => {
         setupAttempts += 1;
         options.onStdoutLine?.(`setup attempt ${setupAttempts}`);
         options.onStderrLine?.(`setup attempt ${setupAttempts}`);
@@ -17,7 +17,7 @@ describe("setup runner", () => {
         }
 
         return { exitCode: 0 };
-      })
+      }),
     };
 
     const result = await runSetupPipeline(
@@ -26,23 +26,23 @@ describe("setup runner", () => {
           name: "repo-a",
           path: "/workspace/repo-a",
           setup_command: "npm ci",
-          setup_env: { NODE_ENV: "test" }
-        }
+          setup_env: { NODE_ENV: "test" },
+        },
       ],
       executor,
       {
         retryPolicy: { attempts: 2, delayMs: 5 },
         timeoutMs: 20_000,
         sleep,
-        onEvent: (event) => events.push(event.type)
-      }
+        onEvent: (event) => events.push(event.type),
+      },
     );
 
     expect(result.success).toBe(true);
     expect(executor.run).toHaveBeenNthCalledWith(
       1,
       "npm ci",
-      expect.objectContaining({ timeoutMs: 20_000, env: { NODE_ENV: "test" } })
+      expect.objectContaining({ timeoutMs: 20_000, env: { NODE_ENV: "test" } }),
     );
     expect(sleep).toHaveBeenCalledTimes(1);
     expect(events).toContain("step:retry");
@@ -52,7 +52,7 @@ describe("setup runner", () => {
 
   it("stops and fails when continueOnError is false", async () => {
     const executor: SetupCommandExecutor = {
-      run: vi.fn().mockResolvedValue({ exitCode: 1, stderr: "boom" })
+      run: vi.fn().mockResolvedValue({ exitCode: 1, stderr: "boom" }),
     };
 
     await expect(
@@ -62,20 +62,20 @@ describe("setup runner", () => {
             name: "repo-a",
             path: "/workspace/repo-a",
             setup_command: "npm ci",
-            setup_env: {}
+            setup_env: {},
           },
           {
             name: "repo-b",
             path: "/workspace/repo-b",
             setup_command: "npm ci",
-            setup_env: {}
-          }
+            setup_env: {},
+          },
         ],
         executor,
         {
-          continueOnError: false
-        }
-      )
+          continueOnError: false,
+        },
+      ),
     ).rejects.toThrow("Setup pipeline failed");
 
     expect(executor.run).toHaveBeenCalledTimes(1);
@@ -86,7 +86,7 @@ describe("setup runner", () => {
       run: vi
         .fn()
         .mockResolvedValueOnce({ exitCode: 1, stderr: "first repo failed" })
-        .mockResolvedValueOnce({ exitCode: 0 })
+        .mockResolvedValueOnce({ exitCode: 0 }),
     };
 
     const result = await runSetupPipeline(
@@ -95,19 +95,19 @@ describe("setup runner", () => {
           name: "repo-a",
           path: "/workspace/repo-a",
           setup_command: "npm ci",
-          setup_env: {}
+          setup_env: {},
         },
         {
           name: "repo-b",
           path: "/workspace/repo-b",
           setup_command: "pnpm i",
-          setup_env: {}
-        }
+          setup_env: {},
+        },
       ],
       executor,
       {
-        continueOnError: true
-      }
+        continueOnError: true,
+      },
     );
 
     expect(result.success).toBe(false);
@@ -127,14 +127,14 @@ describe("setup runner", () => {
         await new Promise((resolve) => setTimeout(resolve, 10));
         inFlight -= 1;
         return { exitCode: 0, stdout: options.cwd };
-      })
+      }),
     };
 
     const repos = [
       { name: "repo-a", path: "/workspace/repo-a", setup_command: "npm ci", setup_env: {} },
       { name: "repo-b", path: "/workspace/repo-b", setup_command: "npm ci", setup_env: {} },
       { name: "repo-c", path: "/workspace/repo-c", setup_command: "npm ci", setup_env: {} },
-      { name: "repo-d", path: "/workspace/repo-d", setup_command: "npm ci", setup_env: {} }
+      { name: "repo-d", path: "/workspace/repo-d", setup_command: "npm ci", setup_env: {} },
     ];
 
     const result = await runSetupPipeline(repos, executor, { maxConcurrency: 2 });
@@ -155,7 +155,7 @@ describe("setup runner", () => {
 
         await new Promise((resolve) => setTimeout(resolve, 10));
         return { exitCode: 0 };
-      })
+      }),
     };
 
     await expect(
@@ -163,14 +163,14 @@ describe("setup runner", () => {
         [
           { name: "repo-a", path: "/workspace/repo-a", setup_command: "npm ci", setup_env: {} },
           { name: "repo-b", path: "/workspace/repo-b", setup_command: "npm ci", setup_env: {} },
-          { name: "repo-c", path: "/workspace/repo-c", setup_command: "npm ci", setup_env: {} }
+          { name: "repo-c", path: "/workspace/repo-c", setup_command: "npm ci", setup_env: {} },
         ],
         executor,
         {
           continueOnError: false,
-          maxConcurrency: 2
-        }
-      )
+          maxConcurrency: 2,
+        },
+      ),
     ).rejects.toThrow("Setup pipeline failed");
 
     expect(startedRepos).toContain("/workspace/repo-a");
@@ -180,15 +180,15 @@ describe("setup runner", () => {
 
   it("rejects invalid maxConcurrency values", async () => {
     const executor: SetupCommandExecutor = {
-      run: vi.fn().mockResolvedValue({ exitCode: 0 })
+      run: vi.fn().mockResolvedValue({ exitCode: 0 }),
     };
 
     await expect(
       runSetupPipeline(
         [{ name: "repo-a", path: "/workspace/repo-a", setup_command: "npm ci", setup_env: {} }],
         executor,
-        { maxConcurrency: 0 }
-      )
+        { maxConcurrency: 0 },
+      ),
     ).rejects.toThrow("maxConcurrency");
   });
 });

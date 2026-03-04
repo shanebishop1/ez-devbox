@@ -30,7 +30,7 @@ export function selectReposForProvisioning<TRepo extends { name: string }>(input
     const repo = repos.find((entry) => entry.name === selectedName);
     if (!repo) {
       throw new Error(
-        `Invalid active repo name '${selectedName}': not found. Available repos: ${repos.map((entry) => entry.name).join(", ")}.`
+        `Invalid active repo name '${selectedName}': not found. Available repos: ${repos.map((entry) => entry.name).join(", ")}.`,
       );
     }
 
@@ -58,7 +58,9 @@ function resolveRepoIndex(index: number | undefined, length: number, source: "ac
   }
 
   if ((index as number) < 0 || (index as number) >= length) {
-    throw new Error(`Invalid ${source}: index ${(index as number).toString()} is out of range (expected 0-${length - 1}).`);
+    throw new Error(
+      `Invalid ${source}: index ${(index as number).toString()} is out of range (expected 0-${length - 1}).`,
+    );
   }
 
   return index as number;

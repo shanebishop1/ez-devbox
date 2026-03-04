@@ -9,14 +9,14 @@ let loadingIntervalId: NodeJS.Timeout | null = null;
 const levelPrefix: Record<LogLevel, string> = {
   info: "INFO",
   warn: "WARN",
-  error: "ERROR"
+  error: "ERROR",
 };
 
 const ansi = {
   reset: "\u001b[0m",
   cyan: "\u001b[36m",
   yellow: "\u001b[33m",
-  red: "\u001b[31m"
+  red: "\u001b[31m",
 } as const;
 
 function isColorEnabled(output: NodeJS.WriteStream): boolean {
@@ -38,8 +38,7 @@ function formatPrefix(level: LogLevel, output: NodeJS.WriteStream): string {
     return prefix;
   }
 
-  const color =
-    level === "info" ? ansi.cyan : level === "warn" ? ansi.yellow : ansi.red;
+  const color = level === "info" ? ansi.cyan : level === "warn" ? ansi.yellow : ansi.red;
   return `${color}${prefix}${ansi.reset}`;
 }
 
@@ -110,5 +109,5 @@ export const logger = {
         process.stdout.write("\r\u001b[2K");
       }
     };
-  }
+  },
 };

@@ -1,8 +1,14 @@
-import { killSandbox, listSandboxes, type ListSandboxesOptions, type LifecycleOperationOptions, type SandboxListItem } from "../e2b/lifecycle.js";
+import {
+  killSandbox,
+  type LifecycleOperationOptions,
+  type ListSandboxesOptions,
+  listSandboxes,
+  type SandboxListItem,
+} from "../e2b/lifecycle.js";
+import { clearLastRunState, type LastRunState, loadLastRunState } from "../state/lastRun.js";
 import type { CommandResult } from "../types/index.js";
-import { clearLastRunState, loadLastRunState, type LastRunState } from "../state/lastRun.js";
-import { formatSandboxDisplayLabel } from "./sandbox-display-name.js";
 import { promptWithReadline } from "./readline-prompt.js";
+import { formatSandboxDisplayLabel } from "./sandbox-display-name.js";
 
 export interface WipeCommandDeps {
   listSandboxes: (options?: ListSandboxesOptions) => Promise<SandboxListItem[]>;
@@ -19,7 +25,7 @@ const defaultDeps: WipeCommandDeps = {
   isInteractiveTerminal: () => Boolean(process.stdin.isTTY && process.stdout.isTTY),
   promptInput,
   loadLastRunState,
-  clearLastRunState
+  clearLastRunState,
 };
 
 export async function runWipeCommand(args: string[], deps: WipeCommandDeps = defaultDeps): Promise<CommandResult> {
@@ -28,7 +34,10 @@ export async function runWipeCommand(args: string[], deps: WipeCommandDeps = def
 
   const selected =
     parsed.sandboxId !== undefined
-      ? sandboxes.find((sandbox) => sandbox.sandboxId === parsed.sandboxId) ?? { sandboxId: parsed.sandboxId, state: "unknown" }
+      ? (sandboxes.find((sandbox) => sandbox.sandboxId === parsed.sandboxId) ?? {
+          sandboxId: parsed.sandboxId,
+          state: "unknown",
+        })
       : await selectSandboxInteractively(sandboxes, deps);
 
   const selectedLabel = formatSandboxDisplayLabel(selected.sandboxId, selected.metadata);
@@ -41,7 +50,7 @@ export async function runWipeCommand(args: string[], deps: WipeCommandDeps = def
 
   return {
     message: `Wiped sandbox ${selectedLabel}.`,
-    exitCode: 0
+    exitCode: 0,
   };
 }
 
@@ -70,7 +79,10 @@ function parseWipeArgs(args: string[]): { sandboxId?: string } {
   return { sandboxId };
 }
 
-async function selectSandboxInteractively(sandboxes: SandboxListItem[], deps: WipeCommandDeps): Promise<SandboxListItem> {
+async function selectSandboxInteractively(
+  sandboxes: SandboxListItem[],
+  deps: WipeCommandDeps,
+): Promise<SandboxListItem> {
   if (!deps.isInteractiveTerminal()) {
     throw new Error("No --sandbox-id provided in a non-interactive terminal. Re-run with --sandbox-id <id>.");
   }
@@ -79,7 +91,9 @@ async function selectSandboxInteractively(sandboxes: SandboxListItem[], deps: Wi
     throw new Error("No sandboxes are available to wipe.");
   }
 
-  const choices = sandboxes.map((sandbox, index) => `${index + 1}) ${formatSandboxDisplayLabel(sandbox.sandboxId, sandbox.metadata)}`);
+  const choices = sandboxes.map(
+    (sandbox, index) => `${index + 1}) ${formatSandboxDisplayLabel(sandbox.sandboxId, sandbox.metadata)}`,
+  );
   const question = ["Select sandbox to wipe:", ...choices, "Enter choice number: "].join("\n");
   const answer = (await deps.promptInput(question)).trim();
 

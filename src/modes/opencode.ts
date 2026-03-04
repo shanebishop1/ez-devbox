@@ -3,11 +3,11 @@ import { logger } from "../logging/logger.js";
 import type { LaunchContextOptions, ModeLaunchResult } from "./index.js";
 import {
   buildInteractiveRemoteCommand,
-  type SshModeDeps,
   cleanupSshBridgeSession,
   prepareSshBridgeSession,
   runInteractiveSshSession,
-  stageInteractiveStartupEnv
+  type SshModeDeps,
+  stageInteractiveStartupEnv,
 } from "./ssh-bridge.js";
 
 const OPEN_CODE_SMOKE_COMMAND = "opencode --version";
@@ -19,13 +19,13 @@ const defaultDeps: OpenCodeModeDeps = {
   isInteractiveTerminal: () => Boolean(process.stdin.isTTY && process.stdout.isTTY),
   prepareSession: prepareSshBridgeSession,
   runInteractiveSession: runInteractiveSshSession,
-  cleanupSession: cleanupSshBridgeSession
+  cleanupSession: cleanupSshBridgeSession,
 };
 
 export async function startOpenCodeMode(
   handle: SandboxHandle,
   launchContext: LaunchContextOptions = {},
-  deps: OpenCodeModeDeps = defaultDeps
+  deps: OpenCodeModeDeps = defaultDeps,
 ): Promise<ModeLaunchResult> {
   const commandContext = resolveCommandContext(launchContext);
 
@@ -44,8 +44,8 @@ export async function startOpenCodeMode(
       buildInteractiveRemoteCommand({
         cwd: commandContext.cwd,
         envScriptPath,
-        command: "opencode"
-      })
+        command: "opencode",
+      }),
     );
   } finally {
     logger.verbose("Cleaning up interactive SSH session.");
@@ -57,20 +57,20 @@ export async function startOpenCodeMode(
     command: "opencode",
     details: {
       session: "interactive",
-      status: "completed"
+      status: "completed",
     },
-    message: `OpenCode interactive session ended for sandbox ${handle.sandboxId}`
+    message: `OpenCode interactive session ended for sandbox ${handle.sandboxId}`,
   };
 }
 
 async function runSmokeCheck(
   handle: SandboxHandle,
-  commandContext: { cwd?: string; envs: Record<string, string> }
+  commandContext: { cwd?: string; envs: Record<string, string> },
 ): Promise<ModeLaunchResult> {
   const result = await handle.run(OPEN_CODE_SMOKE_COMMAND, {
     ...(commandContext.cwd ? { cwd: commandContext.cwd } : {}),
     ...(Object.keys(commandContext.envs).length > 0 ? { envs: commandContext.envs } : {}),
-    timeoutMs: COMMAND_TIMEOUT_MS
+    timeoutMs: COMMAND_TIMEOUT_MS,
   });
 
   const output = firstNonEmptyLine(result.stdout, result.stderr);
@@ -81,16 +81,16 @@ async function runSmokeCheck(
     details: {
       smoke: "opencode-cli",
       status: "ready",
-      output
+      output,
     },
-    message: `OpenCode CLI smoke passed in sandbox ${handle.sandboxId}: ${output}. Run from an interactive terminal for full OpenCode session attach.`
+    message: `OpenCode CLI smoke passed in sandbox ${handle.sandboxId}: ${output}. Run from an interactive terminal for full OpenCode session attach.`,
   };
 }
 
 function resolveCommandContext(launchContext: LaunchContextOptions): { cwd?: string; envs: Record<string, string> } {
   return {
     cwd: normalizeOptionalValue(launchContext.workingDirectory),
-    envs: launchContext.startupEnv ?? {}
+    envs: launchContext.startupEnv ?? {},
   };
 }
 

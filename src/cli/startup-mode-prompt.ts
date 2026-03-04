@@ -9,7 +9,7 @@ const PROMPT_CHOICE_NUMBERS: Record<string, Exclude<StartupMode, "prompt">> = {
   "1": "ssh-opencode",
   "2": "ssh-codex",
   "3": "web",
-  "4": "ssh-shell"
+  "4": "ssh-shell",
 };
 
 export interface StartupModePromptDeps {
@@ -19,12 +19,12 @@ export interface StartupModePromptDeps {
 
 const defaultDeps: StartupModePromptDeps = {
   isInteractiveTerminal: () => Boolean(process.stdin.isTTY && process.stdout.isTTY),
-  promptInput: promptInput
+  promptInput: promptInput,
 };
 
 export async function resolvePromptStartupMode(
   requestedMode: StartupMode,
-  deps: StartupModePromptDeps = defaultDeps
+  deps: StartupModePromptDeps = defaultDeps,
 ): Promise<StartupMode> {
   if (requestedMode !== "prompt") {
     return requestedMode;
@@ -41,7 +41,7 @@ export async function resolvePromptStartupMode(
     formatPromptChoice(2, "ssh-codex"),
     formatPromptChoice(3, "web"),
     formatPromptChoice(4, "ssh-shell"),
-    `Enter choice [1/${PROMPT_FALLBACK_MODE}]: `
+    `Enter choice [1/${PROMPT_FALLBACK_MODE}]: `,
   ].join("\n");
   for (let attempt = 0; attempt < PROMPT_MAX_ATTEMPTS; attempt += 1) {
     const answer = (await deps.promptInput(question)).trim().toLowerCase();
@@ -53,7 +53,7 @@ export async function resolvePromptStartupMode(
   }
 
   throw new Error(
-    `Invalid startup mode selection after ${PROMPT_MAX_ATTEMPTS} attempts. Expected one of ssh-opencode|ssh-codex|web|ssh-shell.`
+    `Invalid startup mode selection after ${PROMPT_MAX_ATTEMPTS} attempts. Expected one of ssh-opencode|ssh-codex|web|ssh-shell.`,
   );
 }
 
@@ -72,7 +72,7 @@ function resolvePromptAnswer(value: string): Exclude<StartupMode, "prompt"> | un
 async function promptInput(question: string): Promise<string> {
   const readline = createInterface({
     input: process.stdin,
-    output: process.stdout
+    output: process.stdout,
   });
 
   try {

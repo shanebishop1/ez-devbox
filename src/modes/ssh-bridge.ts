@@ -7,17 +7,12 @@ import { buildSshdConfig, runLocalCommand } from "./ssh-bridge.commands.js";
 import { SSH_HOST, SSH_SHORT_TIMEOUT_MS, SSH_USER_FALLBACK } from "./ssh-bridge.constants.js";
 import { ensureSshBridgeDependencies } from "./ssh-bridge.dependencies.js";
 import { allocateSshBridgePorts } from "./ssh-bridge.ports.js";
-import type {
-  SshBridgePorts,
-  SshBridgeSession,
-  SshBridgeSessionArtifacts,
-  SshModeDeps
-} from "./ssh-bridge.types.js";
+import type { SshBridgePorts, SshBridgeSession, SshBridgeSessionArtifacts, SshModeDeps } from "./ssh-bridge.types.js";
 import { quoteShellArg, toWsUrl } from "./ssh-bridge.utils.js";
 
 export type { SshBridgePorts, SshBridgeSession, SshBridgeSessionArtifacts, SshModeDeps };
-export { buildInteractiveRemoteCommand, buildSshClientArgs, runInteractiveSshSession } from "./ssh-bridge.commands.js";
 export { cleanupSshBridgeSession } from "./ssh-bridge.cleanup.js";
+export { buildInteractiveRemoteCommand, buildSshClientArgs, runInteractiveSshSession } from "./ssh-bridge.commands.js";
 export { allocateSshBridgePorts } from "./ssh-bridge.ports.js";
 export { stageInteractiveStartupEnv } from "./ssh-bridge.startup-env.js";
 
@@ -57,30 +52,30 @@ export async function prepareSshBridgeSession(handle: SandboxHandle): Promise<Ss
     sshdConfigPath: `${sessionDir}/sshd_config`,
     sshdPidPath: `${sessionDir}/sshd.pid`,
     websockifyPidPath: `${sessionDir}/websockify.pid`,
-    websockifyLogPath: `${sessionDir}/websockify.log`
+    websockifyLogPath: `${sessionDir}/websockify.log`,
   } satisfies SshBridgeSessionArtifacts;
 
   logger.verbose("SSH bridge: configuring remote sshd/websockify.");
   await handle.run(
     `bash -lc 'mkdir -p ${quoteShellArg(`${remoteHome}/.ez-devbox-ssh`)} && chmod 700 ${quoteShellArg(
-      `${remoteHome}/.ez-devbox-ssh`
+      `${remoteHome}/.ez-devbox-ssh`,
     )} && rm -rf ${quoteShellArg(sessionDir)} && mkdir -p ${quoteShellArg(sessionDir)} && chmod 700 ${quoteShellArg(sessionDir)}'`,
-    { timeoutMs: SSH_SHORT_TIMEOUT_MS }
+    { timeoutMs: SSH_SHORT_TIMEOUT_MS },
   );
 
   const publicKeyBase64 = Buffer.from(publicKey, "utf8").toString("base64");
 
   await handle.run(
     `bash -lc 'printf %s ${publicKeyBase64} | base64 -d > ${quoteShellArg(artifacts.authorizedKeysPath)} && chmod 600 ${quoteShellArg(artifacts.authorizedKeysPath)}'`,
-    { timeoutMs: SSH_SHORT_TIMEOUT_MS }
+    { timeoutMs: SSH_SHORT_TIMEOUT_MS },
   );
 
   await handle.run(`ssh-keygen -t ed25519 -N "" -f ${quoteShellArg(artifacts.hostPrivateKeyPath)} -q`, {
-    timeoutMs: SSH_SHORT_TIMEOUT_MS
+    timeoutMs: SSH_SHORT_TIMEOUT_MS,
   });
 
   const hostKeyResult = await handle.run(`bash -lc 'cat ${quoteShellArg(artifacts.hostPublicKeyPath)}'`, {
-    timeoutMs: SSH_SHORT_TIMEOUT_MS
+    timeoutMs: SSH_SHORT_TIMEOUT_MS,
   });
 
   const hostPublicKey = hostKeyResult.stdout.trim();
@@ -95,16 +90,18 @@ export async function prepareSshBridgeSession(handle: SandboxHandle): Promise<Ss
 
   await handle.run(
     `bash -lc 'cat > ${quoteShellArg(artifacts.sshdConfigPath)} <<"EOF"\n${buildSshdConfig(artifacts)}\nEOF'`,
-    { timeoutMs: SSH_SHORT_TIMEOUT_MS }
+    { timeoutMs: SSH_SHORT_TIMEOUT_MS },
   );
 
   await handle.run("sudo mkdir -p /run/sshd", { timeoutMs: SSH_SHORT_TIMEOUT_MS });
-  await handle.run(`sudo /usr/sbin/sshd -f ${quoteShellArg(artifacts.sshdConfigPath)}`, { timeoutMs: SSH_SHORT_TIMEOUT_MS });
+  await handle.run(`sudo /usr/sbin/sshd -f ${quoteShellArg(artifacts.sshdConfigPath)}`, {
+    timeoutMs: SSH_SHORT_TIMEOUT_MS,
+  });
   await handle.run(
     `nohup websockify 0.0.0.0:${artifacts.websockifyPort} 127.0.0.1:${artifacts.sshdPort} >${quoteShellArg(
-      artifacts.websockifyLogPath
+      artifacts.websockifyLogPath,
     )} 2>&1 & echo $! > ${quoteShellArg(artifacts.websockifyPidPath)}`,
-    { timeoutMs: SSH_SHORT_TIMEOUT_MS }
+    { timeoutMs: SSH_SHORT_TIMEOUT_MS },
   );
 
   const wsUrl = toWsUrl(await handle.getHost(artifacts.websockifyPort));
@@ -116,6 +113,6 @@ export async function prepareSshBridgeSession(handle: SandboxHandle): Promise<Ss
     knownHostsPath,
     wsUrl,
     remoteUser,
-    artifacts
+    artifacts,
   };
 }

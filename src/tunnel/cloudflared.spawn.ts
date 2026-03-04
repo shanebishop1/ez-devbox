@@ -5,7 +5,7 @@ export const CLOUDFLARED_DOCKER_FALLBACK_IMAGE = "cloudflare/cloudflared:2024.11
 
 export function spawnLocalCloudflared(upstreamUrl: string): CloudflaredProcess {
   return spawn("cloudflared", ["tunnel", "--no-autoupdate", "--url", upstreamUrl], {
-    stdio: ["ignore", "pipe", "pipe"]
+    stdio: ["ignore", "pipe", "pipe"],
   });
 }
 
@@ -17,16 +17,10 @@ export function spawnDockerCloudflared(upstreamUrl: string): CloudflaredProcess 
 
   const dockerReachableUrl = toDockerReachableUrl(upstreamUrl);
 
-  args.push(
-    CLOUDFLARED_DOCKER_FALLBACK_IMAGE,
-    "tunnel",
-    "--no-autoupdate",
-    "--url",
-    dockerReachableUrl
-  );
+  args.push(CLOUDFLARED_DOCKER_FALLBACK_IMAGE, "tunnel", "--no-autoupdate", "--url", dockerReachableUrl);
 
   return spawn("docker", args, {
-    stdio: ["ignore", "pipe", "pipe"]
+    stdio: ["ignore", "pipe", "pipe"],
   });
 }
 

@@ -20,7 +20,7 @@ describe("template strategy scaffolding", () => {
       alias: "my-opencode-codex",
       withGhTooling: true,
       withSshStack: true,
-      version: "1.2.3"
+      version: "1.2.3",
     });
 
     expect(definition.flags.withGhTooling).toBe(true);
@@ -33,7 +33,7 @@ describe("template strategy scaffolding", () => {
     const definition = buildTemplateDefinition({
       alias: "my-opencode-codex",
       withGhTooling: true,
-      withSshStack: true
+      withSshStack: true,
     });
 
     const lines = renderTemplatePlanLines(definition);

@@ -8,9 +8,9 @@ describe("resolveHostGhToken", () => {
     const token = await resolveHostGhToken(
       {
         GH_TOKEN: "  gh-token  ",
-        GITHUB_TOKEN: "  github-token  "
+        GITHUB_TOKEN: "  github-token  ",
       },
-      { execCommand }
+      { execCommand },
     );
 
     expect(token).toBe("gh-token");
@@ -23,9 +23,9 @@ describe("resolveHostGhToken", () => {
     const token = await resolveHostGhToken(
       {
         GH_TOKEN: "   ",
-        GITHUB_TOKEN: "  github-token  "
+        GITHUB_TOKEN: "  github-token  ",
       },
-      { execCommand }
+      { execCommand },
     );
 
     expect(token).toBe("github-token");
