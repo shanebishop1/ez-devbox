@@ -1,13 +1,17 @@
 import { describe, expect, it } from "vitest";
 import {
-  PromptCancelledError,
   isPromptCancelledError,
-  normalizePromptCancelledError
+  normalizePromptCancelledError,
+  PromptCancelledError,
 } from "../src/cli/prompt-cancelled.js";
 
 describe("prompt cancellation helper", () => {
   it("normalizes readline abort errors into PromptCancelledError", () => {
-    const normalized = normalizePromptCancelledError({ name: "AbortError", code: "ABORT_ERR", message: "The operation was aborted" });
+    const normalized = normalizePromptCancelledError({
+      name: "AbortError",
+      code: "ABORT_ERR",
+      message: "The operation was aborted",
+    });
 
     expect(normalized).toBeInstanceOf(PromptCancelledError);
     expect(normalized?.message).toBe("Prompt cancelled.");

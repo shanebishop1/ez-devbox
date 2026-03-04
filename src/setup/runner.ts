@@ -1,4 +1,4 @@
-import { resolveRetryPolicy, type RetryPolicy, type SleepFn, withRetry } from "./retry.js";
+import { type RetryPolicy, resolveRetryPolicy, type SleepFn, withRetry } from "./retry.js";
 
 export interface SetupRepoConfig {
   name: string;
@@ -60,7 +60,14 @@ export type SetupRunnerEvent =
       error: string;
     }
   | { type: "step:success"; repo: string; step: SetupStepSummary["step"]; command: string; attempts: number }
-  | { type: "step:failure"; repo: string; step: SetupStepSummary["step"]; command: string; attempts: number; error: string };
+  | {
+      type: "step:failure";
+      repo: string;
+      step: SetupStepSummary["step"];
+      command: string;
+      attempts: number;
+      error: string;
+    };
 
 export interface RunSetupPipelineOptions {
   retryPolicy?: Partial<RetryPolicy>;
@@ -75,7 +82,7 @@ export interface RunSetupPipelineOptions {
 export async function runSetupPipeline(
   repos: SetupRepoConfig[],
   executor: SetupCommandExecutor,
-  options: RunSetupPipelineOptions = {}
+  options: RunSetupPipelineOptions = {},
 ): Promise<SetupPipelineResult> {
   const retryPolicy = resolveRetryPolicy(options.retryPolicy);
   const continueOnError = options.continueOnError ?? false;
@@ -84,7 +91,7 @@ export async function runSetupPipeline(
   if (repos.length === 0) {
     return {
       success: true,
-      repos: []
+      repos: [],
     };
   }
 
@@ -131,7 +138,7 @@ export async function runSetupPipeline(
 
   return {
     success: repoResults.every((entry) => entry.success),
-    repos: repoResults
+    repos: repoResults,
   };
 }
 
@@ -140,7 +147,7 @@ async function runSetupPipelineSequential(
   executor: SetupCommandExecutor,
   options: RunSetupPipelineOptions,
   retryPolicy: RetryPolicy,
-  continueOnError: boolean
+  continueOnError: boolean,
 ): Promise<SetupPipelineResult> {
   const repoResults: SetupRepoSummary[] = [];
 
@@ -157,7 +164,7 @@ async function runSetupPipelineSequential(
 
   return {
     success: repoResults.every((entry) => entry.success),
-    repos: repoResults
+    repos: repoResults,
   };
 }
 
@@ -165,7 +172,7 @@ async function runSetupForRepo(
   repo: SetupRepoConfig,
   executor: SetupCommandExecutor,
   options: RunSetupPipelineOptions,
-  retryPolicy: RetryPolicy
+  retryPolicy: RetryPolicy,
 ): Promise<SetupRepoSummary> {
   const stepDefinitions = [{ step: "setup_command" as const, command: repo.setup_command.trim() }];
   const stepSummaries: SetupStepSummary[] = [];
@@ -178,7 +185,7 @@ async function runSetupForRepo(
         command: "",
         success: true,
         attempts: 0,
-        skipped: true
+        skipped: true,
       });
       continue;
     }
@@ -193,14 +200,14 @@ async function runSetupForRepo(
             repo: repo.name,
             step: stepDefinition.step,
             command: stepDefinition.command,
-            attempt
+            attempt,
           });
 
           const result = await executor.run(stepDefinition.command, {
             cwd: repo.path,
             env: {
               ...(options.baseEnv ?? {}),
-              ...repo.setup_env
+              ...repo.setup_env,
             },
             timeoutMs: options.timeoutMs,
             onStdoutLine: (line) => {
@@ -208,7 +215,7 @@ async function runSetupForRepo(
             },
             onStderrLine: (line) => {
               options.onEvent?.({ type: "step:stderr", repo: repo.name, step: stepDefinition.step, line });
-            }
+            },
           });
 
           if (result.exitCode !== 0) {
@@ -227,10 +234,10 @@ async function runSetupForRepo(
               command: stepDefinition.command,
               attempt,
               nextAttempt,
-              error: toErrorMessage(error)
+              error: toErrorMessage(error),
             });
-          }
-        }
+          },
+        },
       );
 
       stepSummaries.push({
@@ -238,14 +245,14 @@ async function runSetupForRepo(
         command: stepDefinition.command,
         success: true,
         attempts,
-        skipped: false
+        skipped: false,
       });
       options.onEvent?.({
         type: "step:success",
         repo: repo.name,
         step: stepDefinition.step,
         command: stepDefinition.command,
-        attempts
+        attempts,
       });
     } catch (error) {
       repoSuccess = false;
@@ -256,7 +263,7 @@ async function runSetupForRepo(
         success: false,
         attempts,
         skipped: false,
-        error: errorMessage
+        error: errorMessage,
       });
       options.onEvent?.({
         type: "step:failure",
@@ -264,7 +271,7 @@ async function runSetupForRepo(
         step: stepDefinition.step,
         command: stepDefinition.command,
         attempts,
-        error: errorMessage
+        error: errorMessage,
       });
       break;
     }
@@ -274,7 +281,7 @@ async function runSetupForRepo(
     repo: repo.name,
     path: repo.path,
     success: repoSuccess,
-    steps: stepSummaries
+    steps: stepSummaries,
   };
 }
 

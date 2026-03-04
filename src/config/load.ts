@@ -1,12 +1,12 @@
 import { resolve } from "node:path";
-import { parseRawLauncherConfig } from "./load.raw-parse.js";
 import { resolveLauncherConfigPath } from "./load.paths.js";
+import { parseRawLauncherConfig } from "./load.raw-parse.js";
 import { readEnvFile, readTomlConfig } from "./load.readers.js";
-import type { LoadedLauncherConfig, LoadConfigOptions } from "./load.types.js";
+import type { LoadConfigOptions, LoadedLauncherConfig } from "./load.types.js";
 import { assertRequiredE2BApiKey, validateResolvedLauncherConfig } from "./load.validation.js";
 import type { ResolvedLauncherConfig } from "./schema.js";
 
-export type { LoadedLauncherConfig, LoadConfigOptions } from "./load.types.js";
+export type { LoadConfigOptions, LoadedLauncherConfig } from "./load.types.js";
 
 export async function loadConfig(options: LoadConfigOptions = {}): Promise<ResolvedLauncherConfig> {
   const loaded = await loadConfigWithMetadata(options);
@@ -24,7 +24,7 @@ export async function loadConfigWithMetadata(options: LoadConfigOptions = {}): P
   const envSource = options.env ?? process.env;
   const mergedEnv = {
     ...parsedEnv,
-    ...envSource
+    ...envSource,
   };
 
   assertRequiredE2BApiKey(mergedEnv);
@@ -36,6 +36,6 @@ export async function loadConfigWithMetadata(options: LoadConfigOptions = {}): P
     config: resolved,
     configPath,
     createdConfig: resolvedPath.created,
-    scope: resolvedPath.scope
+    scope: resolvedPath.scope,
   };
 }

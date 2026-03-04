@@ -16,7 +16,7 @@ export function resolveWebServerPassword(envSource: Record<string, string | unde
 export function addWebServerPasswordForWebMode(
   startupEnv: Record<string, string>,
   mode: "ssh-opencode" | "ssh-codex" | "web" | "ssh-shell",
-  webServerPassword: string | undefined
+  webServerPassword: string | undefined,
 ): Record<string, string> {
   const base = removeOpenCodeServerPassword(startupEnv);
   if (mode !== "web" || webServerPassword === undefined) {
@@ -25,7 +25,7 @@ export function addWebServerPasswordForWebMode(
 
   return {
     ...base,
-    [OPENCODE_SERVER_PASSWORD_ENV_VAR]: webServerPassword
+    [OPENCODE_SERVER_PASSWORD_ENV_VAR]: webServerPassword,
   };
 }
 
@@ -53,5 +53,7 @@ export function parseStartupModeValue(value: string | undefined): StartupMode {
 }
 
 function isStartupMode(value: string | undefined): value is StartupMode {
-  return value === "prompt" || value === "ssh-opencode" || value === "ssh-codex" || value === "web" || value === "ssh-shell";
+  return (
+    value === "prompt" || value === "ssh-opencode" || value === "ssh-codex" || value === "web" || value === "ssh-shell"
+  );
 }

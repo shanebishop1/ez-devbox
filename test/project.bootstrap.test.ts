@@ -11,8 +11,8 @@ function createRepo(name: string): ResolvedProjectRepoConfig {
     setup_command: "npm ci",
     setup_env: {},
     startup_env: {
-      REPO_NAME: name
-    }
+      REPO_NAME: name,
+    },
   };
 }
 
@@ -27,10 +27,10 @@ function createConfig(overrides?: Partial<ResolvedLauncherConfig["project"]>): R
       reuse: true,
       name: "ez-devbox",
       timeout_ms: 1000,
-      delete_on_exit: false
+      delete_on_exit: false,
     },
     startup: {
-      mode: "prompt"
+      mode: "prompt",
     },
     project: {
       mode: "single",
@@ -42,26 +42,26 @@ function createConfig(overrides?: Partial<ResolvedLauncherConfig["project"]>): R
       setup_concurrency: 1,
       setup_continue_on_error: false,
       repos: [],
-      ...(overrides ?? {})
+      ...(overrides ?? {}),
     },
     env: {
-      pass_through: []
+      pass_through: [],
     },
     opencode: {
       config_dir: "",
-      auth_path: ""
+      auth_path: "",
     },
     codex: {
       config_dir: "",
-      auth_path: ""
+      auth_path: "",
     },
     gh: {
       enabled: false,
-      config_dir: ""
+      config_dir: "",
     },
     tunnel: {
-      ports: []
-    }
+      ports: [],
+    },
   };
 }
 
@@ -72,7 +72,7 @@ function createHandle(): SandboxHandle {
     writeFile: vi.fn().mockResolvedValue(undefined),
     getHost: vi.fn().mockResolvedValue(""),
     setTimeout: vi.fn().mockResolvedValue(undefined),
-    kill: vi.fn().mockResolvedValue(undefined)
+    kill: vi.fn().mockResolvedValue(undefined),
   };
 }
 
@@ -85,7 +85,7 @@ describe("project bootstrap", () => {
     const ensureProjectDirectory = vi.fn().mockResolvedValue(undefined);
     const provisionSelectedRepos = vi.fn().mockResolvedValue([
       { repo: "alpha", path: "/workspace/alpha", cloned: false, reused: true, branchSwitched: false },
-      { repo: "beta", path: "/workspace/beta", cloned: false, reused: true, branchSwitched: false }
+      { repo: "beta", path: "/workspace/beta", cloned: false, reused: true, branchSwitched: false },
     ]);
     const runSetupForRepos = vi.fn().mockResolvedValue({ success: true, repos: [] });
 
@@ -93,14 +93,19 @@ describe("project bootstrap", () => {
       deps: {
         ensureProjectDirectory,
         provisionSelectedRepos,
-        runSetupForRepos
-      }
+        runSetupForRepos,
+      },
     });
 
     expect(result.selectedRepoNames).toEqual(["alpha", "beta"]);
     expect(result.workingDirectory).toBe("/workspace");
     expect(result.startupEnv).toEqual({});
-    expect(provisionSelectedRepos).toHaveBeenCalledWith(handle, "/workspace", repos, expect.objectContaining({ timeoutMs: 1000 }));
+    expect(provisionSelectedRepos).toHaveBeenCalledWith(
+      handle,
+      "/workspace",
+      repos,
+      expect.objectContaining({ timeoutMs: 1000 }),
+    );
   });
 
   it("keeps auto working_dir behavior for none/single/multiple repos", async () => {
@@ -112,19 +117,25 @@ describe("project bootstrap", () => {
       deps: {
         ensureProjectDirectory,
         provisionSelectedRepos: vi.fn().mockResolvedValue([]),
-        runSetupForRepos
-      }
+        runSetupForRepos,
+      },
     });
 
-    const singleResult = await bootstrapProjectWorkspace(handle, createConfig({ repos: [createRepo("alpha")], working_dir: "auto" }), {
-      deps: {
-        ensureProjectDirectory,
-        provisionSelectedRepos: vi.fn().mockResolvedValue([
-          { repo: "alpha", path: "/workspace/alpha", cloned: false, reused: true, branchSwitched: false }
-        ]),
-        runSetupForRepos
-      }
-    });
+    const singleResult = await bootstrapProjectWorkspace(
+      handle,
+      createConfig({ repos: [createRepo("alpha")], working_dir: "auto" }),
+      {
+        deps: {
+          ensureProjectDirectory,
+          provisionSelectedRepos: vi
+            .fn()
+            .mockResolvedValue([
+              { repo: "alpha", path: "/workspace/alpha", cloned: false, reused: true, branchSwitched: false },
+            ]),
+          runSetupForRepos,
+        },
+      },
+    );
 
     const multiResult = await bootstrapProjectWorkspace(
       handle,
@@ -134,11 +145,11 @@ describe("project bootstrap", () => {
           ensureProjectDirectory,
           provisionSelectedRepos: vi.fn().mockResolvedValue([
             { repo: "alpha", path: "/workspace/alpha", cloned: false, reused: true, branchSwitched: false },
-            { repo: "beta", path: "/workspace/beta", cloned: false, reused: true, branchSwitched: false }
+            { repo: "beta", path: "/workspace/beta", cloned: false, reused: true, branchSwitched: false },
           ]),
-          runSetupForRepos
-        }
-      }
+          runSetupForRepos,
+        },
+      },
     );
 
     expect(noneResult.workingDirectory).toBeUndefined();
@@ -153,11 +164,13 @@ describe("project bootstrap", () => {
     const result = await bootstrapProjectWorkspace(handle, config, {
       deps: {
         ensureProjectDirectory: vi.fn().mockResolvedValue(undefined),
-        provisionSelectedRepos: vi.fn().mockResolvedValue([
-          { repo: "alpha", path: "/workspace/alpha", cloned: false, reused: true, branchSwitched: false }
-        ]),
-        runSetupForRepos: vi.fn().mockResolvedValue({ success: true, repos: [] })
-      }
+        provisionSelectedRepos: vi
+          .fn()
+          .mockResolvedValue([
+            { repo: "alpha", path: "/workspace/alpha", cloned: false, reused: true, branchSwitched: false },
+          ]),
+        runSetupForRepos: vi.fn().mockResolvedValue({ success: true, repos: [] }),
+      },
     });
 
     expect(result.workingDirectory).toBe("/opt/custom-cwd");
@@ -170,11 +183,13 @@ describe("project bootstrap", () => {
     const result = await bootstrapProjectWorkspace(handle, config, {
       deps: {
         ensureProjectDirectory: vi.fn().mockResolvedValue(undefined),
-        provisionSelectedRepos: vi.fn().mockResolvedValue([
-          { repo: "alpha", path: "/workspace/alpha", cloned: false, reused: true, branchSwitched: false }
-        ]),
-        runSetupForRepos: vi.fn().mockResolvedValue({ success: true, repos: [] })
-      }
+        provisionSelectedRepos: vi
+          .fn()
+          .mockResolvedValue([
+            { repo: "alpha", path: "/workspace/alpha", cloned: false, reused: true, branchSwitched: false },
+          ]),
+        runSetupForRepos: vi.fn().mockResolvedValue({ success: true, repos: [] }),
+      },
     });
 
     expect(result.workingDirectory).toBe("/workspace/custom-cwd");
@@ -185,9 +200,11 @@ describe("project bootstrap", () => {
     const config = createConfig({ mode: "single", active: "prompt", repos });
     const handle = createHandle();
 
-    const provisionSelectedRepos = vi.fn().mockResolvedValue([
-      { repo: "beta", path: "/workspace/beta", cloned: true, reused: false, branchSwitched: false }
-    ]);
+    const provisionSelectedRepos = vi
+      .fn()
+      .mockResolvedValue([
+        { repo: "beta", path: "/workspace/beta", cloned: true, reused: false, branchSwitched: false },
+      ]);
 
     const result = await bootstrapProjectWorkspace(handle, config, {
       isInteractiveTerminal: () => true,
@@ -195,8 +212,8 @@ describe("project bootstrap", () => {
       deps: {
         ensureProjectDirectory: vi.fn().mockResolvedValue(undefined),
         provisionSelectedRepos,
-        runSetupForRepos: vi.fn().mockResolvedValue({ success: true, repos: [] })
-      }
+        runSetupForRepos: vi.fn().mockResolvedValue({ success: true, repos: [] }),
+      },
     });
 
     expect(result.selectedRepoNames).toEqual(["beta"]);
@@ -206,7 +223,7 @@ describe("project bootstrap", () => {
       handle,
       "/workspace",
       [repos[1]],
-      expect.objectContaining({ timeoutMs: 1000 })
+      expect.objectContaining({ timeoutMs: 1000 }),
     );
   });
 
@@ -216,9 +233,11 @@ describe("project bootstrap", () => {
     const handle = createHandle();
 
     const promptInput = vi.fn().mockResolvedValue("1");
-    const provisionSelectedRepos = vi.fn().mockResolvedValue([
-      { repo: "beta", path: "/workspace/beta", cloned: true, reused: false, branchSwitched: false }
-    ]);
+    const provisionSelectedRepos = vi
+      .fn()
+      .mockResolvedValue([
+        { repo: "beta", path: "/workspace/beta", cloned: true, reused: false, branchSwitched: false },
+      ]);
 
     const result = await bootstrapProjectWorkspace(handle, config, {
       isInteractiveTerminal: () => true,
@@ -227,8 +246,8 @@ describe("project bootstrap", () => {
       deps: {
         ensureProjectDirectory: vi.fn().mockResolvedValue(undefined),
         provisionSelectedRepos,
-        runSetupForRepos: vi.fn().mockResolvedValue({ success: true, repos: [] })
-      }
+        runSetupForRepos: vi.fn().mockResolvedValue({ success: true, repos: [] }),
+      },
     });
 
     expect(result.selectedRepoNames).toEqual(["beta"]);
@@ -237,7 +256,7 @@ describe("project bootstrap", () => {
       handle,
       "/workspace",
       [repos[1]],
-      expect.objectContaining({ timeoutMs: 1000 })
+      expect.objectContaining({ timeoutMs: 1000 }),
     );
   });
 
@@ -247,9 +266,11 @@ describe("project bootstrap", () => {
     const handle = createHandle();
 
     const promptInput = vi.fn().mockResolvedValue("2");
-    const provisionSelectedRepos = vi.fn().mockResolvedValue([
-      { repo: "alpha", path: "/workspace/alpha", cloned: true, reused: false, branchSwitched: false }
-    ]);
+    const provisionSelectedRepos = vi
+      .fn()
+      .mockResolvedValue([
+        { repo: "alpha", path: "/workspace/alpha", cloned: true, reused: false, branchSwitched: false },
+      ]);
 
     const result = await bootstrapProjectWorkspace(handle, config, {
       isInteractiveTerminal: () => false,
@@ -257,8 +278,8 @@ describe("project bootstrap", () => {
       deps: {
         ensureProjectDirectory: vi.fn().mockResolvedValue(undefined),
         provisionSelectedRepos,
-        runSetupForRepos: vi.fn().mockResolvedValue({ success: true, repos: [] })
-      }
+        runSetupForRepos: vi.fn().mockResolvedValue({ success: true, repos: [] }),
+      },
     });
 
     expect(result.selectedRepoNames).toEqual(["alpha"]);
@@ -270,9 +291,11 @@ describe("project bootstrap", () => {
     const config = createConfig({ mode: "single", active: "name", active_name: "beta", repos });
     const handle = createHandle();
     const promptInput = vi.fn().mockResolvedValue("1");
-    const provisionSelectedRepos = vi.fn().mockResolvedValue([
-      { repo: "beta", path: "/workspace/beta", cloned: true, reused: false, branchSwitched: false }
-    ]);
+    const provisionSelectedRepos = vi
+      .fn()
+      .mockResolvedValue([
+        { repo: "beta", path: "/workspace/beta", cloned: true, reused: false, branchSwitched: false },
+      ]);
 
     const result = await bootstrapProjectWorkspace(handle, config, {
       isInteractiveTerminal: () => true,
@@ -280,8 +303,8 @@ describe("project bootstrap", () => {
       deps: {
         ensureProjectDirectory: vi.fn().mockResolvedValue(undefined),
         provisionSelectedRepos,
-        runSetupForRepos: vi.fn().mockResolvedValue({ success: true, repos: [] })
-      }
+        runSetupForRepos: vi.fn().mockResolvedValue({ success: true, repos: [] }),
+      },
     });
 
     expect(result.selectedRepoNames).toEqual(["beta"]);
@@ -293,9 +316,11 @@ describe("project bootstrap", () => {
     const config = createConfig({ mode: "single", active: "index", active_index: 2, repos });
     const handle = createHandle();
     const promptInput = vi.fn().mockResolvedValue("1");
-    const provisionSelectedRepos = vi.fn().mockResolvedValue([
-      { repo: "gamma", path: "/workspace/gamma", cloned: true, reused: false, branchSwitched: false }
-    ]);
+    const provisionSelectedRepos = vi
+      .fn()
+      .mockResolvedValue([
+        { repo: "gamma", path: "/workspace/gamma", cloned: true, reused: false, branchSwitched: false },
+      ]);
 
     const result = await bootstrapProjectWorkspace(handle, config, {
       isInteractiveTerminal: () => false,
@@ -303,8 +328,8 @@ describe("project bootstrap", () => {
       deps: {
         ensureProjectDirectory: vi.fn().mockResolvedValue(undefined),
         provisionSelectedRepos,
-        runSetupForRepos: vi.fn().mockResolvedValue({ success: true, repos: [] })
-      }
+        runSetupForRepos: vi.fn().mockResolvedValue({ success: true, repos: [] }),
+      },
     });
 
     expect(result.selectedRepoNames).toEqual(["gamma"]);
@@ -322,11 +347,13 @@ describe("project bootstrap", () => {
       isConnect: true,
       deps: {
         ensureProjectDirectory: vi.fn().mockResolvedValue(undefined),
-        provisionSelectedRepos: vi.fn().mockResolvedValue([
-          { repo: "alpha", path: "/workspace/alpha", cloned: false, reused: true, branchSwitched: false }
-        ]),
-        runSetupForRepos
-      }
+        provisionSelectedRepos: vi
+          .fn()
+          .mockResolvedValue([
+            { repo: "alpha", path: "/workspace/alpha", cloned: false, reused: true, branchSwitched: false },
+          ]),
+        runSetupForRepos,
+      },
     });
 
     expect(runSetupForRepos).not.toHaveBeenCalled();
@@ -342,11 +369,13 @@ describe("project bootstrap", () => {
       isConnect: true,
       deps: {
         ensureProjectDirectory: vi.fn().mockResolvedValue(undefined),
-        provisionSelectedRepos: vi.fn().mockResolvedValue([
-          { repo: "alpha", path: "/workspace/alpha", cloned: true, reused: false, branchSwitched: false }
-        ]),
-        runSetupForRepos: runSetupForReposA
-      }
+        provisionSelectedRepos: vi
+          .fn()
+          .mockResolvedValue([
+            { repo: "alpha", path: "/workspace/alpha", cloned: true, reused: false, branchSwitched: false },
+          ]),
+        runSetupForRepos: runSetupForReposA,
+      },
     });
 
     const runSetupForReposB = vi.fn().mockResolvedValue({ success: true, repos: [] });
@@ -354,11 +383,13 @@ describe("project bootstrap", () => {
       isConnect: true,
       deps: {
         ensureProjectDirectory: vi.fn().mockResolvedValue(undefined),
-        provisionSelectedRepos: vi.fn().mockResolvedValue([
-          { repo: "alpha", path: "/workspace/alpha", cloned: false, reused: true, branchSwitched: false }
-        ]),
-        runSetupForRepos: runSetupForReposB
-      }
+        provisionSelectedRepos: vi
+          .fn()
+          .mockResolvedValue([
+            { repo: "alpha", path: "/workspace/alpha", cloned: false, reused: true, branchSwitched: false },
+          ]),
+        runSetupForRepos: runSetupForReposB,
+      },
     });
 
     expect(runSetupForReposA).toHaveBeenCalledTimes(1);
@@ -388,7 +419,7 @@ describe("project bootstrap", () => {
     });
     const handle = {
       ...createHandle(),
-      run
+      run,
     };
 
     const result = await bootstrapProjectWorkspace(handle, config);
@@ -396,14 +427,14 @@ describe("project bootstrap", () => {
     expect(result.selectedRepoNames).toEqual(["alpha"]);
     expect(run).toHaveBeenCalledWith(
       "if [ -e '/workspace/alpha' ]; then printf EZBOX_TRUE; else printf EZBOX_FALSE; fi",
-      expect.objectContaining({ timeoutMs: 1000 })
+      expect.objectContaining({ timeoutMs: 1000 }),
     );
   });
 
   it("uses GH_TOKEN variable in github clone URL when runtime token exists", async () => {
     const repo: ResolvedProjectRepoConfig = {
       ...createRepo("alpha"),
-      url: "https://github.com/acme/private.git"
+      url: "https://github.com/acme/private.git",
     };
     const config = createConfig({ repos: [repo] });
     const run = vi.fn().mockImplementation(async (command: string) => {
@@ -427,14 +458,14 @@ describe("project bootstrap", () => {
     });
     const handle = {
       ...createHandle(),
-      run
+      run,
     };
 
     await bootstrapProjectWorkspace(handle, config, {
       runtimeEnv: {
         GH_TOKEN: "gh-secret",
-        GITHUB_TOKEN: "github-secret"
-      }
+        GITHUB_TOKEN: "github-secret",
+      },
     });
 
     expect(run).toHaveBeenCalledWith(
@@ -443,16 +474,16 @@ describe("project bootstrap", () => {
         timeoutMs: 1000,
         envs: {
           GH_TOKEN: "gh-secret",
-          GITHUB_TOKEN: "github-secret"
-        }
-      })
+          GITHUB_TOKEN: "github-secret",
+        },
+      }),
     );
   });
 
   it("keeps plain github clone URL when runtime token is missing", async () => {
     const repo: ResolvedProjectRepoConfig = {
       ...createRepo("alpha"),
-      url: "https://github.com/acme/private.git"
+      url: "https://github.com/acme/private.git",
     };
     const config = createConfig({ repos: [repo] });
     const run = vi.fn().mockImplementation(async (command: string) => {
@@ -476,13 +507,13 @@ describe("project bootstrap", () => {
     });
     const handle = {
       ...createHandle(),
-      run
+      run,
     };
 
     await bootstrapProjectWorkspace(handle, config, {
       runtimeEnv: {
-        NODE_ENV: "test"
-      }
+        NODE_ENV: "test",
+      },
     });
 
     expect(run).toHaveBeenCalledWith(
@@ -490,16 +521,16 @@ describe("project bootstrap", () => {
       expect.objectContaining({
         timeoutMs: 1000,
         envs: {
-          NODE_ENV: "test"
-        }
-      })
+          NODE_ENV: "test",
+        },
+      }),
     );
   });
 
   it("redacts sensitive output in bootstrap command errors", async () => {
     const repo: ResolvedProjectRepoConfig = {
       ...createRepo("alpha"),
-      url: "https://github.com/acme/private.git"
+      url: "https://github.com/acme/private.git",
     };
     const config = createConfig({ repos: [repo] });
     const run = vi.fn().mockImplementation(async (command: string) => {
@@ -514,7 +545,7 @@ describe("project bootstrap", () => {
           stdout: "",
           stderr:
             "fatal: auth failed GH_TOKEN=ghp_secret https://x-access-token:ghp_secret@github.com/acme/private.git Authorization: Bearer abc123",
-          exitCode: 1
+          exitCode: 1,
         };
       }
 
@@ -522,11 +553,11 @@ describe("project bootstrap", () => {
     });
     const handle = {
       ...createHandle(),
-      run
+      run,
     };
 
     await expect(bootstrapProjectWorkspace(handle, config)).rejects.toThrow(
-      /GH_TOKEN=\[REDACTED\].*x-access-token:\[REDACTED\]@github\.com.*Bearer \[REDACTED\]/
+      /GH_TOKEN=\[REDACTED\].*x-access-token:\[REDACTED\]@github\.com.*Bearer \[REDACTED\]/,
     );
   });
 
@@ -557,7 +588,7 @@ describe("project bootstrap", () => {
 
     const handle = {
       ...createHandle(),
-      run
+      run,
     };
 
     await bootstrapProjectWorkspace(handle, config);
@@ -573,9 +604,9 @@ describe("project bootstrap", () => {
           GIT_AUTHOR_NAME: "E2B Launcher",
           GIT_AUTHOR_EMAIL: "launcher@example.local",
           GIT_COMMITTER_NAME: "E2B Launcher",
-          GIT_COMMITTER_EMAIL: "launcher@example.local"
-        }
-      })
+          GIT_COMMITTER_EMAIL: "launcher@example.local",
+        },
+      }),
     );
   });
 
@@ -603,14 +634,14 @@ describe("project bootstrap", () => {
 
     const handle = {
       ...createHandle(),
-      run
+      run,
     };
 
     await bootstrapProjectWorkspace(handle, config, {
       runtimeEnv: {
         PATH: "/custom/bin",
-        NODE_ENV: "test"
-      }
+        NODE_ENV: "test",
+      },
     });
 
     expect(run).not.toHaveBeenCalledWith('printf %s "$PATH"', expect.anything());
@@ -625,9 +656,9 @@ describe("project bootstrap", () => {
           GIT_AUTHOR_NAME: "E2B Launcher",
           GIT_AUTHOR_EMAIL: "launcher@example.local",
           GIT_COMMITTER_NAME: "E2B Launcher",
-          GIT_COMMITTER_EMAIL: "launcher@example.local"
-        }
-      })
+          GIT_COMMITTER_EMAIL: "launcher@example.local",
+        },
+      }),
     );
   });
 
@@ -658,14 +689,14 @@ describe("project bootstrap", () => {
 
     const handle = {
       ...createHandle(),
-      run
+      run,
     };
 
     await bootstrapProjectWorkspace(handle, config, {
       runtimeEnv: {
         GIT_AUTHOR_NAME: "Repo Bot",
-        GIT_AUTHOR_EMAIL: "repo-bot@example.com"
-      }
+        GIT_AUTHOR_EMAIL: "repo-bot@example.com",
+      },
     });
 
     expect(run).toHaveBeenCalledWith(
@@ -678,9 +709,9 @@ describe("project bootstrap", () => {
           GIT_AUTHOR_NAME: "Repo Bot",
           GIT_AUTHOR_EMAIL: "repo-bot@example.com",
           GIT_COMMITTER_NAME: "Repo Bot",
-          GIT_COMMITTER_EMAIL: "repo-bot@example.com"
-        }
-      })
+          GIT_COMMITTER_EMAIL: "repo-bot@example.com",
+        },
+      }),
     );
   });
 
@@ -695,7 +726,7 @@ describe("project bootstrap", () => {
         command: "npm ci",
         attempt: 1,
         nextAttempt: 2,
-        error: "deadline exceeded"
+        error: "deadline exceeded",
       });
       options.onEvent?.({ type: "step:success", repo: "alpha", step: "setup_command", command: "npm ci", attempts: 2 });
       return { success: true, repos: [] };
@@ -705,16 +736,18 @@ describe("project bootstrap", () => {
       onProgress: progress,
       deps: {
         ensureProjectDirectory: vi.fn().mockResolvedValue(undefined),
-        provisionSelectedRepos: vi.fn().mockResolvedValue([
-          { repo: "alpha", path: "/workspace/alpha", cloned: true, reused: false, branchSwitched: false }
-        ]),
-        runSetupForRepos
-      }
+        provisionSelectedRepos: vi
+          .fn()
+          .mockResolvedValue([
+            { repo: "alpha", path: "/workspace/alpha", cloned: true, reused: false, branchSwitched: false },
+          ]),
+        runSetupForRepos,
+      },
     });
 
     expect(progress).toHaveBeenCalledWith("Setup start: repo=alpha step=setup_command attempt=1");
     expect(progress).toHaveBeenCalledWith(
-      "Setup retry: repo=alpha step=setup_command attempt=1 next=2 error=deadline exceeded"
+      "Setup retry: repo=alpha step=setup_command attempt=1 next=2 error=deadline exceeded",
     );
     expect(progress).toHaveBeenCalledWith("Setup success: repo=alpha step=setup_command attempts=2");
   });
@@ -722,21 +755,27 @@ describe("project bootstrap", () => {
   it("passes setup_concurrency to setup runner options", async () => {
     const runSetupForRepos = vi.fn().mockResolvedValue({ success: true, repos: [] });
 
-    await bootstrapProjectWorkspace(createHandle(), createConfig({ repos: [createRepo("alpha")], setup_concurrency: 3 }), {
-      deps: {
-        ensureProjectDirectory: vi.fn().mockResolvedValue(undefined),
-        provisionSelectedRepos: vi.fn().mockResolvedValue([
-          { repo: "alpha", path: "/workspace/alpha", cloned: true, reused: false, branchSwitched: false }
-        ]),
-        runSetupForRepos
-      }
-    });
+    await bootstrapProjectWorkspace(
+      createHandle(),
+      createConfig({ repos: [createRepo("alpha")], setup_concurrency: 3 }),
+      {
+        deps: {
+          ensureProjectDirectory: vi.fn().mockResolvedValue(undefined),
+          provisionSelectedRepos: vi
+            .fn()
+            .mockResolvedValue([
+              { repo: "alpha", path: "/workspace/alpha", cloned: true, reused: false, branchSwitched: false },
+            ]),
+          runSetupForRepos,
+        },
+      },
+    );
 
     expect(runSetupForRepos).toHaveBeenCalledWith(
       expect.any(Object),
       expect.any(Array),
       expect.any(Array),
-      expect.objectContaining({ maxConcurrency: 3 })
+      expect.objectContaining({ maxConcurrency: 3 }),
     );
   });
 
@@ -744,7 +783,7 @@ describe("project bootstrap", () => {
     const repo: ResolvedProjectRepoConfig = {
       ...createRepo("alpha"),
       branch: "dev",
-      setup_command: ""
+      setup_command: "",
     };
     const config = createConfig({ repos: [repo] });
 
@@ -776,16 +815,22 @@ describe("project bootstrap", () => {
 
     const handle = {
       ...createHandle(),
-      run
+      run,
     };
 
     await bootstrapProjectWorkspace(handle, config);
 
-    expect(run).toHaveBeenCalledWith("git -C '/workspace/alpha' checkout 'dev'", expect.objectContaining({ timeoutMs: 1000 }));
-    expect(run).toHaveBeenCalledWith("git -C '/workspace/alpha' fetch origin 'dev'", expect.objectContaining({ timeoutMs: 1000 }));
+    expect(run).toHaveBeenCalledWith(
+      "git -C '/workspace/alpha' checkout 'dev'",
+      expect.objectContaining({ timeoutMs: 1000 }),
+    );
+    expect(run).toHaveBeenCalledWith(
+      "git -C '/workspace/alpha' fetch origin 'dev'",
+      expect.objectContaining({ timeoutMs: 1000 }),
+    );
     expect(run).toHaveBeenCalledWith(
       "git -C '/workspace/alpha' checkout -B 'dev' --track 'origin/dev'",
-      expect.objectContaining({ timeoutMs: 1000 })
+      expect.objectContaining({ timeoutMs: 1000 }),
     );
   });
 
@@ -793,7 +838,7 @@ describe("project bootstrap", () => {
     const repo: ResolvedProjectRepoConfig = {
       ...createRepo("alpha"),
       branch: "dev",
-      setup_command: ""
+      setup_command: "",
     };
     const config = createConfig({ repos: [repo] });
 
@@ -822,11 +867,11 @@ describe("project bootstrap", () => {
 
     const handle = {
       ...createHandle(),
-      run
+      run,
     };
 
     await expect(bootstrapProjectWorkspace(handle, config)).rejects.toThrow(
-      "Failed to checkout branch 'dev' in repo '/workspace/alpha'. Try updating project.repos[].branch."
+      "Failed to checkout branch 'dev' in repo '/workspace/alpha'. Try updating project.repos[].branch.",
     );
   });
 });

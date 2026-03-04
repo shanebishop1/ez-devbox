@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { resolveSandboxCreateEnv } from "../src/e2b/env.js";
 import type { ResolvedLauncherConfig } from "../src/config/schema.js";
+import { resolveSandboxCreateEnv } from "../src/e2b/env.js";
 
 describe("sandbox env resolution", () => {
   const baseConfig: ResolvedLauncherConfig = {
@@ -9,10 +9,10 @@ describe("sandbox env resolution", () => {
       reuse: true,
       name: "ez-devbox",
       timeout_ms: 1_800_000,
-      delete_on_exit: false
+      delete_on_exit: false,
     },
     startup: {
-      mode: "prompt"
+      mode: "prompt",
     },
     project: {
       mode: "single",
@@ -23,26 +23,26 @@ describe("sandbox env resolution", () => {
       setup_retries: 2,
       setup_concurrency: 1,
       setup_continue_on_error: false,
-      repos: []
+      repos: [],
     },
     env: {
-      pass_through: ["CUSTOM_TOKEN", "GITHUB_TOKEN"]
+      pass_through: ["CUSTOM_TOKEN", "GITHUB_TOKEN"],
     },
     opencode: {
       config_dir: "~/.config/opencode",
-      auth_path: "~/.local/share/opencode/auth.json"
+      auth_path: "~/.local/share/opencode/auth.json",
     },
     codex: {
       config_dir: "~/.codex",
-      auth_path: "~/.codex/auth.json"
+      auth_path: "~/.codex/auth.json",
     },
     gh: {
       enabled: false,
-      config_dir: "~/.config/gh"
+      config_dir: "~/.config/gh",
     },
     tunnel: {
-      ports: []
-    }
+      ports: [],
+    },
   };
 
   it("includes pass-through allowlist and built-ins", () => {
@@ -52,13 +52,13 @@ describe("sandbox env resolution", () => {
       GITHUB_TOKEN: "ghp_123",
       OPENCODE_SERVER_PASSWORD: "pw",
       FIRECRAWL_API_KEY: "fc-key",
-      UNUSED: "nope"
+      UNUSED: "nope",
     });
 
     expect(resolved.envs).toEqual({
       CUSTOM_TOKEN: "abc",
       OPENAI_API_KEY: "openai-key",
-      GITHUB_TOKEN: "ghp_123"
+      GITHUB_TOKEN: "ghp_123",
     });
   });
 
@@ -67,25 +67,25 @@ describe("sandbox env resolution", () => {
       {
         ...baseConfig,
         env: {
-          pass_through: [...baseConfig.env.pass_through, "FIRECRAWL_API_KEY", "FIRECRAWL_API_URL"]
-        }
+          pass_through: [...baseConfig.env.pass_through, "FIRECRAWL_API_KEY", "FIRECRAWL_API_URL"],
+        },
       },
       {
         FIRECRAWL_API_KEY: "fc-key",
-        FIRECRAWL_API_URL: "https://api.firecrawl.dev"
-      }
+        FIRECRAWL_API_URL: "https://api.firecrawl.dev",
+      },
     );
 
     expect(resolved.envs).toEqual({
       FIRECRAWL_API_KEY: "fc-key",
-      FIRECRAWL_API_URL: "https://api.firecrawl.dev"
+      FIRECRAWL_API_URL: "https://api.firecrawl.dev",
     });
   });
 
   it("skips empty values from env source", () => {
     const resolved = resolveSandboxCreateEnv(baseConfig, {
       CUSTOM_TOKEN: "",
-      OPENAI_API_KEY: "   "
+      OPENAI_API_KEY: "   ",
     });
 
     expect(resolved.envs).toEqual({});

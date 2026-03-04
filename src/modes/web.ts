@@ -3,32 +3,35 @@ import type { LaunchContextOptions, ModeLaunchResult } from "./index.js";
 
 const WEB_COMMAND = "nohup opencode serve --hostname 0.0.0.0 --port 3000 >/tmp/opencode-serve.log 2>&1 &";
 const WEB_READINESS_COMMAND =
-  "bash -lc 'for attempt in $(seq 1 30); do status=$(curl -s -o /dev/null -w \"%{http_code}\" http://127.0.0.1:3000/ || true); if [ \"$status\" = \"200\" ] || [ \"$status\" = \"401\" ]; then exit 0; fi; sleep 1; done; exit 1'";
+  'bash -lc \'for attempt in $(seq 1 30); do status=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:3000/ || true); if [ "$status" = "200" ] || [ "$status" = "401" ]; then exit 0; fi; sleep 1; done; exit 1\'';
 const WEB_AUTH_PROBE_COMMAND = "bash -lc 'curl -s -o /dev/null -w \"%{http_code}\" http://127.0.0.1:3000/ || true'";
 const WEB_START_TIMEOUT_MS = 10_000;
 const WEB_READY_TIMEOUT_MS = 35_000;
 const WEB_AUTH_TIMEOUT_MS = 10_000;
 
-export async function startWebMode(handle: SandboxHandle, launchContext: LaunchContextOptions = {}): Promise<ModeLaunchResult> {
+export async function startWebMode(
+  handle: SandboxHandle,
+  launchContext: LaunchContextOptions = {},
+): Promise<ModeLaunchResult> {
   const commandContext = {
     cwd: normalizeOptionalValue(launchContext.workingDirectory),
-    envs: launchContext.startupEnv ?? {}
+    envs: launchContext.startupEnv ?? {},
   };
 
   await handle.run(WEB_COMMAND, {
     ...(commandContext.cwd ? { cwd: commandContext.cwd } : {}),
     ...(Object.keys(commandContext.envs).length > 0 ? { envs: commandContext.envs } : {}),
-    timeoutMs: WEB_START_TIMEOUT_MS
+    timeoutMs: WEB_START_TIMEOUT_MS,
   });
   await handle.run(WEB_READINESS_COMMAND, {
     ...(commandContext.cwd ? { cwd: commandContext.cwd } : {}),
     ...(Object.keys(commandContext.envs).length > 0 ? { envs: commandContext.envs } : {}),
-    timeoutMs: WEB_READY_TIMEOUT_MS
+    timeoutMs: WEB_READY_TIMEOUT_MS,
   });
   const authProbe = await handle.run(WEB_AUTH_PROBE_COMMAND, {
     ...(commandContext.cwd ? { cwd: commandContext.cwd } : {}),
     ...(Object.keys(commandContext.envs).length > 0 ? { envs: commandContext.envs } : {}),
-    timeoutMs: WEB_AUTH_TIMEOUT_MS
+    timeoutMs: WEB_AUTH_TIMEOUT_MS,
   });
 
   const host = await handle.getHost(3000);
@@ -38,7 +41,7 @@ export async function startWebMode(handle: SandboxHandle, launchContext: LaunchC
 
   if (!authRequired) {
     throw new Error(
-      `Web mode startup requires authentication. Set OPENCODE_SERVER_PASSWORD in the sandbox environment before enabling web mode.`
+      `Web mode startup requires authentication. Set OPENCODE_SERVER_PASSWORD in the sandbox environment before enabling web mode.`,
     );
   }
 
@@ -51,9 +54,9 @@ export async function startWebMode(handle: SandboxHandle, launchContext: LaunchC
       status: "ready",
       port: 3000,
       authRequired,
-      authStatus
+      authStatus,
     },
-    message: `Started web mode in sandbox ${handle.sandboxId} at ${url}`
+    message: `Started web mode in sandbox ${handle.sandboxId} at ${url}`,
   };
 }
 

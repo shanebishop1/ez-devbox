@@ -1,6 +1,6 @@
 import { defaultConfig } from "./defaults.js";
-import type { ResolvedLauncherConfig } from "./schema.js";
 import type { JsonRecord } from "./load.types.js";
+import type { ResolvedLauncherConfig } from "./schema.js";
 
 const STARTUP_MODES = ["prompt", "ssh-opencode", "ssh-codex", "web", "ssh-shell"] as const;
 const PROJECT_MODES = ["single", "all"] as const;
@@ -16,35 +16,29 @@ export function parseRawLauncherConfig(rawConfig: JsonRecord): ResolvedLauncherC
   const ghRaw = getOptionalTable(rawConfig, "gh", "gh");
   const tunnelRaw = getOptionalTable(rawConfig, "tunnel", "tunnel");
 
-  const projectReposRaw =
-    projectRaw === undefined ? undefined : getOptionalArray(projectRaw, "repos", "project.repos");
+  const projectReposRaw = projectRaw === undefined ? undefined : getOptionalArray(projectRaw, "repos", "project.repos");
 
   return {
     sandbox: {
       template: getOptionalString(sandboxRaw, "template", "sandbox.template") ?? defaultConfig.sandbox.template,
       reuse: getOptionalBoolean(sandboxRaw, "reuse", "sandbox.reuse") ?? defaultConfig.sandbox.reuse,
       name: getOptionalString(sandboxRaw, "name", "sandbox.name") ?? defaultConfig.sandbox.name,
-      timeout_ms:
-        getOptionalNumber(sandboxRaw, "timeout_ms", "sandbox.timeout_ms") ?? defaultConfig.sandbox.timeout_ms,
+      timeout_ms: getOptionalNumber(sandboxRaw, "timeout_ms", "sandbox.timeout_ms") ?? defaultConfig.sandbox.timeout_ms,
       delete_on_exit:
         getOptionalBoolean(sandboxRaw, "delete_on_exit", "sandbox.delete_on_exit") ??
-        defaultConfig.sandbox.delete_on_exit
+        defaultConfig.sandbox.delete_on_exit,
     },
     startup: {
-      mode:
-        getOptionalEnum(startupRaw, "mode", "startup.mode", STARTUP_MODES) ?? defaultConfig.startup.mode
+      mode: getOptionalEnum(startupRaw, "mode", "startup.mode", STARTUP_MODES) ?? defaultConfig.startup.mode,
     },
     project: {
       mode: getOptionalEnum(projectRaw, "mode", "project.mode", PROJECT_MODES) ?? defaultConfig.project.mode,
       active:
-        getOptionalEnum(projectRaw, "active", "project.active", PROJECT_ACTIVE_MODES) ??
-        defaultConfig.project.active,
+        getOptionalEnum(projectRaw, "active", "project.active", PROJECT_ACTIVE_MODES) ?? defaultConfig.project.active,
       active_name:
-        getOptionalString(projectRaw, "active_name", "project.active_name") ??
-        defaultConfig.project.active_name,
+        getOptionalString(projectRaw, "active_name", "project.active_name") ?? defaultConfig.project.active_name,
       active_index:
-        getOptionalNumber(projectRaw, "active_index", "project.active_index") ??
-        defaultConfig.project.active_index,
+        getOptionalNumber(projectRaw, "active_index", "project.active_index") ?? defaultConfig.project.active_index,
       dir: getOptionalString(projectRaw, "dir", "project.dir") ?? defaultConfig.project.dir,
       working_dir:
         getOptionalString(projectRaw, "working_dir", "project.working_dir") ?? defaultConfig.project.working_dir,
@@ -52,38 +46,36 @@ export function parseRawLauncherConfig(rawConfig: JsonRecord): ResolvedLauncherC
         getOptionalBoolean(projectRaw, "setup_on_connect", "project.setup_on_connect") ??
         defaultConfig.project.setup_on_connect,
       setup_retries:
-        getOptionalNumber(projectRaw, "setup_retries", "project.setup_retries") ??
-        defaultConfig.project.setup_retries,
+        getOptionalNumber(projectRaw, "setup_retries", "project.setup_retries") ?? defaultConfig.project.setup_retries,
       setup_concurrency:
         getOptionalNumber(projectRaw, "setup_concurrency", "project.setup_concurrency") ??
         defaultConfig.project.setup_concurrency,
       setup_continue_on_error:
         getOptionalBoolean(projectRaw, "setup_continue_on_error", "project.setup_continue_on_error") ??
         defaultConfig.project.setup_continue_on_error,
-      repos: resolveRepos(projectReposRaw)
+      repos: resolveRepos(projectReposRaw),
     },
     env: {
       pass_through:
-        getOptionalStringArray(envRaw, "pass_through", "env.pass_through") ?? defaultConfig.env.pass_through
+        getOptionalStringArray(envRaw, "pass_through", "env.pass_through") ?? defaultConfig.env.pass_through,
     },
     opencode: {
       config_dir:
         getOptionalString(opencodeRaw, "config_dir", "opencode.config_dir") ?? defaultConfig.opencode.config_dir,
-      auth_path:
-        getOptionalString(opencodeRaw, "auth_path", "opencode.auth_path") ?? defaultConfig.opencode.auth_path
+      auth_path: getOptionalString(opencodeRaw, "auth_path", "opencode.auth_path") ?? defaultConfig.opencode.auth_path,
     },
     codex: {
       config_dir: getOptionalString(codexRaw, "config_dir", "codex.config_dir") ?? defaultConfig.codex.config_dir,
-      auth_path: getOptionalString(codexRaw, "auth_path", "codex.auth_path") ?? defaultConfig.codex.auth_path
+      auth_path: getOptionalString(codexRaw, "auth_path", "codex.auth_path") ?? defaultConfig.codex.auth_path,
     },
     gh: {
       enabled: getOptionalBoolean(ghRaw, "enabled", "gh.enabled") ?? defaultConfig.gh.enabled,
-      config_dir: getOptionalString(ghRaw, "config_dir", "gh.config_dir") ?? defaultConfig.gh.config_dir
+      config_dir: getOptionalString(ghRaw, "config_dir", "gh.config_dir") ?? defaultConfig.gh.config_dir,
     },
     tunnel: {
       ports: getOptionalNumberArray(tunnelRaw, "ports", "tunnel.ports") ?? defaultConfig.tunnel.ports,
-      targets: getOptionalStringRecord(tunnelRaw, "targets", "tunnel.targets") ?? defaultConfig.tunnel.targets
-    }
+      targets: getOptionalStringRecord(tunnelRaw, "targets", "tunnel.targets") ?? defaultConfig.tunnel.targets,
+    },
   };
 }
 
@@ -100,16 +92,10 @@ function resolveRepos(rawRepos: unknown[] | undefined): ResolvedLauncherConfig["
     return {
       name: getRequiredString(entry, "name", `project.repos[${index}].name`),
       url: getRequiredString(entry, "url", `project.repos[${index}].url`),
-      branch:
-        getOptionalString(entry, "branch", `project.repos[${index}].branch`) ??
-        "main",
-      setup_command:
-        getOptionalString(entry, "setup_command", `project.repos[${index}].setup_command`) ??
-        "",
-      setup_env:
-        getOptionalStringRecord(entry, "setup_env", `project.repos[${index}].setup_env`) ?? {},
-      startup_env:
-        getOptionalStringRecord(entry, "startup_env", `project.repos[${index}].startup_env`) ?? {}
+      branch: getOptionalString(entry, "branch", `project.repos[${index}].branch`) ?? "main",
+      setup_command: getOptionalString(entry, "setup_command", `project.repos[${index}].setup_command`) ?? "",
+      setup_env: getOptionalStringRecord(entry, "setup_env", `project.repos[${index}].setup_env`) ?? {},
+      startup_env: getOptionalStringRecord(entry, "startup_env", `project.repos[${index}].startup_env`) ?? {},
     };
   });
 }
@@ -181,7 +167,7 @@ function getOptionalEnum<T extends readonly string[]>(
   parent: JsonRecord | undefined,
   key: string,
   path: string,
-  values: T
+  values: T,
 ): T[number] | undefined {
   const value = getOptionalString(parent, key, path);
   if (value === undefined) {
@@ -193,11 +179,7 @@ function getOptionalEnum<T extends readonly string[]>(
   return value as T[number];
 }
 
-function getOptionalStringArray(
-  parent: JsonRecord | undefined,
-  key: string,
-  path: string
-): string[] | undefined {
+function getOptionalStringArray(parent: JsonRecord | undefined, key: string, path: string): string[] | undefined {
   const value = parent?.[key];
   if (value === undefined) {
     return undefined;
@@ -208,11 +190,7 @@ function getOptionalStringArray(
   return [...value];
 }
 
-function getOptionalNumberArray(
-  parent: JsonRecord | undefined,
-  key: string,
-  path: string
-): number[] | undefined {
+function getOptionalNumberArray(parent: JsonRecord | undefined, key: string, path: string): number[] | undefined {
   const value = parent?.[key];
   if (value === undefined) {
     return undefined;
@@ -228,7 +206,7 @@ function getOptionalNumberArray(
 function getOptionalStringRecord(
   parent: JsonRecord | undefined,
   key: string,
-  path: string
+  path: string,
 ): Record<string, string> | undefined {
   const value = parent?.[key];
   if (value === undefined) {

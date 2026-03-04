@@ -1,9 +1,9 @@
 import type { ResolvedLauncherConfig, ResolvedProjectRepoConfig } from "../config/schema.js";
 import type { SandboxHandle } from "../e2b/lifecycle.js";
 import type { ProvisionedRepoSummary } from "../repo/manager.js";
-import type { BootstrapProjectWorkspaceDeps } from "./bootstrap.js";
-import { truncateForLog } from "./bootstrap.command-utils.js";
 import type { SetupPipelineResult, SetupRunnerEvent } from "../setup/runner.js";
+import { truncateForLog } from "./bootstrap.command-utils.js";
+import type { BootstrapProjectWorkspaceDeps } from "./bootstrap.js";
 
 export async function maybeRunSetup(
   handle: SandboxHandle,
@@ -13,7 +13,7 @@ export async function maybeRunSetup(
   isConnect: boolean,
   deps: BootstrapProjectWorkspaceDeps,
   runtimeEnv: Record<string, string>,
-  onProgress?: (message: string) => void
+  onProgress?: (message: string) => void,
 ): Promise<SetupPipelineResult | null> {
   if (selectedRepos.length === 0) {
     return null;
@@ -22,7 +22,9 @@ export async function maybeRunSetup(
   const reposForSetup =
     !isConnect || config.project.setup_on_connect
       ? selectedRepos
-      : selectedRepos.filter((repo) => provisionedRepos.some((summary) => summary.repo === repo.name && summary.cloned));
+      : selectedRepos.filter((repo) =>
+          provisionedRepos.some((summary) => summary.repo === repo.name && summary.cloned),
+        );
 
   if (reposForSetup.length === 0) {
     return null;
@@ -31,7 +33,7 @@ export async function maybeRunSetup(
   return deps.runSetupForRepos(handle, reposForSetup, provisionedRepos, {
     runtimeEnv,
     retryPolicy: {
-      attempts: config.project.setup_retries + 1
+      attempts: config.project.setup_retries + 1,
     },
     maxConcurrency: config.project.setup_concurrency,
     continueOnError: config.project.setup_continue_on_error,
@@ -41,7 +43,7 @@ export async function maybeRunSetup(
       if (message) {
         onProgress?.(message);
       }
-    }
+    },
   });
 }
 

@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
-import { launchMode, type ModeLaunchResult } from "../src/modes/index.js";
 import type { SandboxHandle } from "../src/e2b/lifecycle.js";
-import { startOpenCodeMode } from "../src/modes/opencode.js";
 import { startCodexMode } from "../src/modes/codex.js";
+import { launchMode, type ModeLaunchResult } from "../src/modes/index.js";
+import { startOpenCodeMode } from "../src/modes/opencode.js";
 import { startShellMode } from "../src/modes/shell.js";
 
 describe("startup modes orchestrator", () => {
@@ -20,29 +20,29 @@ describe("startup modes orchestrator", () => {
     expect(run).toHaveBeenNthCalledWith(
       1,
       "nohup opencode serve --hostname 0.0.0.0 --port 3000 >/tmp/opencode-serve.log 2>&1 &",
-      { timeoutMs: 10_000 }
+      { timeoutMs: 10_000 },
     );
     expect(run).toHaveBeenNthCalledWith(
       2,
-      "bash -lc 'for attempt in $(seq 1 30); do status=$(curl -s -o /dev/null -w \"%{http_code}\" http://127.0.0.1:3000/ || true); if [ \"$status\" = \"200\" ] || [ \"$status\" = \"401\" ]; then exit 0; fi; sleep 1; done; exit 1'",
-      { timeoutMs: 35_000 }
+      'bash -lc \'for attempt in $(seq 1 30); do status=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:3000/ || true); if [ "$status" = "200" ] || [ "$status" = "401" ]; then exit 0; fi; sleep 1; done; exit 1\'',
+      { timeoutMs: 35_000 },
     );
     expect(run).toHaveBeenNthCalledWith(
       3,
       "bash -lc 'curl -s -o /dev/null -w \"%{http_code}\" http://127.0.0.1:3000/ || true'",
-      { timeoutMs: 10_000 }
+      { timeoutMs: 10_000 },
     );
     expect(getHost).toHaveBeenCalledWith(3000);
     expect(result).toMatchObject<Partial<ModeLaunchResult>>({
       mode: "web",
-      url: "https://sandbox-123.e2b.dev"
+      url: "https://sandbox-123.e2b.dev",
     });
     expect(result.details).toEqual({
       smoke: "opencode-web",
       status: "ready",
       port: 3000,
       authRequired: true,
-      authStatus: 401
+      authStatus: 401,
     });
     expect(result.message).not.toContain("WARNING");
   });
@@ -81,7 +81,7 @@ describe("startup modes orchestrator", () => {
     expect(result.details).toEqual({
       smoke: "opencode-cli",
       status: "ready",
-      output: "OpenCode 1.2.3"
+      output: "OpenCode 1.2.3",
     });
   });
 
@@ -90,7 +90,7 @@ describe("startup modes orchestrator", () => {
     const prepareSession = vi.fn().mockResolvedValue({
       tempDir: "/tmp/session",
       privateKeyPath: "/tmp/session/id_ed25519",
-      wsUrl: "wss://8081-sbx.e2b.app"
+      wsUrl: "wss://8081-sbx.e2b.app",
     });
     const runInteractiveSession = vi.fn().mockResolvedValue(undefined);
     const cleanupSession = vi.fn().mockResolvedValue(undefined);
@@ -102,24 +102,24 @@ describe("startup modes orchestrator", () => {
         isInteractiveTerminal: () => true,
         prepareSession,
         runInteractiveSession,
-        cleanupSession
-      }
+        cleanupSession,
+      },
     );
 
     expect(prepareSession).toHaveBeenCalledWith(handle);
     expect(runInteractiveSession).toHaveBeenCalledWith(
       {
-      tempDir: "/tmp/session",
-      privateKeyPath: "/tmp/session/id_ed25519",
-      wsUrl: "wss://8081-sbx.e2b.app"
+        tempDir: "/tmp/session",
+        privateKeyPath: "/tmp/session/id_ed25519",
+        wsUrl: "wss://8081-sbx.e2b.app",
       },
-      "bash -lc 'exec opencode'"
+      "bash -lc 'exec opencode'",
     );
     expect(cleanupSession).toHaveBeenCalledTimes(1);
     expect(result.mode).toBe("ssh-opencode");
     expect(result.details).toEqual({
       session: "interactive",
-      status: "completed"
+      status: "completed",
     });
   });
 
@@ -135,14 +135,14 @@ describe("startup modes orchestrator", () => {
     expect(run).toHaveBeenNthCalledWith(
       1,
       "bash -lc 'if command -v codex >/dev/null 2>&1; then printf PRESENT; else printf MISSING; fi'",
-      { timeoutMs: 15_000 }
+      { timeoutMs: 15_000 },
     );
     expect(run).toHaveBeenNthCalledWith(2, "codex --version", { timeoutMs: 15_000 });
     expect(result.mode).toBe("ssh-codex");
     expect(result.details).toEqual({
       smoke: "codex-cli",
       status: "ready",
-      output: "codex 0.9.0"
+      output: "codex 0.9.0",
     });
   });
 
@@ -152,13 +152,13 @@ describe("startup modes orchestrator", () => {
 
     await launchMode(handle, "ssh-opencode", {
       workingDirectory: "/workspace/alpha",
-      startupEnv: { PROJECT_NAME: "alpha" }
+      startupEnv: { PROJECT_NAME: "alpha" },
     });
 
     expect(run).toHaveBeenCalledWith("opencode --version", {
       cwd: "/workspace/alpha",
       envs: { PROJECT_NAME: "alpha" },
-      timeoutMs: 15_000
+      timeoutMs: 15_000,
     });
   });
 
@@ -176,20 +176,20 @@ describe("startup modes orchestrator", () => {
     expect(run).toHaveBeenNthCalledWith(
       1,
       "bash -lc 'if command -v codex >/dev/null 2>&1; then printf PRESENT; else printf MISSING; fi'",
-      { timeoutMs: 15_000 }
+      { timeoutMs: 15_000 },
     );
     expect(run).toHaveBeenNthCalledWith(2, "npm i -g @openai/codex", { timeoutMs: 120_000 });
     expect(run).toHaveBeenNthCalledWith(
       3,
       "bash -lc 'if command -v codex >/dev/null 2>&1; then printf PRESENT; else printf MISSING; fi'",
-      { timeoutMs: 15_000 }
+      { timeoutMs: 15_000 },
     );
     expect(run).toHaveBeenNthCalledWith(4, "codex --version", { timeoutMs: 15_000 });
     expect(result.mode).toBe("ssh-codex");
     expect(result.details).toEqual({
       smoke: "codex-cli",
       status: "ready",
-      output: "codex 0.9.0"
+      output: "codex 0.9.0",
     });
   });
 
@@ -201,13 +201,13 @@ describe("startup modes orchestrator", () => {
     const handle = createHandle({ run });
 
     await expect(launchMode(handle, "ssh-codex")).rejects.toThrow(
-      "Codex CLI is not available in the sandbox and automatic install failed"
+      "Codex CLI is not available in the sandbox and automatic install failed",
     );
 
     expect(run).toHaveBeenNthCalledWith(
       1,
       "bash -lc 'if command -v codex >/dev/null 2>&1; then printf PRESENT; else printf MISSING; fi'",
-      { timeoutMs: 15_000 }
+      { timeoutMs: 15_000 },
     );
     expect(run).toHaveBeenNthCalledWith(2, "npm i -g @openai/codex", { timeoutMs: 120_000 });
   });
@@ -218,7 +218,7 @@ describe("startup modes orchestrator", () => {
       tempDir: "/tmp/session",
       privateKeyPath: "/tmp/session/id_ed25519",
       knownHostsPath: "/tmp/session/known_hosts",
-      wsUrl: "wss://8081-sbx.e2b.app"
+      wsUrl: "wss://8081-sbx.e2b.app",
     });
     const runInteractiveSession = vi.fn().mockResolvedValue(undefined);
     const cleanupSession = vi.fn().mockResolvedValue(undefined);
@@ -230,8 +230,8 @@ describe("startup modes orchestrator", () => {
         isInteractiveTerminal: () => true,
         prepareSession,
         runInteractiveSession,
-        cleanupSession
-      }
+        cleanupSession,
+      },
     );
 
     expect(prepareSession).toHaveBeenCalledWith(handle);
@@ -240,15 +240,15 @@ describe("startup modes orchestrator", () => {
         tempDir: "/tmp/session",
         privateKeyPath: "/tmp/session/id_ed25519",
         knownHostsPath: "/tmp/session/known_hosts",
-        wsUrl: "wss://8081-sbx.e2b.app"
+        wsUrl: "wss://8081-sbx.e2b.app",
       },
-      "bash -lc 'exec codex'"
+      "bash -lc 'exec codex'",
     );
     expect(cleanupSession).toHaveBeenCalledTimes(1);
     expect(result.mode).toBe("ssh-codex");
     expect(result.details).toEqual({
       session: "interactive",
-      status: "completed"
+      status: "completed",
     });
   });
 
@@ -263,7 +263,7 @@ describe("startup modes orchestrator", () => {
     expect(result.details).toEqual({
       smoke: "shell",
       status: "ready",
-      output: "shell-ready"
+      output: "shell-ready",
     });
   });
 
@@ -277,7 +277,7 @@ describe("startup modes orchestrator", () => {
 
     await launchMode(handle, "web", {
       workingDirectory: "/workspace/alpha",
-      startupEnv: { PROJECT_NAME: "alpha" }
+      startupEnv: { PROJECT_NAME: "alpha" },
     });
 
     expect(run).toHaveBeenNthCalledWith(
@@ -286,8 +286,8 @@ describe("startup modes orchestrator", () => {
       {
         cwd: "/workspace/alpha",
         envs: { PROJECT_NAME: "alpha" },
-        timeoutMs: 10_000
-      }
+        timeoutMs: 10_000,
+      },
     );
   });
 
@@ -297,7 +297,7 @@ describe("startup modes orchestrator", () => {
       tempDir: "/tmp/session",
       privateKeyPath: "/tmp/session/id_ed25519",
       knownHostsPath: "/tmp/session/known_hosts",
-      wsUrl: "wss://8081-sbx.e2b.app"
+      wsUrl: "wss://8081-sbx.e2b.app",
     });
     const runInteractiveSession = vi.fn().mockResolvedValue(undefined);
     const cleanupSession = vi.fn().mockResolvedValue(undefined);
@@ -309,8 +309,8 @@ describe("startup modes orchestrator", () => {
         isInteractiveTerminal: () => true,
         prepareSession,
         runInteractiveSession,
-        cleanupSession
-      }
+        cleanupSession,
+      },
     );
 
     expect(prepareSession).toHaveBeenCalledWith(handle);
@@ -319,15 +319,15 @@ describe("startup modes orchestrator", () => {
         tempDir: "/tmp/session",
         privateKeyPath: "/tmp/session/id_ed25519",
         knownHostsPath: "/tmp/session/known_hosts",
-        wsUrl: "wss://8081-sbx.e2b.app"
+        wsUrl: "wss://8081-sbx.e2b.app",
       },
-      "bash -lc 'exec bash -i'"
+      "bash -lc 'exec bash -i'",
     );
     expect(cleanupSession).toHaveBeenCalledTimes(1);
     expect(result.mode).toBe("ssh-shell");
     expect(result.details).toEqual({
       session: "interactive",
-      status: "completed"
+      status: "completed",
     });
   });
 
@@ -336,7 +336,7 @@ describe("startup modes orchestrator", () => {
       tempDir: "/tmp/session",
       privateKeyPath: "/tmp/session/id_ed25519",
       knownHostsPath: "/tmp/session/known_hosts",
-      wsUrl: "wss://8081-sbx.e2b.app"
+      wsUrl: "wss://8081-sbx.e2b.app",
     };
 
     const opencodeRunInteractiveSession = vi.fn().mockResolvedValue(undefined);
@@ -347,8 +347,8 @@ describe("startup modes orchestrator", () => {
         isInteractiveTerminal: () => true,
         prepareSession: vi.fn().mockResolvedValue(session),
         runInteractiveSession: opencodeRunInteractiveSession,
-        cleanupSession: vi.fn().mockResolvedValue(undefined)
-      }
+        cleanupSession: vi.fn().mockResolvedValue(undefined),
+      },
     );
 
     const codexRunInteractiveSession = vi.fn().mockResolvedValue(undefined);
@@ -357,15 +357,15 @@ describe("startup modes orchestrator", () => {
         run: vi
           .fn()
           .mockResolvedValueOnce({ stdout: "PRESENT", stderr: "", exitCode: 0 })
-          .mockResolvedValueOnce({ stdout: "", stderr: "", exitCode: 0 })
+          .mockResolvedValueOnce({ stdout: "", stderr: "", exitCode: 0 }),
       }),
       { workingDirectory: "/workspace/repo-b", startupEnv: { PROJECT_NAME: "repo-b" } },
       {
         isInteractiveTerminal: () => true,
         prepareSession: vi.fn().mockResolvedValue(session),
         runInteractiveSession: codexRunInteractiveSession,
-        cleanupSession: vi.fn().mockResolvedValue(undefined)
-      }
+        cleanupSession: vi.fn().mockResolvedValue(undefined),
+      },
     );
 
     const shellRunInteractiveSession = vi.fn().mockResolvedValue(undefined);
@@ -376,34 +376,25 @@ describe("startup modes orchestrator", () => {
         isInteractiveTerminal: () => true,
         prepareSession: vi.fn().mockResolvedValue(session),
         runInteractiveSession: shellRunInteractiveSession,
-        cleanupSession: vi.fn().mockResolvedValue(undefined)
-      }
+        cleanupSession: vi.fn().mockResolvedValue(undefined),
+      },
     );
 
-    expect(opencodeRunInteractiveSession).toHaveBeenCalledWith(
-      session,
-      expect.stringContaining("cd")
-    );
+    expect(opencodeRunInteractiveSession).toHaveBeenCalledWith(session, expect.stringContaining("cd"));
     expect(opencodeRunInteractiveSession.mock.calls[0]?.[1]).toContain("/workspace/repo-a");
     expect(opencodeRunInteractiveSession.mock.calls[0]?.[1]).toContain("source");
     expect(opencodeRunInteractiveSession.mock.calls[0]?.[1]).toContain("/tmp/ez-devbox-startup-env-");
     expect(opencodeRunInteractiveSession.mock.calls[0]?.[1]).not.toContain("PROJECT_NAME");
     expect(opencodeRunInteractiveSession.mock.calls[0]?.[1]).toContain("exec opencode");
 
-    expect(codexRunInteractiveSession).toHaveBeenCalledWith(
-      session,
-      expect.stringContaining("cd")
-    );
+    expect(codexRunInteractiveSession).toHaveBeenCalledWith(session, expect.stringContaining("cd"));
     expect(codexRunInteractiveSession.mock.calls[0]?.[1]).toContain("/workspace/repo-b");
     expect(codexRunInteractiveSession.mock.calls[0]?.[1]).toContain("source");
     expect(codexRunInteractiveSession.mock.calls[0]?.[1]).toContain("/tmp/ez-devbox-startup-env-");
     expect(codexRunInteractiveSession.mock.calls[0]?.[1]).not.toContain("PROJECT_NAME");
     expect(codexRunInteractiveSession.mock.calls[0]?.[1]).toContain("exec codex");
 
-    expect(shellRunInteractiveSession).toHaveBeenCalledWith(
-      session,
-      expect.stringContaining("cd")
-    );
+    expect(shellRunInteractiveSession).toHaveBeenCalledWith(session, expect.stringContaining("cd"));
     expect(shellRunInteractiveSession.mock.calls[0]?.[1]).toContain("/workspace/repo-c");
     expect(shellRunInteractiveSession.mock.calls[0]?.[1]).toContain("source");
     expect(shellRunInteractiveSession.mock.calls[0]?.[1]).toContain("/tmp/ez-devbox-startup-env-");
@@ -416,7 +407,7 @@ describe("startup modes orchestrator", () => {
       tempDir: "/tmp/session",
       privateKeyPath: "/tmp/session/id_ed25519",
       knownHostsPath: "/tmp/session/known_hosts",
-      wsUrl: "wss://8081-sbx.e2b.app"
+      wsUrl: "wss://8081-sbx.e2b.app",
     };
 
     const runInteractiveSession = vi.fn().mockResolvedValue(undefined);
@@ -426,14 +417,14 @@ describe("startup modes orchestrator", () => {
       handle,
       {
         workingDirectory: "/workspace/team's-repo",
-        startupEnv: { PROJECT_NAME: "o'neil" }
+        startupEnv: { PROJECT_NAME: "o'neil" },
       },
       {
         isInteractiveTerminal: () => true,
         prepareSession: vi.fn().mockResolvedValue(session),
         runInteractiveSession,
-        cleanupSession: vi.fn().mockResolvedValue(undefined)
-      }
+        cleanupSession: vi.fn().mockResolvedValue(undefined),
+      },
     );
 
     const remoteCommand = runInteractiveSession.mock.calls[0]?.[1] as string;
@@ -456,21 +447,21 @@ describe("startup modes orchestrator", () => {
       tempDir: "/tmp/session",
       privateKeyPath: "/tmp/session/id_ed25519",
       knownHostsPath: "/tmp/session/known_hosts",
-      wsUrl: "wss://8081-sbx.e2b.app"
+      wsUrl: "wss://8081-sbx.e2b.app",
     };
     const runInteractiveSession = vi.fn().mockResolvedValue(undefined);
 
     await startShellMode(
       handle,
       {
-        startupEnv: { GOOD_KEY: "ok", "NOT-VALID": "bad" }
+        startupEnv: { GOOD_KEY: "ok", "NOT-VALID": "bad" },
       },
       {
         isInteractiveTerminal: () => true,
         prepareSession: vi.fn().mockResolvedValue(session),
         runInteractiveSession,
-        cleanupSession: vi.fn().mockResolvedValue(undefined)
-      }
+        cleanupSession: vi.fn().mockResolvedValue(undefined),
+      },
     );
 
     const runMock = handle.run as ReturnType<typeof vi.fn>;
@@ -489,6 +480,6 @@ function createHandle(overrides: Partial<SandboxHandle>): SandboxHandle {
     writeFile: overrides.writeFile ?? vi.fn().mockResolvedValue(undefined),
     getHost: overrides.getHost ?? vi.fn().mockResolvedValue("https://sbx-1.e2b.dev"),
     setTimeout: overrides.setTimeout ?? vi.fn().mockResolvedValue(undefined),
-    kill: overrides.kill ?? vi.fn().mockResolvedValue(undefined)
+    kill: overrides.kill ?? vi.fn().mockResolvedValue(undefined),
   };
 }

@@ -1,15 +1,15 @@
 import { randomUUID } from "node:crypto";
 import { loadConfig } from "../src/config/load.js";
-import { connectSandbox, createSandbox, killSandbox, type SandboxHandle } from "../src/e2b/lifecycle.js";
 import { resolveSandboxCreateEnv } from "../src/e2b/env.js";
+import { connectSandbox, createSandbox, killSandbox, type SandboxHandle } from "../src/e2b/lifecycle.js";
 import { launchMode } from "../src/modes/index.js";
+import { runLocalCommand } from "../src/modes/ssh-bridge.commands.js";
 import {
   buildSshClientArgs,
   cleanupSshBridgeSession,
   prepareSshBridgeSession,
-  type SshBridgeSession
+  type SshBridgeSession,
 } from "../src/modes/ssh-bridge.js";
-import { runLocalCommand } from "../src/modes/ssh-bridge.commands.js";
 
 type CheckStatus = "PASS" | "FAIL" | "SKIP";
 
@@ -19,7 +19,7 @@ interface CheckResult {
   detail: string;
 }
 
-const MARKER_PATH = "/tmp/agent-box-live-marker.txt";
+const MARKER_PATH = "/tmp/ez-devbox-live-marker.txt";
 
 async function main(): Promise<void> {
   if (!process.env.E2B_API_KEY) {
@@ -33,15 +33,15 @@ async function main(): Promise<void> {
     ...config,
     sandbox: {
       ...config.sandbox,
-      template: "opencode"
-    }
+      template: "opencode",
+    },
   };
   const codexConfig = {
     ...config,
     sandbox: {
       ...config.sandbox,
-      template: "codex"
-    }
+      template: "codex",
+    },
   };
   const checks: CheckResult[] = [];
   const sandboxIds: string[] = [];
@@ -53,11 +53,11 @@ async function main(): Promise<void> {
     const opencodeHandle = await createSandbox(opencodeConfig, {
       envs: {
         ...resolveSandboxCreateEnv(opencodeConfig).envs,
-        OPENCODE_SERVER_PASSWORD: webPassword
+        OPENCODE_SERVER_PASSWORD: webPassword,
       },
       metadata: {
-        "launcher.live": "opencode"
-      }
+        "launcher.live": "opencode",
+      },
     });
     opencodeSandboxId = opencodeHandle.sandboxId;
     sandboxIds.push(opencodeHandle.sandboxId);
@@ -71,7 +71,7 @@ async function main(): Promise<void> {
     checks.push(
       markerRead.stdout.trim() === marker
         ? { name: "create/connect marker", status: "PASS", detail: "marker persisted across reconnect" }
-        : { name: "create/connect marker", status: "FAIL", detail: "marker mismatch after reconnect" }
+        : { name: "create/connect marker", status: "FAIL", detail: "marker mismatch after reconnect" },
     );
 
     try {
@@ -89,13 +89,13 @@ async function main(): Promise<void> {
 
       const webResponse = await fetch(webResult.url, {
         method: "GET",
-        redirect: "manual"
+        redirect: "manual",
       });
 
       checks.push(
         webResponse.status === 401
           ? { name: "secure web", status: "PASS", detail: `unauthorized response verified at ${webResult.url}` }
-          : { name: "secure web", status: "FAIL", detail: `expected 401 unauthorized, got ${webResponse.status}` }
+          : { name: "secure web", status: "FAIL", detail: `expected 401 unauthorized, got ${webResponse.status}` },
       );
     } catch (error) {
       checks.push({ name: "secure web", status: "FAIL", detail: formatError(error) });
@@ -110,15 +110,15 @@ async function main(): Promise<void> {
     pushIfMissing(checks, {
       name: "ssh connectivity",
       status: "SKIP",
-      detail: "opencode flow failed early; SSH requires a running target sandbox"
+      detail: "opencode flow failed early; SSH requires a running target sandbox",
     });
   } finally {
     try {
       const codexHandle = await createSandbox(codexConfig, {
         envs: resolveSandboxCreateEnv(codexConfig).envs,
         metadata: {
-          "launcher.live": "codex"
-        }
+          "launcher.live": "codex",
+        },
       });
       codexSandboxId = codexHandle.sandboxId;
       sandboxIds.push(codexHandle.sandboxId);
@@ -152,7 +152,7 @@ async function cleanupSandboxes(
   sandboxIds: string[],
   checks: CheckResult[],
   opencodeSandboxId: string | null,
-  codexSandboxId: string | null
+  codexSandboxId: string | null,
 ): Promise<void> {
   await Promise.all(
     sandboxIds.map(async (sandboxId) => {
@@ -161,18 +161,18 @@ async function cleanupSandboxes(
       } catch {
         // best effort cleanup in smoke script
       }
-    })
+    }),
   );
 
   checks.push({
     name: "cleanup opencode sandbox",
     status: opencodeSandboxId ? "PASS" : "SKIP",
-    detail: opencodeSandboxId ? `requested kill for ${opencodeSandboxId}` : "opencode sandbox was not created"
+    detail: opencodeSandboxId ? `requested kill for ${opencodeSandboxId}` : "opencode sandbox was not created",
   });
   checks.push({
     name: "cleanup codex sandbox",
     status: codexSandboxId ? "PASS" : "SKIP",
-    detail: codexSandboxId ? `requested kill for ${codexSandboxId}` : "codex sandbox was not created"
+    detail: codexSandboxId ? `requested kill for ${codexSandboxId}` : "codex sandbox was not created",
   });
 }
 
@@ -202,20 +202,20 @@ async function checkSshStatus(handle: {
       return {
         name: "ssh connectivity",
         status: "FAIL",
-        detail: "ssh command completed but did not return expected marker"
+        detail: "ssh command completed but did not return expected marker",
       };
     }
 
     return {
       name: "ssh connectivity",
       status: "PASS",
-      detail: `ssh command succeeded via websocket proxy (${session.wsUrl})`
+      detail: `ssh command succeeded via websocket proxy (${session.wsUrl})`,
     };
   } catch (error) {
     return {
       name: "ssh connectivity",
       status: "FAIL",
-      detail: `ssh check failed: ${error instanceof Error ? error.message : "unknown error"}`
+      detail: `ssh check failed: ${error instanceof Error ? error.message : "unknown error"}`,
     };
   } finally {
     if (session) {

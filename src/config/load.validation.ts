@@ -3,9 +3,7 @@ import type { ResolvedLauncherConfig } from "./schema.js";
 export function assertRequiredE2BApiKey(mergedEnv: Record<string, string | undefined>): void {
   const e2bApiKey = mergedEnv.E2B_API_KEY;
   if (typeof e2bApiKey !== "string" || e2bApiKey.trim() === "") {
-    throw new Error(
-      "Invalid env.E2B_API_KEY: required value is missing. Set E2B_API_KEY in process env or .env."
-    );
+    throw new Error("Invalid env.E2B_API_KEY: required value is missing. Set E2B_API_KEY in process env or .env.");
   }
 }
 
@@ -41,7 +39,7 @@ export function validateResolvedLauncherConfig(resolved: ResolvedLauncherConfig)
     const resolvedActiveIndex = activeIndex as number;
     if (resolvedActiveIndex < 0 || resolvedActiveIndex >= resolved.project.repos.length) {
       throw new Error(
-        `Invalid project.active_index: index ${resolvedActiveIndex.toString()} is out of range for ${resolved.project.repos.length} repos.`
+        `Invalid project.active_index: index ${resolvedActiveIndex.toString()} is out of range for ${resolved.project.repos.length} repos.`,
       );
     }
   }
@@ -54,9 +52,7 @@ export function validateResolvedLauncherConfig(resolved: ResolvedLauncherConfig)
   for (const [portKey, upstreamUrl] of Object.entries(resolved.tunnel.targets ?? {})) {
     const port = Number.parseInt(portKey, 10);
     if (!Number.isInteger(port) || port < 1 || port > 65535 || String(port) !== portKey) {
-      throw new Error(
-        `Invalid tunnel.targets.${portKey}: key must be a stringified integer between 1 and 65535.`
-      );
+      throw new Error(`Invalid tunnel.targets.${portKey}: key must be a stringified integer between 1 and 65535.`);
     }
 
     let parsedUrl: URL;

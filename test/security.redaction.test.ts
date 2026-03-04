@@ -3,7 +3,8 @@ import { redactSensitiveText } from "../src/security/redaction.js";
 
 describe("redactSensitiveText", () => {
   it("redacts assignment-style secrets for known keys and token-like suffixes", () => {
-    const input = "GH_TOKEN=abc GITHUB_TOKEN='def' OPENAI_API_KEY=\"ghi\" E2B_API_KEY=xyz FIRECRAWL_API_KEY:secret SERVICE_TOKEN=token";
+    const input =
+      "GH_TOKEN=abc GITHUB_TOKEN='def' OPENAI_API_KEY=\"ghi\" E2B_API_KEY=xyz FIRECRAWL_API_KEY:secret SERVICE_TOKEN=token";
     const redacted = redactSensitiveText(input);
 
     expect(redacted).toContain("GH_TOKEN=[REDACTED]");
