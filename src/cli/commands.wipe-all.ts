@@ -49,11 +49,17 @@ export async function runWipeAllCommand(args: string[], deps: WipeAllCommandDeps
 
   const deletedIds = new Set<string>();
   const deletedLabels: string[] = [];
+  const failedLabels: string[] = [];
 
   for (const sandbox of sandboxes) {
-    await deps.killSandbox(sandbox.sandboxId);
-    deletedIds.add(sandbox.sandboxId);
-    deletedLabels.push(formatSandboxDisplayLabel(sandbox.sandboxId, sandbox.metadata));
+    const label = formatSandboxDisplayLabel(sandbox.sandboxId, sandbox.metadata);
+    try {
+      await deps.killSandbox(sandbox.sandboxId);
+      deletedIds.add(sandbox.sandboxId);
+      deletedLabels.push(label);
+    } catch (error) {
+      failedLabels.push(`${label} (${toErrorMessage(error)})`);
+    }
   }
 
   const lastRun = await deps.loadLastRunState();
@@ -61,10 +67,26 @@ export async function runWipeAllCommand(args: string[], deps: WipeAllCommandDeps
     await deps.clearLastRunState();
   }
 
-  const plural = sandboxes.length === 1 ? "sandbox" : "sandboxes";
+  const messages: string[] = [];
+  if (deletedLabels.length > 0) {
+    const plural = deletedLabels.length === 1 ? "sandbox" : "sandboxes";
+    messages.push(`Wiped ${deletedLabels.length} ${plural}: ${deletedLabels.join(", ")}.`);
+  }
+  if (failedLabels.length > 0) {
+    const plural = failedLabels.length === 1 ? "sandbox" : "sandboxes";
+    messages.push(`Failed to wipe ${failedLabels.length} ${plural}: ${failedLabels.join(", ")}.`);
+  }
+
+  if (messages.length === 0) {
+    return {
+      message: "No sandboxes were wiped.",
+      exitCode: 0
+    };
+  }
+
   return {
-    message: `Wiped ${sandboxes.length} ${plural}: ${deletedLabels.join(", ")}.`,
-    exitCode: 0
+    message: messages.join("\n"),
+    exitCode: failedLabels.length > 0 ? 1 : 0
   };
 }
 
@@ -88,4 +110,12 @@ function parseWipeAllArgs(args: string[]): { yes: boolean } {
 
 async function promptInput(question: string): Promise<string> {
   return promptWithReadline(question);
+}
+
+function toErrorMessage(error: unknown): string {
+  if (error instanceof Error && error.message.trim() !== "") {
+    return error.message;
+  }
+
+  return "unknown error";
 }
