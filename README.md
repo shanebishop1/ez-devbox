@@ -5,16 +5,15 @@ Run OpenCode/Codex agents in disposable E2B sandboxes with fast reconnects, repe
 ## What it does
 
 - Creates or connects to an E2B sandbox
-- Resumes the last saved sandbox/mode with a single command
 - Includes the following modes:
-  - `ssh-opencode`
-  - `ssh-codex`
+  - `ssh-opencode` (ssh + open an instance of opencode)
+  - `ssh-codex` (ssh + open an instance of codex)
   - `web` (starts `opencode serve` and returns URL)
-  - `ssh-shell`
-- Automatic repo set-up/bootstrapping during sandbox creation (clone, branch, initialize)
+  - `ssh-shell` (normal ssh into the container)
+- Automatic repo set-up/bootstrapping during sandbox creation (clone, branch, set up environment, install packages, initialize, etc.)
 - Starts tools in the expected directory (`project.working_dir = "auto"` picks repo or workspace)
 - Syncs local tool auth/config (OpenCode, Codex, GitHub CLI) into sandbox during `create`
-- Supports optional auto-managed local port tunneling for sandbox access of MCP servers, Docker containers, etc.
+- Supports optional auto-managed port tunneling for sandbox access to your local MCP servers, Docker containers, etc.
 
 ## Why This Approach
 
@@ -138,9 +137,9 @@ Use `npx ez-devbox ...` if the CLI is not globally installed.
 | --- | --- |
 | Help | `ez-devbox --help` |
 | Create sandbox + launch mode | `ez-devbox create --mode web` |
+| List sandboxes | `ez-devbox list` |
 | Connect to existing sandbox | `ez-devbox connect --sandbox-id <sandbox-id>` |
 | Resume last sandbox/mode | `ez-devbox resume` |
-| List sandboxes | `ez-devbox list` |
 | Run command in sandbox | `ez-devbox command --sandbox-id <sandbox-id> -- pwd` |
 | JSON output for automation | `ez-devbox list --json` |
 | Wipe one sandbox | `ez-devbox wipe` |
