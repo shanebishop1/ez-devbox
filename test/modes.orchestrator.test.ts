@@ -85,6 +85,33 @@ describe("startup modes orchestrator", () => {
     });
   });
 
+  it("ssh-opencode smoke check retries once when the first run times out", async () => {
+    const run = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("deadline_exceeded"))
+      .mockResolvedValueOnce({ stdout: "OpenCode 1.2.3\n", stderr: "", exitCode: 0 });
+    const handle = createHandle({ run });
+
+    const result = await launchMode(handle, "ssh-opencode");
+
+    expect(run).toHaveBeenNthCalledWith(1, "opencode --version", { timeoutMs: 15_000 });
+    expect(run).toHaveBeenNthCalledWith(2, "opencode --version", { timeoutMs: 60_000 });
+    expect(result.details).toEqual({
+      smoke: "opencode-cli",
+      status: "ready",
+      output: "OpenCode 1.2.3",
+    });
+  });
+
+  it("ssh-opencode smoke check does not retry for non-timeout errors", async () => {
+    const run = vi.fn().mockRejectedValue(new Error("permission denied"));
+    const handle = createHandle({ run });
+
+    await expect(launchMode(handle, "ssh-opencode")).rejects.toThrow("permission denied");
+    expect(run).toHaveBeenCalledTimes(1);
+    expect(run).toHaveBeenCalledWith("opencode --version", { timeoutMs: 15_000 });
+  });
+
   it("ssh-opencode mode uses interactive attach in tty environments", async () => {
     const handle = createHandle({ run: vi.fn().mockResolvedValue({ stdout: "", stderr: "", exitCode: 0 }) });
     const prepareSession = vi.fn().mockResolvedValue({
