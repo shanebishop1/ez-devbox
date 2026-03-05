@@ -140,7 +140,7 @@ describe("startup modes orchestrator", () => {
         privateKeyPath: "/tmp/session/id_ed25519",
         wsUrl: "wss://8081-sbx.e2b.app",
       },
-      `bash -lc 'exec tmux -L ez-devbox-opencode new-session -A -s ez-devbox-opencode "opencode attach http://127.0.0.1:4096" \\; set-option -g status off \\; bind-key -n C-c detach-client'`,
+      `bash -lc 'exec tmux -u -L ez-devbox-opencode new-session -A -s ez-devbox-opencode "opencode attach http://127.0.0.1:4096" \\; set-option -g default-terminal "screen-256color" \\; set-option -ga terminal-overrides ",xterm-256color:Tc,screen-256color:Tc,tmux-256color:Tc" \\; set-option -g status off \\; bind-key -n C-c detach-client'`,
     );
     expect(handle.run).toHaveBeenNthCalledWith(
       1,
@@ -152,11 +152,7 @@ describe("startup modes orchestrator", () => {
       'bash -lc \'for attempt in $(seq 1 30); do status=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:4096/global/health || true); if [ "$status" = "200" ] || [ "$status" = "401" ]; then exit 0; fi; sleep 1; done; exit 1\'',
       { timeoutMs: 35_000 },
     );
-    expect(handle.run).toHaveBeenNthCalledWith(
-      3,
-      'bash -lc \'for pid in $(pgrep -u "$(whoami)" -f "[o]pencode attach http://127.0.0.1:4096" || true); do tty=$(ps -p "$pid" -o tty= | tr -d " "); if [ "$tty" = "?" ]; then kill "$pid" || true; fi; done\'',
-      { timeoutMs: 10_000 },
-    );
+    expect(handle.run).toHaveBeenCalledTimes(2);
     expect(cleanupSession).toHaveBeenCalledTimes(1);
     expect(result.mode).toBe("ssh-opencode");
     expect(result.details).toEqual({
@@ -242,15 +238,11 @@ describe("startup modes orchestrator", () => {
         timeoutMs: 35_000,
       },
     );
-    expect(run).toHaveBeenNthCalledWith(
-      3,
-      'bash -lc \'for pid in $(pgrep -u "$(whoami)" -f "[o]pencode attach http://127.0.0.1:4096" || true); do tty=$(ps -p "$pid" -o tty= | tr -d " "); if [ "$tty" = "?" ]; then kill "$pid" || true; fi; done\'',
-      {
-        cwd: "/workspace/repo-a",
-        envs: { PROJECT_NAME: "repo-a" },
-        timeoutMs: 10_000,
-      },
-    );
+    expect(run.mock.calls[2]?.[0]).toContain("ez-devbox-startup-env-");
+    expect(run.mock.calls[2]?.[1]).toEqual({
+      envs: { PROJECT_NAME: "repo-a" },
+      timeoutMs: 15_000,
+    });
   });
 
   it("ssh-codex mode auto-installs codex when missing", async () => {
@@ -477,7 +469,7 @@ describe("startup modes orchestrator", () => {
     expect(opencodeRunInteractiveSession.mock.calls[0]?.[1]).toContain("/tmp/ez-devbox-startup-env-");
     expect(opencodeRunInteractiveSession.mock.calls[0]?.[1]).not.toContain("PROJECT_NAME");
     expect(opencodeRunInteractiveSession.mock.calls[0]?.[1]).toContain(
-      `exec tmux -L ez-devbox-opencode new-session -A -s ez-devbox-opencode "opencode attach http://127.0.0.1:4096" \\; set-option -g status off \\; bind-key -n C-c detach-client`,
+      `exec tmux -u -L ez-devbox-opencode new-session -A -s ez-devbox-opencode "opencode attach http://127.0.0.1:4096" \\; set-option -g default-terminal "screen-256color" \\; set-option -ga terminal-overrides ",xterm-256color:Tc,screen-256color:Tc,tmux-256color:Tc" \\; set-option -g status off \\; bind-key -n C-c detach-client`,
     );
 
     expect(codexRunInteractiveSession).toHaveBeenCalledWith(session, expect.stringContaining("cd"));
