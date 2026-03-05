@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { config as loadDotEnv } from "dotenv";
 import { loadConfig } from "../src/config/load.js";
 import { resolveSandboxCreateEnv } from "../src/e2b/env.js";
 import { connectSandbox, createSandbox, killSandbox, type SandboxHandle } from "../src/e2b/lifecycle.js";
@@ -22,6 +23,8 @@ interface CheckResult {
 const MARKER_PATH = "/tmp/ez-devbox-live-marker.txt";
 
 async function main(): Promise<void> {
+  loadDotEnv();
+
   if (!process.env.E2B_API_KEY) {
     console.log("[e2e:live] FAIL bootstrap: Missing E2B_API_KEY in environment.");
     process.exitCode = 1;

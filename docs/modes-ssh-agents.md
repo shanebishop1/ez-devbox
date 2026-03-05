@@ -4,8 +4,15 @@ Use SSH agent modes when you want an interactive terminal session for OpenCode o
 
 ## Modes
 
-- `ssh-opencode`: launches OpenCode CLI in the sandbox.
+- `ssh-opencode`: starts/uses a persistent OpenCode server (`opencode serve`) in the sandbox, then attaches the TUI client over SSH (`opencode attach`).
 - `ssh-codex`: launches Codex CLI in the sandbox.
+
+### `ssh-opencode` persistence behavior
+
+- The OpenCode backend process is decoupled from your SSH attach session.
+- If your SSH session disconnects or you exit attach, the backend keeps running while the sandbox is alive.
+- Re-running `connect --mode ssh-opencode` re-attaches a new TUI client to that running backend.
+- On reconnect, ez-devbox prunes detached stale `opencode attach` client processes before opening a new attach session.
 
 ## Auth prerequisites (important)
 

@@ -113,7 +113,22 @@ describe("startup modes orchestrator", () => {
         privateKeyPath: "/tmp/session/id_ed25519",
         wsUrl: "wss://8081-sbx.e2b.app",
       },
-      "bash -lc 'exec opencode'",
+      "bash -lc 'exec opencode attach http://127.0.0.1:4096'",
+    );
+    expect(handle.run).toHaveBeenNthCalledWith(
+      1,
+      "nohup opencode serve --hostname 127.0.0.1 --port 4096 >/tmp/opencode-serve-ssh.log 2>&1 &",
+      { timeoutMs: 10_000 },
+    );
+    expect(handle.run).toHaveBeenNthCalledWith(
+      2,
+      'bash -lc \'for attempt in $(seq 1 30); do status=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:4096/global/health || true); if [ "$status" = "200" ] || [ "$status" = "401" ]; then exit 0; fi; sleep 1; done; exit 1\'',
+      { timeoutMs: 35_000 },
+    );
+    expect(handle.run).toHaveBeenNthCalledWith(
+      3,
+      'bash -lc \'for pid in $(pgrep -u "$(whoami)" -f "[o]pencode attach http://127.0.0.1:4096" || true); do tty=$(ps -p "$pid" -o tty= | tr -d " "); if [ "$tty" = "?" ]; then kill "$pid" || true; fi; done\'',
+      { timeoutMs: 10_000 },
     );
     expect(cleanupSession).toHaveBeenCalledTimes(1);
     expect(result.mode).toBe("ssh-opencode");
@@ -160,6 +175,55 @@ describe("startup modes orchestrator", () => {
       envs: { PROJECT_NAME: "alpha" },
       timeoutMs: 15_000,
     });
+  });
+
+  it("ssh-opencode interactive startup forwards cwd/env context to server bootstrap", async () => {
+    const run = vi.fn().mockResolvedValue({ stdout: "", stderr: "", exitCode: 0 });
+    const handle = createHandle({ run });
+    const session = {
+      tempDir: "/tmp/session",
+      privateKeyPath: "/tmp/session/id_ed25519",
+      wsUrl: "wss://8081-sbx.e2b.app",
+    };
+
+    await startOpenCodeMode(
+      handle,
+      { workingDirectory: "/workspace/repo-a", startupEnv: { PROJECT_NAME: "repo-a" } },
+      {
+        isInteractiveTerminal: () => true,
+        prepareSession: vi.fn().mockResolvedValue(session),
+        runInteractiveSession: vi.fn().mockResolvedValue(undefined),
+        cleanupSession: vi.fn().mockResolvedValue(undefined),
+      },
+    );
+
+    expect(run).toHaveBeenNthCalledWith(
+      1,
+      "nohup opencode serve --hostname 127.0.0.1 --port 4096 >/tmp/opencode-serve-ssh.log 2>&1 &",
+      {
+        cwd: "/workspace/repo-a",
+        envs: { PROJECT_NAME: "repo-a" },
+        timeoutMs: 10_000,
+      },
+    );
+    expect(run).toHaveBeenNthCalledWith(
+      2,
+      'bash -lc \'for attempt in $(seq 1 30); do status=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:4096/global/health || true); if [ "$status" = "200" ] || [ "$status" = "401" ]; then exit 0; fi; sleep 1; done; exit 1\'',
+      {
+        cwd: "/workspace/repo-a",
+        envs: { PROJECT_NAME: "repo-a" },
+        timeoutMs: 35_000,
+      },
+    );
+    expect(run).toHaveBeenNthCalledWith(
+      3,
+      'bash -lc \'for pid in $(pgrep -u "$(whoami)" -f "[o]pencode attach http://127.0.0.1:4096" || true); do tty=$(ps -p "$pid" -o tty= | tr -d " "); if [ "$tty" = "?" ]; then kill "$pid" || true; fi; done\'',
+      {
+        cwd: "/workspace/repo-a",
+        envs: { PROJECT_NAME: "repo-a" },
+        timeoutMs: 10_000,
+      },
+    );
   });
 
   it("ssh-codex mode auto-installs codex when missing", async () => {
@@ -385,7 +449,7 @@ describe("startup modes orchestrator", () => {
     expect(opencodeRunInteractiveSession.mock.calls[0]?.[1]).toContain("source");
     expect(opencodeRunInteractiveSession.mock.calls[0]?.[1]).toContain("/tmp/ez-devbox-startup-env-");
     expect(opencodeRunInteractiveSession.mock.calls[0]?.[1]).not.toContain("PROJECT_NAME");
-    expect(opencodeRunInteractiveSession.mock.calls[0]?.[1]).toContain("exec opencode");
+    expect(opencodeRunInteractiveSession.mock.calls[0]?.[1]).toContain("exec opencode attach http://127.0.0.1:4096");
 
     expect(codexRunInteractiveSession).toHaveBeenCalledWith(session, expect.stringContaining("cd"));
     expect(codexRunInteractiveSession.mock.calls[0]?.[1]).toContain("/workspace/repo-b");

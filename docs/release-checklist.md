@@ -7,6 +7,7 @@ Run this checklist before publishing a new `ez-devbox` version.
    - `npm run check:style`
    - `npm run test`
    - `npm run build`
+   - `npm run e2e:live`
    - (or run all together) `npm run validate`
 2. Verify package contents and runtime entrypoints:
    - `npm run pack:check`
