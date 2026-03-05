@@ -7,6 +7,8 @@ import {
 } from "../e2b/lifecycle.js";
 import { clearLastRunState, type LastRunState, loadLastRunState } from "../state/lastRun.js";
 import type { CommandResult } from "../types/index.js";
+import { applyEnvDefaults } from "./env-defaults.js";
+import { loadCliEnvSource } from "./env-source.js";
 import { promptWithReadline } from "./readline-prompt.js";
 import { formatSandboxDisplayLabel } from "./sandbox-display-name.js";
 
@@ -17,6 +19,7 @@ export interface WipeAllCommandDeps {
   promptInput: (question: string) => Promise<string>;
   loadLastRunState: () => Promise<LastRunState | null>;
   clearLastRunState: () => Promise<void>;
+  resolveEnvSource?: () => Promise<Record<string, string | undefined>>;
 }
 
 const defaultDeps: WipeAllCommandDeps = {
@@ -26,6 +29,7 @@ const defaultDeps: WipeAllCommandDeps = {
   promptInput,
   loadLastRunState,
   clearLastRunState,
+  resolveEnvSource: loadCliEnvSource,
 };
 
 export async function runWipeAllCommand(
@@ -33,6 +37,10 @@ export async function runWipeAllCommand(
   deps: WipeAllCommandDeps = defaultDeps,
 ): Promise<CommandResult> {
   const parsed = parseWipeAllArgs(args);
+  const envSource = deps.resolveEnvSource ? await deps.resolveEnvSource() : undefined;
+  if (envSource) {
+    applyEnvDefaults(process.env, envSource);
+  }
   const sandboxes = await deps.listSandboxes();
 
   if (sandboxes.length === 0) {

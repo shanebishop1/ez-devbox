@@ -2,6 +2,38 @@ import { describe, expect, it, vi } from "vitest";
 import { runWipeCommand } from "../src/cli/commands.wipe.js";
 
 describe("runWipeCommand", () => {
+  it("applies E2B_API_KEY from resolved env source when process env is missing", async () => {
+    const original = process.env.E2B_API_KEY;
+    delete process.env.E2B_API_KEY;
+
+    try {
+      const listSandboxes = vi.fn().mockImplementation(async () => {
+        expect(process.env.E2B_API_KEY).toBe("from-dotenv");
+        return [{ sandboxId: "sbx-1", state: "running" }];
+      });
+
+      await runWipeCommand(["--sandbox-id", "sbx-1"], {
+        listSandboxes,
+        killSandbox: vi.fn().mockResolvedValue(undefined),
+        isInteractiveTerminal: () => false,
+        promptInput: vi.fn().mockResolvedValue("1"),
+        loadLastRunState: vi.fn().mockResolvedValue(null),
+        clearLastRunState: vi.fn().mockResolvedValue(undefined),
+        resolveEnvSource: vi.fn().mockResolvedValue({
+          E2B_API_KEY: "from-dotenv",
+        }),
+      });
+
+      expect(listSandboxes).toHaveBeenCalledTimes(1);
+    } finally {
+      if (original === undefined) {
+        delete process.env.E2B_API_KEY;
+      } else {
+        process.env.E2B_API_KEY = original;
+      }
+    }
+  });
+
   it("rejects unexpected arguments with help guidance", async () => {
     await expect(
       runWipeCommand(["--bad"], {
