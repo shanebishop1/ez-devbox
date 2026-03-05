@@ -139,6 +139,16 @@ describe("e2b lifecycle adapter", () => {
     ]);
   });
 
+  it("adds a helpful API key hint when list returns missing authorization header", async () => {
+    const client = createMockClient({
+      list: vi.fn().mockRejectedValue(new Error("401: authorization header is missing")),
+    });
+
+    await expect(listSandboxes({ client })).rejects.toThrow(
+      "Failed to list sandboxes: 401: authorization header is missing. Ensure E2B_API_KEY is set in your environment or .env.",
+    );
+  });
+
   it("refreshTimeout normalizes milliseconds and calls setTimeout", async () => {
     const setTimeout = vi.fn().mockResolvedValue(undefined);
     const handle: SandboxHandle = {

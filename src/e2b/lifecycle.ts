@@ -214,14 +214,14 @@ function formatLifecycleError(message: string, cause: unknown): string {
       parts.push(`stdout=${commandLike.stdout}`);
     }
 
-    return redactSensitiveText(parts.join(": "));
+    return redactSensitiveText(addAuthHintIfApplicable(parts.join(": ")));
   }
 
   if (cause instanceof Error && cause.message.trim() !== "") {
-    return redactSensitiveText(`${message}: ${cause.message}`);
+    return redactSensitiveText(addAuthHintIfApplicable(`${message}: ${cause.message}`));
   }
 
-  return redactSensitiveText(message);
+  return redactSensitiveText(addAuthHintIfApplicable(message));
 }
 
 function getCommandLikeError(
@@ -248,4 +248,17 @@ function getCommandLikeError(
     stdout,
     stderr,
   };
+}
+
+function addAuthHintIfApplicable(message: string): string {
+  const normalized = message.toLowerCase();
+  if (!normalized.includes("authorization header is missing")) {
+    return message;
+  }
+
+  if (normalized.includes("ensure e2b_api_key is set")) {
+    return message;
+  }
+
+  return `${message}. Ensure E2B_API_KEY is set in your environment or .env.`;
 }
