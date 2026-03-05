@@ -19,6 +19,8 @@ const OPEN_CODE_SERVER_READINESS_COMMAND =
 const OPEN_CODE_ATTACH_ORPHAN_CLEANUP_COMMAND =
   'bash -lc \'for pid in $(pgrep -u "$(whoami)" -f "[o]pencode attach http://127.0.0.1:4096" || true); do tty=$(ps -p "$pid" -o tty= | tr -d " "); if [ "$tty" = "?" ]; then kill "$pid" || true; fi; done\'';
 const COMMAND_TIMEOUT_MS = 15_000;
+const COMMAND_RETRY_TIMEOUT_MS = 60_000;
+const COMMAND_MAX_ATTEMPTS = 2;
 const SERVER_START_TIMEOUT_MS = 10_000;
 const SERVER_READY_TIMEOUT_MS = 35_000;
 const ORPHAN_ATTACH_CLEANUP_TIMEOUT_MS = 10_000;
@@ -109,24 +111,42 @@ async function runSmokeCheck(
   handle: SandboxHandle,
   commandContext: { cwd?: string; envs: Record<string, string> },
 ): Promise<ModeLaunchResult> {
-  const result = await handle.run(OPEN_CODE_SMOKE_COMMAND, {
-    ...(commandContext.cwd ? { cwd: commandContext.cwd } : {}),
-    ...(Object.keys(commandContext.envs).length > 0 ? { envs: commandContext.envs } : {}),
-    timeoutMs: COMMAND_TIMEOUT_MS,
-  });
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= COMMAND_MAX_ATTEMPTS; attempt += 1) {
+    const timeoutMs = attempt === 1 ? COMMAND_TIMEOUT_MS : COMMAND_RETRY_TIMEOUT_MS;
 
-  const output = firstNonEmptyLine(result.stdout, result.stderr);
+    try {
+      const result = await handle.run(OPEN_CODE_SMOKE_COMMAND, {
+        ...(commandContext.cwd ? { cwd: commandContext.cwd } : {}),
+        ...(Object.keys(commandContext.envs).length > 0 ? { envs: commandContext.envs } : {}),
+        timeoutMs,
+      });
 
-  return {
-    mode: "ssh-opencode",
-    command: OPEN_CODE_SMOKE_COMMAND,
-    details: {
-      smoke: "opencode-cli",
-      status: "ready",
-      output,
-    },
-    message: `OpenCode CLI smoke passed in sandbox ${handle.sandboxId}: ${output}. Run from an interactive terminal for full OpenCode session attach.`,
-  };
+      const output = firstNonEmptyLine(result.stdout, result.stderr);
+
+      return {
+        mode: "ssh-opencode",
+        command: OPEN_CODE_SMOKE_COMMAND,
+        details: {
+          smoke: "opencode-cli",
+          status: "ready",
+          output,
+        },
+        message: `OpenCode CLI smoke passed in sandbox ${handle.sandboxId}: ${output}. Run from an interactive terminal for full OpenCode session attach.`,
+      };
+    } catch (error) {
+      lastError = error;
+      if (!isCommandTimeoutError(error) || attempt >= COMMAND_MAX_ATTEMPTS) {
+        throw error;
+      }
+
+      logger.verbose(
+        `OpenCode smoke command timed out after ${timeoutMs}ms; retrying once with ${COMMAND_RETRY_TIMEOUT_MS}ms timeout.`,
+      );
+    }
+  }
+
+  throw lastError instanceof Error ? lastError : new Error("OpenCode smoke check failed unexpectedly.");
 }
 
 function resolveCommandContext(launchContext: LaunchContextOptions): { cwd?: string; envs: Record<string, string> } {
@@ -149,4 +169,13 @@ function firstNonEmptyLine(stdout: string, stderr: string): string {
 
   const [firstLine] = preferred.split("\n");
   return firstLine.trim();
+}
+
+function isCommandTimeoutError(error: unknown): boolean {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+
+  const normalizedMessage = error.message.toLowerCase();
+  return normalizedMessage.includes("deadline_exceeded") || normalizedMessage.includes("timed out");
 }
