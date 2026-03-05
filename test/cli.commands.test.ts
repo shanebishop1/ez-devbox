@@ -837,6 +837,62 @@ describe("CLI command integration", () => {
     );
   });
 
+  it("connect preserves preferred active repo even after pre-launch last-run save", async () => {
+    const multiRepoConfig: ResolvedLauncherConfig = {
+      ...config,
+      project: {
+        ...config.project,
+        repos: [
+          {
+            name: "sample-repo",
+            url: "https://github.com/bukatea/sample-repo.git",
+            branch: "main",
+            setup_command: "",
+            setup_env: {},
+            startup_env: {},
+          },
+          {
+            name: "next.js",
+            url: "https://github.com/vercel/next.js.git",
+            branch: "canary",
+            setup_command: "",
+            setup_env: {},
+            startup_env: {},
+          },
+        ],
+      },
+    };
+
+    let persistedLastRun: LastRunState | null = {
+      sandboxId: "sbx-arg",
+      mode: "ssh-opencode",
+      activeRepo: "sample-repo",
+      updatedAt: "2026-02-01T00:00:00.000Z",
+    };
+
+    const bootstrapProjectWorkspace = vi.fn().mockResolvedValue(bootstrapResult);
+
+    await runConnectCommand(["--sandbox-id", "sbx-arg"], {
+      loadConfig: vi.fn().mockResolvedValue(multiRepoConfig),
+      connectSandbox: vi.fn().mockResolvedValue({ sandboxId: "sbx-arg" }),
+      loadLastRunState: vi.fn().mockImplementation(async () => persistedLastRun),
+      listSandboxes: vi.fn().mockResolvedValue([]),
+      resolvePromptStartupMode: vi.fn().mockResolvedValue("ssh-opencode"),
+      launchMode: vi.fn().mockResolvedValue({ mode: "ssh-opencode", command: "opencode", message: "launched" }),
+      bootstrapProjectWorkspace,
+      saveLastRunState: vi.fn().mockImplementation(async (state: LastRunState) => {
+        persistedLastRun = state;
+      }),
+      now: () => "2026-02-01T00:00:00.000Z",
+    });
+
+    expect(bootstrapProjectWorkspace).toHaveBeenCalledWith(
+      { sandboxId: "sbx-arg" },
+      multiRepoConfig,
+      expect.objectContaining({ preferredActiveRepo: "sample-repo" }),
+    );
+  });
+
   it("connect injects GH token into launch startupEnv when gh is enabled", async () => {
     const ghEnabledConfig: ResolvedLauncherConfig = {
       ...config,
