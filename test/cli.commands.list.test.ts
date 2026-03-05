@@ -2,6 +2,60 @@ import { describe, expect, it, vi } from "vitest";
 import { runListCommand } from "../src/cli/commands.list.js";
 
 describe("runListCommand", () => {
+  it("applies E2B_API_KEY from resolved env source when process env is missing", async () => {
+    const original = process.env.E2B_API_KEY;
+    delete process.env.E2B_API_KEY;
+
+    try {
+      const listSandboxes = vi.fn().mockImplementation(async () => {
+        expect(process.env.E2B_API_KEY).toBe("from-dotenv");
+        return [];
+      });
+
+      await runListCommand([], {
+        listSandboxes,
+        resolveEnvSource: vi.fn().mockResolvedValue({
+          E2B_API_KEY: "from-dotenv",
+        }),
+      });
+
+      expect(listSandboxes).toHaveBeenCalledTimes(1);
+    } finally {
+      if (original === undefined) {
+        delete process.env.E2B_API_KEY;
+      } else {
+        process.env.E2B_API_KEY = original;
+      }
+    }
+  });
+
+  it("does not override E2B_API_KEY already present in process env", async () => {
+    const original = process.env.E2B_API_KEY;
+    process.env.E2B_API_KEY = "from-process";
+
+    try {
+      const listSandboxes = vi.fn().mockImplementation(async () => {
+        expect(process.env.E2B_API_KEY).toBe("from-process");
+        return [];
+      });
+
+      await runListCommand([], {
+        listSandboxes,
+        resolveEnvSource: vi.fn().mockResolvedValue({
+          E2B_API_KEY: "from-dotenv",
+        }),
+      });
+
+      expect(listSandboxes).toHaveBeenCalledTimes(1);
+    } finally {
+      if (original === undefined) {
+        delete process.env.E2B_API_KEY;
+      } else {
+        process.env.E2B_API_KEY = original;
+      }
+    }
+  });
+
   it("rejects unexpected arguments with help guidance", async () => {
     await expect(
       runListCommand(["--bad"], {

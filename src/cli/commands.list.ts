@@ -1,17 +1,24 @@
 import { type ListSandboxesOptions, listSandboxes, type SandboxListItem } from "../e2b/lifecycle.js";
 import type { CommandResult } from "../types/index.js";
+import { loadCliEnvSource } from "./env-source.js";
 import { formatSandboxDisplayLabel } from "./sandbox-display-name.js";
 
 export interface ListCommandDeps {
   listSandboxes: (options?: ListSandboxesOptions) => Promise<SandboxListItem[]>;
+  resolveEnvSource?: () => Promise<Record<string, string | undefined>>;
 }
 
 const defaultDeps: ListCommandDeps = {
   listSandboxes,
+  resolveEnvSource: loadCliEnvSource,
 };
 
 export async function runListCommand(_args: string[], deps: ListCommandDeps = defaultDeps): Promise<CommandResult> {
   const parsed = parseListArgs(_args);
+  const envSource = deps.resolveEnvSource ? await deps.resolveEnvSource() : undefined;
+  if (envSource) {
+    applyEnvDefaults(process.env, envSource);
+  }
 
   const sandboxes = await deps.listSandboxes();
   const formattedSandboxes = sandboxes.map((sandbox) => ({
@@ -62,4 +69,15 @@ function parseListArgs(args: string[]): { json: boolean } {
   }
 
   return { json };
+}
+
+function applyEnvDefaults(
+  targetEnv: NodeJS.ProcessEnv,
+  envSource: Record<string, string | undefined>,
+): void {
+  for (const [key, value] of Object.entries(envSource)) {
+    if (targetEnv[key] === undefined && value !== undefined) {
+      targetEnv[key] = value;
+    }
+  }
 }
