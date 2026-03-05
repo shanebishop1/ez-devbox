@@ -12,6 +12,9 @@ import {
 
 const OPEN_CODE_SMOKE_COMMAND = "opencode --version";
 const OPEN_CODE_ATTACH_COMMAND = "opencode attach http://127.0.0.1:4096";
+const OPEN_CODE_ATTACH_TMUX_SOCKET = "ez-devbox-opencode";
+const OPEN_CODE_ATTACH_TMUX_SESSION = "ez-devbox-opencode";
+const OPEN_CODE_ATTACH_TMUX_COMMAND = `tmux -L ${OPEN_CODE_ATTACH_TMUX_SOCKET} new-session -A -s ${OPEN_CODE_ATTACH_TMUX_SESSION} "${OPEN_CODE_ATTACH_COMMAND}" \\; set-option -g status off \\; bind-key -n C-c detach-client`;
 const OPEN_CODE_SERVER_BOOT_COMMAND =
   "nohup opencode serve --hostname 127.0.0.1 --port 4096 >/tmp/opencode-serve-ssh.log 2>&1 &";
 const OPEN_CODE_SERVER_READINESS_COMMAND =
@@ -53,13 +56,16 @@ export async function startOpenCodeMode(
 
   try {
     const envScriptPath = await stageInteractiveStartupEnv(handle, session, commandContext.envs);
+    logger.verbose(
+      "OpenCode SSH mode uses a persistent tmux session; Ctrl+C detaches your terminal while tasks continue.",
+    );
     logger.verbose("Opening interactive SSH session.");
     await deps.runInteractiveSession(
       session,
       buildInteractiveRemoteCommand({
         cwd: commandContext.cwd,
         envScriptPath,
-        command: OPEN_CODE_ATTACH_COMMAND,
+        command: OPEN_CODE_ATTACH_TMUX_COMMAND,
       }),
     );
   } finally {

@@ -13,8 +13,8 @@ export async function ensureSshBridgeDependencies(handle: Pick<SandboxHandle, "r
     return;
   }
 
-  logger.verbose("SSH bridge: missing dependencies; installing openssh-server and websockify.");
-  const installCommand = "bash -lc 'sudo apt-get update && sudo apt-get install -y openssh-server websockify'";
+  logger.verbose("SSH bridge: missing dependencies; installing openssh-server, websockify, and tmux.");
+  const installCommand = "bash -lc 'sudo apt-get update && sudo apt-get install -y openssh-server websockify tmux'";
 
   for (let attempt = 1; attempt <= APT_LOCK_RETRY_ATTEMPTS; attempt += 1) {
     try {
@@ -38,7 +38,7 @@ export async function ensureSshBridgeDependencies(handle: Pick<SandboxHandle, "r
 
 async function hasSshBridgeDependencies(handle: Pick<SandboxHandle, "run">): Promise<boolean> {
   const result = await handle.run(
-    "bash -lc 'if [ -x /usr/sbin/sshd ] && command -v websockify >/dev/null 2>&1 && command -v ssh-keygen >/dev/null 2>&1; then printf READY; else printf MISSING; fi'",
+    "bash -lc 'if [ -x /usr/sbin/sshd ] && command -v websockify >/dev/null 2>&1 && command -v ssh-keygen >/dev/null 2>&1 && command -v tmux >/dev/null 2>&1; then printf READY; else printf MISSING; fi'",
     { timeoutMs: SSH_SHORT_TIMEOUT_MS },
   );
 
