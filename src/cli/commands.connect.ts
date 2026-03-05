@@ -101,6 +101,7 @@ export async function runConnectCommand(
     if (requestedMode === "prompt") {
       logger.verbose(`Startup mode selected via prompt: ${mode}.`);
     }
+    const preferredActiveRepo = await resolvePreferredActiveRepo(config, target.sandboxId, deps, options);
 
     logger.verbose(`Connecting to sandbox ${targetLabel}.`);
     const handle = await deps.connectSandbox(target.sandboxId, config);
@@ -109,7 +110,7 @@ export async function runConnectCommand(
     await deps.saveLastRunState({
       sandboxId: handle.sandboxId,
       mode,
-      activeRepo: undefined,
+      activeRepo: preferredActiveRepo,
       updatedAt: deps.now(),
     });
 
@@ -126,7 +127,6 @@ export async function runConnectCommand(
       ...ghRuntimeEnv,
     });
     const webServerPassword = resolveWebServerPassword(envSource);
-    const preferredActiveRepo = await resolvePreferredActiveRepo(config, target.sandboxId, deps, options);
 
     const bootstrapResult = await (deps.bootstrapProjectWorkspace ?? bootstrapProjectWorkspace)(handle, config, {
       isConnect: true,
