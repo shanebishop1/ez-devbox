@@ -32,7 +32,7 @@
     "lint": "biome lint src test scripts package.json",
     "format": "biome format --write src test scripts package.json",
     "check:style": "biome check src test scripts package.json",
-    "validate": "npm run check:complexity && npm run check:style && npm run test && npm run build",
+    "validate": "npm run check:complexity && npm run check:style && npm run test && npm run build && npm run e2e:live",
     "test": "vitest run",
     "e2e:live": "tsx scripts/e2e.live.ts",
     "template:build": "tsx templates/build.ts",
