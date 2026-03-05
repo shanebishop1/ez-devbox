@@ -6,7 +6,7 @@ Run OpenCode/Codex agents in disposable E2B sandboxes with fast reconnects, repe
 
 - Creates or connects to an E2B sandbox
 - Includes the following modes:
-  - `ssh-opencode` (ssh + open an instance of opencode)
+  - `ssh-opencode` (ssh + attach OpenCode TUI to a persistent in-sandbox `opencode serve` backend)
   - `ssh-codex` (ssh + open an instance of codex)
   - `web` (starts `opencode serve` and returns URL)
   - `ssh-shell` (normal ssh into the container)
