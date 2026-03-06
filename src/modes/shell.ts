@@ -9,8 +9,14 @@ import {
   type SshModeDeps,
   stageInteractiveStartupEnv,
 } from "./ssh-bridge.js";
+import { buildPersistentTmuxCommand } from "./tmux.js";
 
 const SHELL_SMOKE_COMMAND = "bash -lc 'echo shell-ready'";
+const SHELL_ATTACH_TMUX_COMMAND = buildPersistentTmuxCommand({
+  socketName: "ez-devbox-shell",
+  sessionName: "ez-devbox-shell",
+  command: "bash -i",
+});
 const COMMAND_TIMEOUT_MS = 15_000;
 
 type ShellModeDeps = SshModeDeps;
@@ -38,13 +44,16 @@ export async function startShellMode(
 
   try {
     const envScriptPath = await stageInteractiveStartupEnv(handle, session, commandContext.envs);
+    logger.verbose(
+      "Shell SSH mode uses a persistent tmux session; use Ctrl+b d to detach while it continues running in the sandbox.",
+    );
     logger.verbose("Opening interactive SSH session.");
     await deps.runInteractiveSession(
       session,
       buildInteractiveRemoteCommand({
         cwd: commandContext.cwd,
         envScriptPath,
-        command: "bash -i",
+        command: SHELL_ATTACH_TMUX_COMMAND,
       }),
     );
   } finally {

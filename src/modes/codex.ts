@@ -9,8 +9,14 @@ import {
   type SshModeDeps,
   stageInteractiveStartupEnv,
 } from "./ssh-bridge.js";
+import { buildPersistentTmuxCommand } from "./tmux.js";
 
 const CODEX_SMOKE_COMMAND = "codex --version";
+const CODEX_ATTACH_TMUX_COMMAND = buildPersistentTmuxCommand({
+  socketName: "ez-devbox-codex",
+  sessionName: "ez-devbox-codex",
+  command: "codex",
+});
 const CODEX_AVAILABILITY_CHECK_COMMAND =
   "bash -lc 'if command -v codex >/dev/null 2>&1; then printf PRESENT; else printf MISSING; fi'";
 const CODEX_INSTALL_COMMAND = "npm i -g @openai/codex";
@@ -43,13 +49,16 @@ export async function startCodexMode(
 
   try {
     const envScriptPath = await stageInteractiveStartupEnv(handle, session, commandContext.envs);
+    logger.verbose(
+      "Codex SSH mode uses a persistent tmux session; use Ctrl+b d to detach while it continues running in the sandbox.",
+    );
     logger.verbose("Opening interactive SSH session.");
     await deps.runInteractiveSession(
       session,
       buildInteractiveRemoteCommand({
         cwd: commandContext.cwd,
         envScriptPath,
-        command: "codex",
+        command: CODEX_ATTACH_TMUX_COMMAND,
       }),
     );
   } finally {

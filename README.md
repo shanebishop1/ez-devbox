@@ -6,10 +6,10 @@ Run OpenCode/Codex agents in disposable E2B sandboxes with fast reconnects, repe
 
 - Creates or connects to an E2B sandbox
 - Includes the following modes:
-  - `ssh-opencode` (ssh + attach OpenCode TUI to a persistent in-sandbox `opencode serve` backend)
-  - `ssh-codex` (ssh + open an instance of codex)
+  - `ssh-opencode` (ssh + attach OpenCode TUI to a persistent in-sandbox `opencode serve` backend; leaving the session detaches and reconnect/resume re-attaches to the same in-sandbox session)
+  - `ssh-codex` (ssh + attach Codex inside a persistent in-sandbox `tmux` session)
   - `web` (starts `opencode serve` and returns URL)
-  - `ssh-shell` (normal ssh into the container)
+  - `ssh-shell` (interactive shell inside a persistent in-sandbox `tmux` session)
 - Automatic repo set-up/bootstrapping during sandbox creation (clone, branch, set up environment, install packages, initialize, etc.)
 - Starts tools in the expected directory (`project.working_dir = "auto"` picks repo or workspace)
 - Syncs local tool auth/config (OpenCode, Codex, GitHub CLI) into sandbox during `create`
@@ -21,6 +21,7 @@ This tool is for a workflow where you want disposable cloud sandboxes without gi
 
 - Repeatable repo bootstrapping on sandbox creation, instead of manual shell setup each time.
 - Fast reconnect/resume behavior with saved sandbox + mode state.
+- SSH modes are persistent: disconnecting detaches while the sandbox keeps the session alive, and reconnect/resume attaches you back to it.
 - Controlled env pass-through and auth/config sync (OpenCode/Codex/GitHub) rather than ad-hoc copying.
 - Optional local port tunnel mapping for MCP servers and local services.
 
