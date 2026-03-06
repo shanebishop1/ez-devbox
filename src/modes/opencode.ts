@@ -17,6 +17,7 @@ const OPEN_CODE_ATTACH_TMUX_SESSION = "ez-devbox-opencode";
 const OPEN_CODE_ATTACH_TMUX_COMMAND = [
   `tmux -u -L ${OPEN_CODE_ATTACH_TMUX_SOCKET}`,
   `new-session -A -s ${OPEN_CODE_ATTACH_TMUX_SESSION} "${OPEN_CODE_ATTACH_COMMAND}"`,
+  "\\; set-option -s escape-time 0",
   '\\; set-option -g default-terminal "screen-256color"',
   '\\; set-option -ga terminal-overrides ",xterm-256color:Tc,screen-256color:Tc,tmux-256color:Tc"',
   "\\; set-option -g status off",
