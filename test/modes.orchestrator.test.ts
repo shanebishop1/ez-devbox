@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { SandboxHandle } from "../src/e2b/lifecycle.js";
+import { logger } from "../src/logging/logger.js";
 import { startCodexMode } from "../src/modes/codex.js";
 import { launchMode, type ModeLaunchResult } from "../src/modes/index.js";
 import { startOpenCodeMode } from "../src/modes/opencode.js";
@@ -297,6 +298,7 @@ describe("startup modes orchestrator", () => {
 
   it("ssh-codex mode uses interactive attach in tty environments", async () => {
     const handle = createHandle({ run: vi.fn().mockResolvedValue({ stdout: "PRESENT", stderr: "", exitCode: 0 }) });
+    const loggerVerbose = vi.spyOn(logger, "verbose").mockImplementation(() => undefined);
     const prepareSession = vi.fn().mockResolvedValue({
       tempDir: "/tmp/session",
       privateKeyPath: "/tmp/session/id_ed25519",
@@ -325,7 +327,10 @@ describe("startup modes orchestrator", () => {
         knownHostsPath: "/tmp/session/known_hosts",
         wsUrl: "wss://8081-sbx.e2b.app",
       },
-      "bash -lc 'exec codex'",
+      'bash -lc \'exec tmux -u -L ez-devbox-codex new-session -A -s ez-devbox-codex "codex" \\; set-option -s escape-time 0 \\; set-option -g default-terminal "screen-256color" \\; set-option -ga terminal-overrides ",xterm-256color:Tc,screen-256color:Tc,tmux-256color:Tc" \\; set-option -g status off\'',
+    );
+    expect(loggerVerbose).toHaveBeenCalledWith(
+      "Codex SSH mode uses a persistent tmux session; use Ctrl+b d to detach while it continues running in the sandbox.",
     );
     expect(cleanupSession).toHaveBeenCalledTimes(1);
     expect(result.mode).toBe("ssh-codex");
@@ -333,6 +338,7 @@ describe("startup modes orchestrator", () => {
       session: "interactive",
       status: "completed",
     });
+    loggerVerbose.mockRestore();
   });
 
   it("ssh-shell mode runs deterministic shell smoke command", async () => {
@@ -376,6 +382,7 @@ describe("startup modes orchestrator", () => {
 
   it("ssh-shell mode uses interactive attach in tty environments", async () => {
     const handle = createHandle({ run: vi.fn().mockResolvedValue({ stdout: "", stderr: "", exitCode: 0 }) });
+    const loggerVerbose = vi.spyOn(logger, "verbose").mockImplementation(() => undefined);
     const prepareSession = vi.fn().mockResolvedValue({
       tempDir: "/tmp/session",
       privateKeyPath: "/tmp/session/id_ed25519",
@@ -404,7 +411,10 @@ describe("startup modes orchestrator", () => {
         knownHostsPath: "/tmp/session/known_hosts",
         wsUrl: "wss://8081-sbx.e2b.app",
       },
-      "bash -lc 'exec bash -i'",
+      'bash -lc \'exec tmux -u -L ez-devbox-shell new-session -A -s ez-devbox-shell "bash -i" \\; set-option -s escape-time 0 \\; set-option -g default-terminal "screen-256color" \\; set-option -ga terminal-overrides ",xterm-256color:Tc,screen-256color:Tc,tmux-256color:Tc" \\; set-option -g status off\'',
+    );
+    expect(loggerVerbose).toHaveBeenCalledWith(
+      "Shell SSH mode uses a persistent tmux session; use Ctrl+b d to detach while it continues running in the sandbox.",
     );
     expect(cleanupSession).toHaveBeenCalledTimes(1);
     expect(result.mode).toBe("ssh-shell");
@@ -412,6 +422,7 @@ describe("startup modes orchestrator", () => {
       session: "interactive",
       status: "completed",
     });
+    loggerVerbose.mockRestore();
   });
 
   it("interactive modes cd into launch working directory", async () => {
@@ -477,14 +488,18 @@ describe("startup modes orchestrator", () => {
     expect(codexRunInteractiveSession.mock.calls[0]?.[1]).toContain("source");
     expect(codexRunInteractiveSession.mock.calls[0]?.[1]).toContain("/tmp/ez-devbox-startup-env-");
     expect(codexRunInteractiveSession.mock.calls[0]?.[1]).not.toContain("PROJECT_NAME");
-    expect(codexRunInteractiveSession.mock.calls[0]?.[1]).toContain("exec codex");
+    expect(codexRunInteractiveSession.mock.calls[0]?.[1]).toContain(
+      'exec tmux -u -L ez-devbox-codex new-session -A -s ez-devbox-codex "codex" \\; set-option -s escape-time 0 \\; set-option -g default-terminal "screen-256color" \\; set-option -ga terminal-overrides ",xterm-256color:Tc,screen-256color:Tc,tmux-256color:Tc" \\; set-option -g status off',
+    );
 
     expect(shellRunInteractiveSession).toHaveBeenCalledWith(session, expect.stringContaining("cd"));
     expect(shellRunInteractiveSession.mock.calls[0]?.[1]).toContain("/workspace/repo-c");
     expect(shellRunInteractiveSession.mock.calls[0]?.[1]).toContain("source");
     expect(shellRunInteractiveSession.mock.calls[0]?.[1]).toContain("/tmp/ez-devbox-startup-env-");
     expect(shellRunInteractiveSession.mock.calls[0]?.[1]).not.toContain("PROJECT_NAME");
-    expect(shellRunInteractiveSession.mock.calls[0]?.[1]).toContain("exec bash -i");
+    expect(shellRunInteractiveSession.mock.calls[0]?.[1]).toContain(
+      'exec tmux -u -L ez-devbox-shell new-session -A -s ez-devbox-shell "bash -i" \\; set-option -s escape-time 0 \\; set-option -g default-terminal "screen-256color" \\; set-option -ga terminal-overrides ",xterm-256color:Tc,screen-256color:Tc,tmux-256color:Tc" \\; set-option -g status off',
+    );
   });
 
   it("interactive modes stage env values without exposing them in remote ssh command", async () => {
@@ -521,7 +536,9 @@ describe("startup modes orchestrator", () => {
     expect(remoteCommand).toContain("/tmp/ez-devbox-startup-env-");
     expect(remoteCommand).not.toContain("PROJECT_NAME");
     expect(remoteCommand).not.toContain("o'neil");
-    expect(remoteCommand).toContain("exec bash -i");
+    expect(remoteCommand).toContain(
+      'exec tmux -u -L ez-devbox-shell new-session -A -s ez-devbox-shell "bash -i" \\; set-option -s escape-time 0 \\; set-option -g default-terminal "screen-256color" \\; set-option -ga terminal-overrides ",xterm-256color:Tc,screen-256color:Tc,tmux-256color:Tc" \\; set-option -g status off',
+    );
     expect(stageCall).toBeDefined();
     expect(stageCall?.[1]).toMatchObject({ envs: { PROJECT_NAME: "o'neil" }, timeoutMs: 15_000 });
   });
