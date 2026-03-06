@@ -9,20 +9,18 @@ import {
   type SshModeDeps,
   stageInteractiveStartupEnv,
 } from "./ssh-bridge.js";
+import { buildPersistentTmuxCommand } from "./tmux.js";
 
 const OPEN_CODE_SMOKE_COMMAND = "opencode --version";
 const OPEN_CODE_ATTACH_COMMAND = "opencode attach http://127.0.0.1:4096";
 const OPEN_CODE_ATTACH_TMUX_SOCKET = "ez-devbox-opencode";
 const OPEN_CODE_ATTACH_TMUX_SESSION = "ez-devbox-opencode";
-const OPEN_CODE_ATTACH_TMUX_COMMAND = [
-  `tmux -u -L ${OPEN_CODE_ATTACH_TMUX_SOCKET}`,
-  `new-session -A -s ${OPEN_CODE_ATTACH_TMUX_SESSION} "${OPEN_CODE_ATTACH_COMMAND}"`,
-  "\\; set-option -s escape-time 0",
-  '\\; set-option -g default-terminal "screen-256color"',
-  '\\; set-option -ga terminal-overrides ",xterm-256color:Tc,screen-256color:Tc,tmux-256color:Tc"',
-  "\\; set-option -g status off",
-  "\\; bind-key -n C-c detach-client",
-].join(" ");
+const OPEN_CODE_ATTACH_TMUX_COMMAND = buildPersistentTmuxCommand({
+  socketName: OPEN_CODE_ATTACH_TMUX_SOCKET,
+  sessionName: OPEN_CODE_ATTACH_TMUX_SESSION,
+  command: OPEN_CODE_ATTACH_COMMAND,
+  detachBehavior: "ctrl-c",
+});
 const OPEN_CODE_SERVER_BOOT_COMMAND =
   "nohup opencode serve --hostname 127.0.0.1 --port 4096 >/tmp/opencode-serve-ssh.log 2>&1 &";
 const OPEN_CODE_SERVER_READINESS_COMMAND =
