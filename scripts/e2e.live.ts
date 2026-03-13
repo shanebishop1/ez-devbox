@@ -46,10 +46,18 @@ async function main(): Promise<void> {
       template: "codex",
     },
   };
+  const claudeConfig = {
+    ...config,
+    sandbox: {
+      ...config.sandbox,
+      template: "opencode",
+    },
+  };
   const checks: CheckResult[] = [];
   const sandboxIds: string[] = [];
   let opencodeSandboxId: string | null = null;
   let codexSandboxId: string | null = null;
+  let claudeSandboxId: string | null = null;
 
   try {
     const webPassword = `live-${randomUUID()}`;
@@ -138,7 +146,29 @@ async function main(): Promise<void> {
       checks.push({ name: "codex CLI", status: "SKIP", detail: "codex sandbox creation failed" });
     }
 
-    await cleanupSandboxes(sandboxIds, checks, opencodeSandboxId, codexSandboxId);
+    try {
+      const claudeHandle = await createSandbox(claudeConfig, {
+        envs: resolveSandboxCreateEnv(claudeConfig).envs,
+        metadata: {
+          "launcher.live": "claude",
+        },
+      });
+      claudeSandboxId = claudeHandle.sandboxId;
+      sandboxIds.push(claudeHandle.sandboxId);
+      checks.push({ name: "create claude sandbox", status: "PASS", detail: claudeHandle.sandboxId });
+
+      try {
+        const claudeResult = await launchMode(claudeHandle, "ssh-claude");
+        checks.push({ name: "claude CLI", status: "PASS", detail: claudeResult.message });
+      } catch (error) {
+        checks.push({ name: "claude CLI", status: "FAIL", detail: formatError(error) });
+      }
+    } catch (error) {
+      checks.push({ name: "create claude sandbox", status: "FAIL", detail: formatError(error) });
+      checks.push({ name: "claude CLI", status: "SKIP", detail: "claude sandbox creation failed" });
+    }
+
+    await cleanupSandboxes(sandboxIds, checks, opencodeSandboxId, codexSandboxId, claudeSandboxId);
   }
 
   for (const check of checks) {
@@ -156,6 +186,7 @@ async function cleanupSandboxes(
   checks: CheckResult[],
   opencodeSandboxId: string | null,
   codexSandboxId: string | null,
+  claudeSandboxId: string | null,
 ): Promise<void> {
   await Promise.all(
     sandboxIds.map(async (sandboxId) => {
@@ -176,6 +207,11 @@ async function cleanupSandboxes(
     name: "cleanup codex sandbox",
     status: codexSandboxId ? "PASS" : "SKIP",
     detail: codexSandboxId ? `requested kill for ${codexSandboxId}` : "codex sandbox was not created",
+  });
+  checks.push({
+    name: "cleanup claude sandbox",
+    status: claudeSandboxId ? "PASS" : "SKIP",
+    detail: claudeSandboxId ? `requested kill for ${claudeSandboxId}` : "claude sandbox was not created",
   });
 }
 

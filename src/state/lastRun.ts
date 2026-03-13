@@ -16,7 +16,14 @@ type LastRunStateJson = Partial<LastRunState>;
 const DEFAULT_LAST_RUN_FILENAME = ".ez-devbox-last-run.json";
 const LEGACY_LAST_RUN_FILENAME = ".agent-box-last-run.json";
 const DEFAULT_LAST_RUN_DIR = join(tmpdir(), "ez-devbox", "last-run", "cwd-state");
-const STARTUP_MODES: ReadonlySet<StartupMode> = new Set(["prompt", "ssh-opencode", "ssh-codex", "web", "ssh-shell"]);
+const STARTUP_MODES: ReadonlySet<StartupMode> = new Set([
+  "prompt",
+  "ssh-opencode",
+  "ssh-codex",
+  "ssh-claude",
+  "web",
+  "ssh-shell",
+]);
 
 export async function loadLastRunState(path?: string): Promise<LastRunState | null> {
   const { resolvedPath, usedDefaultPath } = resolveLastRunPath(path);

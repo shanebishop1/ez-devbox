@@ -48,8 +48,8 @@ setup_command = "npm install"
 
 ## `[startup]`
 
-- `mode` (enum): default startup mode. Allowed values: `prompt|ssh-opencode|ssh-codex|web|ssh-shell`.
-- `prompt` behavior: prompts in interactive terminals (accepts `1-4` or mode name), reprompts invalid input up to 3 times, then fails with an actionable error.
+- `mode` (enum): default startup mode. Allowed values: `prompt|ssh-opencode|ssh-codex|ssh-claude|web|ssh-shell`.
+- `prompt` behavior: prompts in interactive terminals (accepts `1-5` or mode name), reprompts invalid input up to 3 times, then fails with an actionable error.
 - Non-interactive fallback is `ssh-opencode`.
 
 ## `[project]`
@@ -100,6 +100,13 @@ When `project.working_dir = "auto"`, working directory behavior after repo selec
 
 - `config_dir` (string): host Codex config directory to sync into `/home/user/.codex` in sandbox.
 - `auth_path` (string): host Codex auth file to sync into `/home/user/.codex/auth.json` in sandbox.
+
+## `[claude]`
+
+- `config_dir` (string): host Claude config directory to sync into `/home/user/.claude` in sandbox.
+- `state_path` (string): host Claude state file to sync into `/home/user/.claude.json` in sandbox.
+- Claude authentication commonly relies on browser-based login. In remote/SSH environments, this flow may require manual login inside the sandbox if host state sync is unavailable or stale.
+- Treat Claude state artifacts as sensitive credentials and avoid syncing from untrusted hosts.
 
 ## `[gh]`
 

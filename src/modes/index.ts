@@ -1,11 +1,12 @@
 import type { SandboxHandle } from "../e2b/lifecycle.js";
 import type { StartupMode } from "../types/index.js";
+import { startClaudeMode } from "./claude.js";
 import { startCodexMode } from "./codex.js";
 import { startOpenCodeMode } from "./opencode.js";
 import { startShellMode } from "./shell.js";
 import { startWebMode } from "./web.js";
 
-export const supportedModes: StartupMode[] = ["prompt", "ssh-opencode", "ssh-codex", "web", "ssh-shell"];
+export const supportedModes: StartupMode[] = ["prompt", "ssh-opencode", "ssh-codex", "ssh-claude", "web", "ssh-shell"];
 
 export type ConcreteStartupMode = Exclude<StartupMode, "prompt">;
 
@@ -35,6 +36,7 @@ const DEFAULT_PROMPT_FALLBACK_MODE: ConcreteStartupMode = "ssh-opencode";
 const MODE_RUNNERS: Record<ConcreteStartupMode, ConcreteModeRunner> = {
   "ssh-opencode": startOpenCodeMode,
   "ssh-codex": startCodexMode,
+  "ssh-claude": startClaudeMode,
   "ssh-shell": startShellMode,
   web: startWebMode,
 };

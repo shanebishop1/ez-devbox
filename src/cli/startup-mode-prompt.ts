@@ -10,6 +10,7 @@ const PROMPT_CHOICE_NUMBERS: Record<string, Exclude<StartupMode, "prompt">> = {
   "2": "ssh-codex",
   "3": "web",
   "4": "ssh-shell",
+  "5": "ssh-claude",
 };
 
 export interface StartupModePromptDeps {
@@ -41,6 +42,7 @@ export async function resolvePromptStartupMode(
     formatPromptChoice(2, "ssh-codex"),
     formatPromptChoice(3, "web"),
     formatPromptChoice(4, "ssh-shell"),
+    formatPromptChoice(5, "ssh-claude"),
     `Enter choice [1/${PROMPT_FALLBACK_MODE}]: `,
   ].join("\n");
   for (let attempt = 0; attempt < PROMPT_MAX_ATTEMPTS; attempt += 1) {
@@ -53,12 +55,18 @@ export async function resolvePromptStartupMode(
   }
 
   throw new Error(
-    `Invalid startup mode selection after ${PROMPT_MAX_ATTEMPTS} attempts. Expected one of ssh-opencode|ssh-codex|web|ssh-shell.`,
+    `Invalid startup mode selection after ${PROMPT_MAX_ATTEMPTS} attempts. Expected one of ssh-opencode|ssh-codex|ssh-claude|web|ssh-shell.`,
   );
 }
 
 function isConcreteStartupMode(value: string): value is Exclude<StartupMode, "prompt"> {
-  return value === "ssh-opencode" || value === "ssh-codex" || value === "web" || value === "ssh-shell";
+  return (
+    value === "ssh-opencode" ||
+    value === "ssh-codex" ||
+    value === "ssh-claude" ||
+    value === "web" ||
+    value === "ssh-shell"
+  );
 }
 
 function resolvePromptAnswer(value: string): Exclude<StartupMode, "prompt"> | undefined {

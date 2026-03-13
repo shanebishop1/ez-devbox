@@ -15,7 +15,7 @@ export function resolveWebServerPassword(envSource: Record<string, string | unde
 
 export function addWebServerPasswordForWebMode(
   startupEnv: Record<string, string>,
-  mode: "ssh-opencode" | "ssh-codex" | "web" | "ssh-shell",
+  mode: "ssh-opencode" | "ssh-codex" | "ssh-claude" | "web" | "ssh-shell",
   webServerPassword: string | undefined,
 ): Record<string, string> {
   const base = removeOpenCodeServerPassword(startupEnv);
@@ -46,7 +46,7 @@ export function formatSetupOutcomeSummary(setup: BootstrapProjectWorkspaceResult
 
 export function parseStartupModeValue(value: string | undefined): StartupMode {
   if (!isStartupMode(value)) {
-    throw new Error("Invalid value for --mode. Expected one of prompt|ssh-opencode|ssh-codex|web|ssh-shell.");
+    throw new Error("Invalid value for --mode. Expected one of prompt|ssh-opencode|ssh-codex|ssh-claude|web|ssh-shell.");
   }
 
   return value;
@@ -54,6 +54,11 @@ export function parseStartupModeValue(value: string | undefined): StartupMode {
 
 function isStartupMode(value: string | undefined): value is StartupMode {
   return (
-    value === "prompt" || value === "ssh-opencode" || value === "ssh-codex" || value === "web" || value === "ssh-shell"
+    value === "prompt" ||
+    value === "ssh-opencode" ||
+    value === "ssh-codex" ||
+    value === "ssh-claude" ||
+    value === "web" ||
+    value === "ssh-shell"
   );
 }

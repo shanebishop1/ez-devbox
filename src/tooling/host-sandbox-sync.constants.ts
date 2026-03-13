@@ -2,6 +2,8 @@ export const OPEN_CODE_CONFIG_DEST = "/home/user/.config/opencode";
 export const OPEN_CODE_AUTH_DEST = "/home/user/.local/share/opencode/auth.json";
 export const CODEX_CONFIG_DEST = "/home/user/.codex";
 export const CODEX_AUTH_DEST = "/home/user/.codex/auth.json";
+export const CLAUDE_CONFIG_DEST = "/home/user/.claude";
+export const CLAUDE_STATE_DEST = "/home/user/.claude.json";
 export const GH_CONFIG_DEST = "/home/user/.config/gh";
 
 export const SKIPPED_DIRECTORY_NAMES = new Set([

@@ -79,6 +79,10 @@ describe("loadConfig", () => {
       config_dir: "~/.codex",
       auth_path: "~/.codex/auth.json",
     });
+    expect(resolved.claude).toEqual({
+      config_dir: "~/.claude",
+      state_path: "~/.claude.json",
+    });
     expect(resolved.gh).toEqual({
       enabled: false,
       config_dir: "~/.config/gh",
@@ -86,7 +90,7 @@ describe("loadConfig", () => {
     expect(resolved.tunnel.ports).toEqual([]);
   });
 
-  it("supports opencode/codex path overrides", async () => {
+  it("supports opencode/codex/claude path overrides", async () => {
     const configPath = join(tempDir, "launcher.config.toml");
     const envPath = join(tempDir, ".env");
 
@@ -100,6 +104,10 @@ describe("loadConfig", () => {
         "[codex]",
         'config_dir = "/tmp/codex-config"',
         'auth_path = "/tmp/codex-auth.json"',
+        "",
+        "[claude]",
+        'config_dir = "/tmp/claude-config"',
+        'state_path = "/tmp/claude-state.json"',
       ].join("\n"),
     );
     await writeFile(envPath, "E2B_API_KEY=test-e2b-key\n");
@@ -113,6 +121,10 @@ describe("loadConfig", () => {
     expect(resolved.codex).toEqual({
       config_dir: "/tmp/codex-config",
       auth_path: "/tmp/codex-auth.json",
+    });
+    expect(resolved.claude).toEqual({
+      config_dir: "/tmp/claude-config",
+      state_path: "/tmp/claude-state.json",
     });
   });
 

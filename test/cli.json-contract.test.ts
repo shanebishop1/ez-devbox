@@ -38,6 +38,10 @@ const baseConfig: ResolvedLauncherConfig = {
     config_dir: "~/.codex",
     auth_path: "~/.codex/auth.json",
   },
+  claude: {
+    config_dir: "~/.claude",
+    state_path: "~/.claude.json",
+  },
   gh: {
     enabled: false,
     config_dir: "~/.config/gh",
@@ -130,6 +134,8 @@ describe("CLI JSON output contracts", () => {
       opencodeAuthSynced: false,
       codexConfigSynced: false,
       codexAuthSynced: false,
+      claudeConfigSynced: false,
+      claudeStateSynced: false,
       ghEnabled: false,
       ghConfigSynced: false,
     };

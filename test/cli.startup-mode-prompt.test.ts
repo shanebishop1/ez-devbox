@@ -31,6 +31,7 @@ describe("resolvePromptStartupMode", () => {
     await expectResolvedMode("2", "ssh-codex");
     await expectResolvedMode("3", "web");
     await expectResolvedMode("4", "ssh-shell");
+    await expectResolvedMode("5", "ssh-claude");
   });
 
   it("accepts textual selections", async () => {
@@ -38,10 +39,11 @@ describe("resolvePromptStartupMode", () => {
     await expectResolvedMode("SSH-CODEX", "ssh-codex");
     await expectResolvedMode(" web ", "web");
     await expectResolvedMode("ssh-shell", "ssh-shell");
+    await expectResolvedMode("ssh-claude", "ssh-claude");
   });
 
   it("reprompts in interactive mode until a valid selection is provided", async () => {
-    const promptInput = vi.fn().mockResolvedValueOnce("5").mockResolvedValueOnce("ssh-codex");
+    const promptInput = vi.fn().mockResolvedValueOnce("0").mockResolvedValueOnce("ssh-codex");
 
     const result = await resolvePromptStartupMode("prompt", {
       isInteractiveTerminal: () => true,
@@ -83,6 +85,7 @@ describe("resolvePromptStartupMode", () => {
         "2) ssh-codex",
         "3) web",
         "4) ssh-shell",
+        "5) ssh-claude",
         "Enter choice [1/ssh-opencode]: ",
       ].join("\n"),
     );
@@ -91,7 +94,7 @@ describe("resolvePromptStartupMode", () => {
 
 async function expectResolvedMode(
   input: string,
-  expected: "ssh-opencode" | "ssh-codex" | "web" | "ssh-shell",
+  expected: "ssh-opencode" | "ssh-codex" | "web" | "ssh-shell" | "ssh-claude",
 ): Promise<void> {
   const result = await resolvePromptStartupMode("prompt", {
     isInteractiveTerminal: () => true,

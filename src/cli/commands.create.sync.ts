@@ -3,6 +3,8 @@ import type { SandboxHandle } from "../e2b/lifecycle.js";
 import { logger } from "../logging/logger.js";
 import type { ConcreteStartupMode } from "../modes/index.js";
 import {
+  syncClaudeConfigDir,
+  syncClaudeStateFile,
   type DirectorySyncProgress,
   type PathSyncSummary,
   syncCodexAuthFile,
@@ -30,7 +32,20 @@ export async function syncToolingForMode(
     syncCodexConfigDir(config, sandbox, { onProgress }),
   );
   const codexAuth = await runSyncUnit("Codex auth", () => syncCodexAuthFile(config, sandbox));
-  return summarizeToolingSync(opencodeConfig, opencodeAuth, codexConfig, codexAuth, ghConfig, config.gh.enabled);
+  const claudeConfig = await runSyncUnit("Claude config", (onProgress) =>
+    syncClaudeConfigDir(config, sandbox, { onProgress }),
+  );
+  const claudeState = await runSyncUnit("Claude state", () => syncClaudeStateFile(config, sandbox));
+  return summarizeToolingSync(
+    opencodeConfig,
+    opencodeAuth,
+    codexConfig,
+    codexAuth,
+    claudeConfig,
+    claudeState,
+    ghConfig,
+    config.gh.enabled,
+  );
 }
 
 async function maybeSyncGhConfig(
@@ -80,10 +95,12 @@ function summarizeToolingSync(
   opencodeAuth: PathSyncSummary | null,
   codexConfig: PathSyncSummary | null,
   codexAuth: PathSyncSummary | null,
+  claudeConfig: PathSyncSummary | null,
+  claudeState: PathSyncSummary | null,
   ghConfig: PathSyncSummary | null,
   ghEnabled: boolean,
 ): ToolingSyncSummary {
-  const summaries = [opencodeConfig, opencodeAuth, codexConfig, codexAuth, ghConfig].filter(
+  const summaries = [opencodeConfig, opencodeAuth, codexConfig, codexAuth, claudeConfig, claudeState, ghConfig].filter(
     (item): item is PathSyncSummary => item !== null,
   );
 
@@ -97,6 +114,8 @@ function summarizeToolingSync(
     opencodeAuthSynced: opencodeAuth !== null && !opencodeAuth.skippedMissing,
     codexConfigSynced: codexConfig !== null && !codexConfig.skippedMissing,
     codexAuthSynced: codexAuth !== null && !codexAuth.skippedMissing,
+    claudeConfigSynced: claudeConfig !== null && !claudeConfig.skippedMissing,
+    claudeStateSynced: claudeState !== null && !claudeState.skippedMissing,
     ghEnabled,
     ghConfigSynced: ghConfig !== null && !ghConfig.skippedMissing,
   };
@@ -105,6 +124,7 @@ function summarizeToolingSync(
 export function formatToolingSyncSummary(summary: ToolingSyncSummary): string {
   const opencodeSynced = summary.opencodeConfigSynced || summary.opencodeAuthSynced;
   const codexSynced = summary.codexConfigSynced || summary.codexAuthSynced;
+  const claudeSynced = summary.claudeConfigSynced || summary.claudeStateSynced;
   const ghSynced = summary.ghEnabled && summary.ghConfigSynced;
-  return `discovered=${summary.totalDiscovered}, written=${summary.totalWritten}, unchanged=${summary.totalUnchanged}, missingPaths=${summary.totalMissingPaths}, opencodeSynced=${opencodeSynced}, codexSynced=${codexSynced}, ghSynced=${ghSynced}`;
+  return `discovered=${summary.totalDiscovered}, written=${summary.totalWritten}, unchanged=${summary.totalUnchanged}, missingPaths=${summary.totalMissingPaths}, opencodeSynced=${opencodeSynced}, codexSynced=${codexSynced}, claudeSynced=${claudeSynced}, ghSynced=${ghSynced}`;
 }

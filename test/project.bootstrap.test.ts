@@ -55,6 +55,10 @@ function createConfig(overrides?: Partial<ResolvedLauncherConfig["project"]>): R
       config_dir: "",
       auth_path: "",
     },
+    claude: {
+      config_dir: "",
+      state_path: "",
+    },
     gh: {
       enabled: false,
       config_dir: "",

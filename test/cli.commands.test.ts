@@ -34,6 +34,8 @@ describe("CLI command integration", () => {
     opencodeAuthSynced: true,
     codexConfigSynced: false,
     codexAuthSynced: false,
+    claudeConfigSynced: false,
+    claudeStateSynced: false,
     ghEnabled: false,
     ghConfigSynced: false,
   };
@@ -77,6 +79,10 @@ describe("CLI command integration", () => {
     codex: {
       config_dir: "~/.codex",
       auth_path: "~/.codex/auth.json",
+    },
+    claude: {
+      config_dir: "~/.claude",
+      state_path: "~/.claude.json",
     },
     gh: {
       enabled: false,

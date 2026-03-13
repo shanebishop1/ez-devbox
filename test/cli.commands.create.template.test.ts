@@ -21,5 +21,9 @@ describe("resolveTemplateForMode", () => {
       template: "opencode",
       autoSelected: true,
     });
+    expect(resolveTemplateForMode("", "ssh-claude")).toEqual({
+      template: "opencode",
+      autoSelected: true,
+    });
   });
 });

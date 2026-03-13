@@ -2,7 +2,7 @@ import { defaultConfig } from "./defaults.js";
 import type { JsonRecord } from "./load.types.js";
 import type { ResolvedLauncherConfig } from "./schema.js";
 
-const STARTUP_MODES = ["prompt", "ssh-opencode", "ssh-codex", "web", "ssh-shell"] as const;
+const STARTUP_MODES = ["prompt", "ssh-opencode", "ssh-codex", "ssh-claude", "web", "ssh-shell"] as const;
 const PROJECT_MODES = ["single", "all"] as const;
 const PROJECT_ACTIVE_MODES = ["prompt", "name", "index"] as const;
 
@@ -13,6 +13,7 @@ export function parseRawLauncherConfig(rawConfig: JsonRecord): ResolvedLauncherC
   const envRaw = getOptionalTable(rawConfig, "env", "env");
   const opencodeRaw = getOptionalTable(rawConfig, "opencode", "opencode");
   const codexRaw = getOptionalTable(rawConfig, "codex", "codex");
+  const claudeRaw = getOptionalTable(rawConfig, "claude", "claude");
   const ghRaw = getOptionalTable(rawConfig, "gh", "gh");
   const tunnelRaw = getOptionalTable(rawConfig, "tunnel", "tunnel");
 
@@ -67,6 +68,10 @@ export function parseRawLauncherConfig(rawConfig: JsonRecord): ResolvedLauncherC
     codex: {
       config_dir: getOptionalString(codexRaw, "config_dir", "codex.config_dir") ?? defaultConfig.codex.config_dir,
       auth_path: getOptionalString(codexRaw, "auth_path", "codex.auth_path") ?? defaultConfig.codex.auth_path,
+    },
+    claude: {
+      config_dir: getOptionalString(claudeRaw, "config_dir", "claude.config_dir") ?? defaultConfig.claude.config_dir,
+      state_path: getOptionalString(claudeRaw, "state_path", "claude.state_path") ?? defaultConfig.claude.state_path,
     },
     gh: {
       enabled: getOptionalBoolean(ghRaw, "enabled", "gh.enabled") ?? defaultConfig.gh.enabled,

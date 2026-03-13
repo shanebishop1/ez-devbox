@@ -1,4 +1,4 @@
-export type StartupMode = "ssh-opencode" | "ssh-codex" | "web" | "ssh-shell" | "prompt";
+export type StartupMode = "ssh-opencode" | "ssh-codex" | "ssh-claude" | "web" | "ssh-shell" | "prompt";
 
 export type CliCommandName = "create" | "connect" | "resume" | "list" | "command" | "wipe" | "wipe-all" | "help";
 
