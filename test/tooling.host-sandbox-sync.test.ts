@@ -5,6 +5,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   discoverDirectoryFiles,
   resolveHostPath,
+  syncClaudeConfigDir,
+  syncClaudeStateFile,
   syncCodexAuthFile,
   syncCodexConfigDir,
   syncOpenCodeAuthFile,
@@ -89,6 +91,10 @@ describe("host to sandbox tooling sync", () => {
         config_dir: join(root, "missing-codex-config"),
         auth_path: join(root, "missing-codex-auth.json"),
       },
+      claude: {
+        config_dir: join(root, "missing-claude-config"),
+        state_path: join(root, "missing-claude-state.json"),
+      },
       gh: {
         enabled: false,
         config_dir: join(root, "missing-gh-config"),
@@ -103,12 +109,14 @@ describe("host to sandbox tooling sync", () => {
       totalDiscovered: 0,
       totalWritten: 0,
       totalUnchanged: 0,
-      totalMissingPaths: 4,
-      skippedMissingPaths: 4,
+      totalMissingPaths: 6,
+      skippedMissingPaths: 6,
       opencodeConfigSynced: false,
       opencodeAuthSynced: false,
       codexConfigSynced: false,
       codexAuthSynced: false,
+      claudeConfigSynced: false,
+      claudeStateSynced: false,
       ghEnabled: false,
       ghConfigSynced: false,
     });
@@ -140,6 +148,10 @@ describe("host to sandbox tooling sync", () => {
       codex: {
         config_dir: codexConfigDir,
         auth_path: codexAuthPath,
+      },
+      claude: {
+        config_dir: join(root, "unused-claude-config"),
+        state_path: join(root, "unused-claude-state.json"),
       },
       gh: {
         enabled: false,
@@ -213,6 +225,10 @@ describe("host to sandbox tooling sync", () => {
         config_dir: codexConfigDir,
         auth_path: codexAuthPath,
       },
+      claude: {
+        config_dir: join(root, "unused-claude-config"),
+        state_path: join(root, "unused-claude-state.json"),
+      },
       gh: {
         enabled: false,
         config_dir: join(root, "unused-gh"),
@@ -228,6 +244,59 @@ describe("host to sandbox tooling sync", () => {
     expect(onProgress).toHaveBeenNthCalledWith(1, { filesWritten: 1, filesUnchanged: 0, filesDiscovered: 3 });
     expect(onProgress).toHaveBeenNthCalledWith(2, { filesWritten: 2, filesUnchanged: 0, filesDiscovered: 3 });
     expect(onProgress).toHaveBeenNthCalledWith(3, { filesWritten: 3, filesUnchanged: 0, filesDiscovered: 3 });
+  });
+
+  it("writes claude config and state files to fixed sandbox destinations", async () => {
+    const root = await createTempRoot("claude-writes");
+    const claudeConfigDir = join(root, "claude-config");
+    const claudeStatePath = join(root, "claude-state.json");
+
+    await mkdir(join(claudeConfigDir, "profiles"), { recursive: true });
+    await writeFile(join(claudeConfigDir, "settings.json"), "{}", "utf8");
+    await writeFile(join(claudeConfigDir, "profiles", "default.json"), "{}", "utf8");
+    await writeFile(claudeStatePath, '{"authenticated":true}', "utf8");
+
+    const config = {
+      opencode: {
+        config_dir: join(root, "unused-opencode"),
+        auth_path: join(root, "unused-opencode-auth.json"),
+      },
+      codex: {
+        config_dir: join(root, "unused-codex"),
+        auth_path: join(root, "unused-codex-auth.json"),
+      },
+      claude: {
+        config_dir: claudeConfigDir,
+        state_path: claudeStatePath,
+      },
+      gh: {
+        enabled: false,
+        config_dir: join(root, "unused-gh"),
+      },
+    };
+    const writeFileInSandbox = vi.fn().mockResolvedValue(undefined);
+
+    const configSummary = await syncClaudeConfigDir(config, { writeFile: writeFileInSandbox });
+    const stateSummary = await syncClaudeStateFile(config, { writeFile: writeFileInSandbox });
+
+    expect(configSummary).toEqual({
+      skippedMissing: false,
+      filesDiscovered: 2,
+      filesWritten: 2,
+      filesUnchanged: 0,
+    });
+    expect(stateSummary).toEqual({
+      skippedMissing: false,
+      filesDiscovered: 1,
+      filesWritten: 1,
+      filesUnchanged: 0,
+    });
+    expect(writeFileInSandbox).toHaveBeenCalledWith("/home/user/.claude/settings.json", expect.any(ArrayBuffer));
+    expect(writeFileInSandbox).toHaveBeenCalledWith(
+      "/home/user/.claude/profiles/default.json",
+      expect.any(ArrayBuffer),
+    );
+    expect(writeFileInSandbox).toHaveBeenCalledWith("/home/user/.claude.json", expect.any(ArrayBuffer));
   });
 
   it("excludes codex archived_sessions history artifacts from sync", async () => {
@@ -261,6 +330,10 @@ describe("host to sandbox tooling sync", () => {
       codex: {
         config_dir: codexConfigDir,
         auth_path: join(root, "unused-codex-auth.json"),
+      },
+      claude: {
+        config_dir: join(root, "unused-claude-config"),
+        state_path: join(root, "unused-claude-state.json"),
       },
       gh: {
         enabled: false,
@@ -329,6 +402,10 @@ describe("host to sandbox tooling sync", () => {
         config_dir: codexConfigDir,
         auth_path: codexAuthPath,
       },
+      claude: {
+        config_dir: join(root, "missing-claude-config"),
+        state_path: join(root, "missing-claude-state.json"),
+      },
       gh: {
         enabled: true,
         config_dir: ghConfigDir,
@@ -342,12 +419,14 @@ describe("host to sandbox tooling sync", () => {
       totalDiscovered: 3,
       totalWritten: 3,
       totalUnchanged: 0,
-      totalMissingPaths: 2,
-      skippedMissingPaths: 2,
+      totalMissingPaths: 4,
+      skippedMissingPaths: 4,
       opencodeConfigSynced: false,
       opencodeAuthSynced: false,
       codexConfigSynced: true,
       codexAuthSynced: true,
+      claudeConfigSynced: false,
+      claudeStateSynced: false,
       ghEnabled: true,
       ghConfigSynced: true,
     });
@@ -369,6 +448,10 @@ describe("host to sandbox tooling sync", () => {
       codex: {
         config_dir: codexConfigDir,
         auth_path: join(root, "missing-codex-auth.json"),
+      },
+      claude: {
+        config_dir: join(root, "missing-claude-config"),
+        state_path: join(root, "missing-claude-state.json"),
       },
       gh: {
         enabled: false,

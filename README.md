@@ -8,11 +8,12 @@ Run OpenCode/Codex agents in disposable E2B sandboxes with fast reconnects, repe
 - Includes the following modes:
   - `ssh-opencode` (ssh + attach OpenCode TUI to a persistent in-sandbox `opencode serve` backend; leaving the session detaches and reconnect/resume re-attaches to the same in-sandbox session)
   - `ssh-codex` (ssh + attach Codex inside a persistent in-sandbox `tmux` session)
+  - `ssh-claude` (ssh + attach Claude Code inside a persistent in-sandbox `tmux` session)
   - `web` (starts `opencode serve` and returns URL)
   - `ssh-shell` (interactive shell inside a persistent in-sandbox `tmux` session)
 - Automatic repo set-up/bootstrapping during sandbox creation (clone, branch, set up environment, install packages, initialize, etc.)
 - Starts tools in the expected directory (`project.working_dir = "auto"` picks repo or workspace)
-- Syncs local tool auth/config (OpenCode, Codex, GitHub CLI) into sandbox during `create`
+- Syncs local tool auth/config (OpenCode, Codex, Claude, GitHub CLI) into sandbox during `create`
 - Supports optional auto-managed port tunneling for sandbox access to your local MCP servers, Docker containers, etc.
 
 ## Why This Approach
@@ -22,7 +23,7 @@ This tool is for a workflow where you want disposable cloud sandboxes without gi
 - Repeatable repo bootstrapping on sandbox creation, instead of manual shell setup each time.
 - Fast reconnect/resume behavior with saved sandbox + mode state.
 - SSH modes are persistent: disconnecting detaches while the sandbox keeps the session alive, and reconnect/resume attaches you back to it.
-- Controlled env pass-through and auth/config sync (OpenCode/Codex/GitHub) rather than ad-hoc copying.
+- Controlled env pass-through and auth/config sync (OpenCode/Codex/Claude/GitHub) rather than ad-hoc copying.
 - Optional local port tunnel mapping for MCP servers and local services.
 
 ## Install
@@ -128,7 +129,7 @@ npx ez-devbox connect
 ## Mode guides
 
 - [Web mode (OpenCode in browser)](docs/modes-web.md)
-- [SSH agent modes (OpenCode and Codex)](docs/modes-ssh-agents.md)
+- [SSH agent modes (OpenCode, Codex, and Claude)](docs/modes-ssh-agents.md)
 
 ## Common commands
 

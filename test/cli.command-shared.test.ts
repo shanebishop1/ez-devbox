@@ -12,6 +12,7 @@ describe("cli command shared helpers", () => {
   it("parses supported startup mode values", () => {
     expect(parseStartupModeValue("prompt")).toBe("prompt");
     expect(parseStartupModeValue("web")).toBe("web");
+    expect(parseStartupModeValue("ssh-claude")).toBe("ssh-claude");
   });
 
   it("rejects unsupported startup mode values", () => {

@@ -98,7 +98,7 @@ export function renderHelp(): string {
     "  wipe-all Delete all sandboxes (use --yes to skip prompt)",
     "",
     "Options:",
-    "  --mode <mode>         Startup mode (prompt|ssh-opencode|ssh-codex|web|ssh-shell)",
+    "  --mode <mode>         Startup mode (prompt|ssh-opencode|ssh-codex|ssh-claude|web|ssh-shell)",
     "  --sandbox-id <id>     Sandbox id to connect/command",
     "  --json                Structured JSON output (list, command, create, connect)",
     "  --yes                 Skip wipe-all confirmation prompt",
