@@ -47,6 +47,10 @@ export interface ResolvedLauncherConfig {
     config_dir: string;
     auth_path: string;
   };
+  claude: {
+    config_dir: string;
+    state_path: string;
+  };
   gh: {
     enabled: boolean;
     config_dir: string;

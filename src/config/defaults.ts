@@ -35,6 +35,10 @@ export const defaultConfig: ResolvedLauncherConfig = {
     config_dir: "~/.codex",
     auth_path: "~/.codex/auth.json",
   },
+  claude: {
+    config_dir: "~/.claude",
+    state_path: "~/.claude.json",
+  },
   gh: {
     enabled: false,
     config_dir: "~/.config/gh",
