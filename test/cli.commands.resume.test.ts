@@ -39,6 +39,21 @@ describe("runResumeCommand", () => {
     expect(runConnectCommand).toHaveBeenCalledWith(["--sandbox-id", "sbx-123", "--mode", "ssh-opencode"]);
   });
 
+  it("passes through ssh-claude mode when resuming", async () => {
+    const runConnectCommand = vi.fn().mockResolvedValue({ message: "ok", exitCode: 0 });
+
+    await runResumeCommand([], {
+      loadLastRunState: vi.fn().mockResolvedValue({
+        sandboxId: "sbx-123",
+        mode: "ssh-claude",
+        updatedAt: "2026-02-01T00:00:00.000Z",
+      }),
+      runConnectCommand,
+    });
+
+    expect(runConnectCommand).toHaveBeenCalledWith(["--sandbox-id", "sbx-123", "--mode", "ssh-claude"]);
+  });
+
   it("errors when no prior run exists", async () => {
     await expect(
       runResumeCommand([], {

@@ -48,6 +48,14 @@ export function validateResolvedLauncherConfig(resolved: ResolvedLauncherConfig)
     throw new Error("Invalid gh.config_dir: expected a non-empty path string.");
   }
 
+  if (resolved.claude.config_dir.trim() === "") {
+    throw new Error("Invalid claude.config_dir: expected a non-empty path string.");
+  }
+
+  if (resolved.claude.state_path.trim() === "") {
+    throw new Error("Invalid claude.state_path: expected a non-empty path string.");
+  }
+
   const targetPorts: number[] = [];
   for (const [portKey, upstreamUrl] of Object.entries(resolved.tunnel.targets ?? {})) {
     const port = Number.parseInt(portKey, 10);

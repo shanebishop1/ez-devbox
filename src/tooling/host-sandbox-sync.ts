@@ -11,6 +11,8 @@ import {
   toArrayBuffer,
 } from "./host-sandbox-sync.cache.js";
 import {
+  CLAUDE_CONFIG_DEST,
+  CLAUDE_STATE_DEST,
   CODEX_AUTH_DEST,
   CODEX_CONFIG_DEST,
   GH_CONFIG_DEST,
@@ -56,11 +58,13 @@ export interface ToolingSyncSummary {
   opencodeAuthSynced: boolean;
   codexConfigSynced: boolean;
   codexAuthSynced: boolean;
+  claudeConfigSynced: boolean;
+  claudeStateSynced: boolean;
   ghEnabled: boolean;
   ghConfigSynced: boolean;
 }
 
-type ToolingSyncConfig = Pick<ResolvedLauncherConfig, "opencode" | "codex" | "gh">;
+type ToolingSyncConfig = Pick<ResolvedLauncherConfig, "opencode" | "codex" | "claude" | "gh">;
 type SandboxWritableHandle = Pick<SandboxHandle, "writeFile">;
 
 export function resolveHostPath(inputPath: string, options: HostPathResolveOptions = {}): string {
@@ -110,6 +114,22 @@ export async function syncCodexAuthFile(
   return syncFile(config.codex.auth_path, CODEX_AUTH_DEST, sandbox, options);
 }
 
+export async function syncClaudeConfigDir(
+  config: ToolingSyncConfig,
+  sandbox: Pick<SandboxHandle, "writeFile">,
+  options?: HostToSandboxSyncOptions,
+): Promise<PathSyncSummary> {
+  return syncDirectory(config.claude.config_dir, CLAUDE_CONFIG_DEST, sandbox, options);
+}
+
+export async function syncClaudeStateFile(
+  config: ToolingSyncConfig,
+  sandbox: Pick<SandboxHandle, "writeFile">,
+  options?: HostToSandboxSyncOptions,
+): Promise<PathSyncSummary> {
+  return syncFile(config.claude.state_path, CLAUDE_STATE_DEST, sandbox, options);
+}
+
 export async function syncGhConfigDir(
   config: ToolingSyncConfig,
   sandbox: Pick<SandboxHandle, "writeFile">,
@@ -130,9 +150,11 @@ export async function syncToolingToSandbox(
   const opencodeAuth = await syncOpenCodeAuthFile(config, sandbox, options);
   const codexConfig = await syncCodexConfigDir(config, sandbox, options);
   const codexAuth = await syncCodexAuthFile(config, sandbox, options);
+  const claudeConfig = await syncClaudeConfigDir(config, sandbox, options);
+  const claudeState = await syncClaudeStateFile(config, sandbox, options);
   const ghConfig = config.gh.enabled ? await syncGhConfigDir(config, sandbox, options) : null;
 
-  const summaries = [opencodeConfig, opencodeAuth, codexConfig, codexAuth, ghConfig].filter(
+  const summaries = [opencodeConfig, opencodeAuth, codexConfig, codexAuth, claudeConfig, claudeState, ghConfig].filter(
     (item): item is PathSyncSummary => item !== null,
   );
   return {
@@ -145,6 +167,8 @@ export async function syncToolingToSandbox(
     opencodeAuthSynced: !opencodeAuth.skippedMissing,
     codexConfigSynced: !codexConfig.skippedMissing,
     codexAuthSynced: !codexAuth.skippedMissing,
+    claudeConfigSynced: !claudeConfig.skippedMissing,
+    claudeStateSynced: !claudeState.skippedMissing,
     ghEnabled: config.gh.enabled,
     ghConfigSynced: ghConfig !== null && !ghConfig.skippedMissing,
   };
