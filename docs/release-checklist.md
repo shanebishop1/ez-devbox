@@ -17,7 +17,11 @@ Run this checklist before publishing a new `ez-devbox` version.
    - `dist/src/cli/index.d.ts`
    - `scripts/ws-ssh-proxy.mjs`
    - `README.md`, `LICENSE`, `package.json`
-4. Publish using your standard npm release flow.
-   - verify auth/session: `npm whoami`
-   - publish: `npm publish --access public`
-   - if npm 2FA is enabled: `npm publish --access public --otp <code>`
+4. Create a GitHub Release from the Releases tab (tag format `vX.Y.Z`).
+   - choose `main` as the target
+   - create tag if it does not exist yet
+   - publish the release
+5. Confirm GitHub Actions `Release` workflow succeeds.
+   - workflow validates `package.json` version matches release tag
+   - workflow runs `npm run test`, `npm run build`, and `npm run pack:check`
+   - workflow publishes to npm via trusted publishing (`npm publish --provenance`)
