@@ -3,10 +3,10 @@ import type { SandboxHandle } from "../e2b/lifecycle.js";
 import { logger } from "../logging/logger.js";
 import type { ConcreteStartupMode } from "../modes/index.js";
 import {
-  syncClaudeConfigDir,
-  syncClaudeStateFile,
   type DirectorySyncProgress,
   type PathSyncSummary,
+  syncClaudeConfigDir,
+  syncClaudeStateFile,
   syncCodexAuthFile,
   syncCodexConfigDir,
   syncGhConfigDir,
