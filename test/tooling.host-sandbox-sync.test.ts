@@ -2,6 +2,7 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { logger } from "../src/logging/logger.js";
 import {
   discoverDirectoryFiles,
   resolveHostPath,
@@ -42,6 +43,7 @@ describe("host to sandbox tooling sync", () => {
     const topNodeModulesDir = join(root, "node_modules");
     const vendorImportsDir = join(root, "vendor_imports");
     const shellSnapshotsDir = join(root, "shell_snapshots");
+    const shellSnapshotsDashDir = join(root, "shell-snapshots");
     const sqliteDir = join(root, "sqlite");
     const systemDir = join(root, ".system");
     const curatedDir = join(root, ".curated");
@@ -53,6 +55,7 @@ describe("host to sandbox tooling sync", () => {
     await mkdir(topNodeModulesDir, { recursive: true });
     await mkdir(vendorImportsDir, { recursive: true });
     await mkdir(shellSnapshotsDir, { recursive: true });
+    await mkdir(shellSnapshotsDashDir, { recursive: true });
     await mkdir(sqliteDir, { recursive: true });
     await mkdir(systemDir, { recursive: true });
     await mkdir(curatedDir, { recursive: true });
@@ -63,6 +66,11 @@ describe("host to sandbox tooling sync", () => {
     await writeFile(join(root, "models_cache.json"), "skip");
     await writeFile(join(root, "cache.db"), "skip");
     await writeFile(join(root, "cache.sqlite"), "skip");
+    await writeFile(join(root, "logs_1.sqlite-wal"), "skip");
+    await writeFile(join(root, "logs_1.sqlite-shm"), "skip");
+    await writeFile(join(root, "logs_1.sqlite-journal"), "skip");
+    await writeFile(join(root, "bun.lock"), "skip");
+    await writeFile(join(root, "bun.lockb"), "skip");
     await writeFile(join(nestedDir, "keep.txt"), "keep");
     await writeFile(join(nestedDir, "keep.log"), "skip");
     await writeFile(join(nestedNodeModulesDir, "ignore.txt"), "ignore");
@@ -71,6 +79,7 @@ describe("host to sandbox tooling sync", () => {
     await writeFile(join(topNodeModulesDir, "ignore-too.txt"), "ignore");
     await writeFile(join(vendorImportsDir, "bundled.json"), "ignore");
     await writeFile(join(shellSnapshotsDir, "snapshot.json"), "ignore");
+    await writeFile(join(shellSnapshotsDashDir, "snapshot-zsh.sh"), "ignore");
     await writeFile(join(sqliteDir, "state.json"), "ignore");
     await writeFile(join(systemDir, "state.json"), "ignore");
     await writeFile(join(curatedDir, "state.json"), "ignore");
@@ -130,10 +139,12 @@ describe("host to sandbox tooling sync", () => {
     const codexAuthPath = join(root, "codex-auth.json");
 
     await mkdir(join(opencodeConfigDir, "profiles"), { recursive: true });
+    await mkdir(join(opencodeConfigDir, "docs", "screenshots"), { recursive: true });
     await mkdir(join(opencodeConfigDir, "node_modules", "x"), { recursive: true });
     await mkdir(join(codexConfigDir, "archived_sessions"), { recursive: true });
     await writeFile(join(opencodeConfigDir, "settings.toml"), "opencode=true");
     await writeFile(join(opencodeConfigDir, "profiles", "main.json"), "{}");
+    await writeFile(join(opencodeConfigDir, "docs", "screenshots", "example.png"), "binary");
     await writeFile(join(opencodeConfigDir, "node_modules", "x", "skip.json"), "{}", "utf8");
     await writeFile(join(codexConfigDir, "config.json"), "{}", "utf8");
     await writeFile(join(codexConfigDir, "archived_sessions", "2026-01-01.jsonl"), "session", "utf8");
@@ -193,6 +204,10 @@ describe("host to sandbox tooling sync", () => {
       "/home/user/.config/opencode/profiles/main.json",
       expect.any(ArrayBuffer),
     );
+    expect(writeFileInSandbox).not.toHaveBeenCalledWith(
+      "/home/user/.config/opencode/docs/screenshots/example.png",
+      expect.any(ArrayBuffer),
+    );
     expect(writeFileInSandbox).toHaveBeenCalledWith(
       "/home/user/.local/share/opencode/auth.json",
       expect.any(ArrayBuffer),
@@ -203,6 +218,54 @@ describe("host to sandbox tooling sync", () => {
       "/home/user/.codex/archived_sessions/2026-01-01.jsonl",
       expect.any(ArrayBuffer),
     );
+  });
+
+  it("warns once with aggregated unsupported extension counts", async () => {
+    const root = await createTempRoot("unsupported-extensions");
+    const opencodeConfigDir = join(root, "opencode-config");
+    const opencodeAuthPath = join(root, "opencode-auth.json");
+
+    await mkdir(opencodeConfigDir, { recursive: true });
+    await writeFile(join(opencodeConfigDir, "settings.toml"), "ok");
+    await writeFile(join(opencodeConfigDir, "screenshot-a.png"), "skip");
+    await writeFile(join(opencodeConfigDir, "screenshot-b.png"), "skip");
+    await writeFile(join(opencodeConfigDir, "preview.jpg"), "skip");
+    await writeFile(opencodeAuthPath, '{"token":"secret"}', "utf8");
+
+    const config = {
+      opencode: {
+        config_dir: opencodeConfigDir,
+        auth_path: opencodeAuthPath,
+      },
+      codex: {
+        config_dir: join(root, "unused-codex-config"),
+        auth_path: join(root, "unused-codex-auth.json"),
+      },
+      claude: {
+        config_dir: join(root, "unused-claude-config"),
+        state_path: join(root, "unused-claude-state.json"),
+      },
+      gh: {
+        enabled: false,
+        config_dir: join(root, "unused-gh"),
+      },
+    };
+
+    const warnSpy = vi.spyOn(logger, "warn").mockImplementation(() => undefined);
+    const writeFileInSandbox = vi.fn().mockResolvedValue(undefined);
+
+    const summary = await syncOpenCodeConfigDir(config, { writeFile: writeFileInSandbox });
+
+    expect(summary).toEqual({
+      skippedMissing: false,
+      filesDiscovered: 1,
+      filesWritten: 1,
+      filesUnchanged: 0,
+    });
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+    expect(warnSpy.mock.calls[0]?.[0]).toContain(".jpg (1)");
+    expect(warnSpy.mock.calls[0]?.[0]).toContain(".png (2)");
+    warnSpy.mockRestore();
   });
 
   it("reports incremental directory sync progress", async () => {

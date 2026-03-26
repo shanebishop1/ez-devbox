@@ -1,8 +1,9 @@
 import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
-import { isAbsolute, join, posix, relative, resolve, sep } from "node:path";
+import { extname, isAbsolute, join, posix, relative, resolve, sep } from "node:path";
 import type { ResolvedLauncherConfig } from "../config/schema.js";
 import type { SandboxHandle } from "../e2b/lifecycle.js";
+import { logger } from "../logging/logger.js";
 import {
   digestBuffer,
   ensureDirectoryPrefix,
@@ -19,6 +20,7 @@ import {
   GH_SKIPPED_SYNC_FILE_NAMES,
   OPEN_CODE_AUTH_DEST,
   OPEN_CODE_CONFIG_DEST,
+  UNSUPPORTED_SYNC_FILE_EXTENSIONS,
 } from "./host-sandbox-sync.constants.js";
 import { discoverDirectoryFiles, pathExists, shouldSkipSyncFile } from "./host-sandbox-sync.fs.js";
 
@@ -193,7 +195,28 @@ async function syncDirectory(
   }
 
   const discoveredFiles = await discoverDirectoryFiles(resolvedLocalDirectoryPath);
-  const files = discoveredFiles.filter((filePath) => !shouldSkipSyncFile(filePath, options));
+  const skippedUnsupportedExtensionCounts = new Map<string, number>();
+  const files = discoveredFiles.filter((filePath) => {
+    if (shouldSkipSyncFile(filePath, options)) {
+      return false;
+    }
+
+    const fileExtension = extname(filePath).toLowerCase();
+    if (UNSUPPORTED_SYNC_FILE_EXTENSIONS.has(fileExtension)) {
+      skippedUnsupportedExtensionCounts.set(
+        fileExtension,
+        (skippedUnsupportedExtensionCounts.get(fileExtension) ?? 0) + 1,
+      );
+      return false;
+    }
+
+    return true;
+  });
+  if (skippedUnsupportedExtensionCounts.size > 0) {
+    logger.warn(
+      `Tooling sync skipped unsupported extensions in '${resolvedLocalDirectoryPath}': ${formatSkippedExtensionsSummary(skippedUnsupportedExtensionCounts)}`,
+    );
+  }
   let filesWritten = 0;
   let filesUnchanged = 0;
   const syncedPaths = new Set<string>();
@@ -268,4 +291,12 @@ async function syncFile(
     filesUnchanged,
   };
 }
+
+function formatSkippedExtensionsSummary(counts: Map<string, number>): string {
+  return [...counts.entries()]
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([extension, count]) => `${extension} (${count})`)
+    .join(", ");
+}
+
 export { discoverDirectoryFiles };
