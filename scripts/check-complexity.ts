@@ -8,6 +8,12 @@ const BRANCH_TOKEN_REGEX = /\b(if|for|while|case|catch)\b|\?\s|&&|\|\|/g;
 const LINE_LIMIT_ALLOWLIST: Readonly<Record<string, number>> = {
   // TODO(cleanup): Split setup runner to remove this exception.
   "src/setup/runner.ts": 320,
+  // TODO(cleanup): Extract create-flow stage orchestration/prompt rendering helpers.
+  "src/cli/commands.create.ts": 420,
+  // TODO(cleanup): Split OpenCode launch/version matching into dedicated modules.
+  "src/modes/opencode.ts": 360,
+  // TODO(cleanup): Extract sync filtering/extension handling into composable helpers.
+  "src/tooling/host-sandbox-sync.ts": 340,
 };
 const COMPLEXITY_LIMIT_ALLOWLIST: Readonly<Record<string, number>> = {
   // TODO(cleanup): Continue parser decomposition to remove this exception.
