@@ -10,6 +10,7 @@ import { runWipeCommand } from "./commands.wipe.js";
 import { runWipeAllCommand } from "./commands.wipe-all.js";
 import { toUserVisibleCliErrorMessage } from "./error-message.js";
 import { parseGlobalCliOptions, renderHelp, resolveCliCommand } from "./router.js";
+import { readCliVersion } from "./version.js";
 
 export async function runCli(argv: string[]): Promise<number> {
   try {
@@ -19,6 +20,11 @@ export async function runCli(argv: string[]): Promise<number> {
 
     if (resolved.command === "help") {
       logger.info(renderHelp());
+      return 0;
+    }
+
+    if (resolved.command === "version") {
+      logger.info(readCliVersion());
       return 0;
     }
 
