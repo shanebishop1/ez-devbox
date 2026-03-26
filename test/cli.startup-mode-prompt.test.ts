@@ -28,15 +28,16 @@ describe("resolvePromptStartupMode", () => {
 
   it("accepts numeric selections with deterministic mapping", async () => {
     await expectResolvedMode("1", "ssh-opencode");
-    await expectResolvedMode("2", "ssh-codex");
-    await expectResolvedMode("3", "web");
-    await expectResolvedMode("4", "ssh-shell");
-    await expectResolvedMode("5", "ssh-claude");
+    await expectResolvedMode("2", "ssh-claude");
+    await expectResolvedMode("3", "ssh-codex");
+    await expectResolvedMode("4", "web");
+    await expectResolvedMode("5", "ssh-shell");
   });
 
   it("accepts textual selections", async () => {
     await expectResolvedMode("ssh-opencode", "ssh-opencode");
     await expectResolvedMode("SSH-CODEX", "ssh-codex");
+    await expectResolvedMode("web-opencode", "web");
     await expectResolvedMode(" web ", "web");
     await expectResolvedMode("ssh-shell", "ssh-shell");
     await expectResolvedMode("ssh-claude", "ssh-claude");
@@ -79,14 +80,54 @@ describe("resolvePromptStartupMode", () => {
 
     expect(promptInput).toHaveBeenCalledWith(
       [
-        "ez-devbox",
+        "\u001b[2J\u001b[H+-----------+",
+        "| ez-devbox |",
+        "+-----------+",
+        "",
         "Select startup mode:",
+        "--------------------",
         "1) ssh-opencode",
-        "2) ssh-codex",
-        "3) web",
-        "4) ssh-shell",
-        "5) ssh-claude",
-        "Enter choice [1/ssh-opencode]: ",
+        "2) ssh-claude",
+        "3) ssh-codex",
+        "4) web-opencode",
+        "5) ssh-shell",
+        "",
+        "Enter choice: ",
+      ].join("\n"),
+    );
+  });
+
+  it("renders preface lines between title and mode selection", async () => {
+    const promptInput = vi.fn().mockResolvedValue("1");
+
+    await resolvePromptStartupMode(
+      "prompt",
+      {
+        isInteractiveTerminal: () => true,
+        promptInput,
+      },
+      {
+        prefaceLines: ["[INFO] Using launcher config: /tmp/launcher.config.toml"],
+      },
+    );
+
+    expect(promptInput).toHaveBeenCalledWith(
+      [
+        "\u001b[2J\u001b[H+-----------+",
+        "| ez-devbox |",
+        "+-----------+",
+        "",
+        "[INFO] Using launcher config: /tmp/launcher.config.toml",
+        "",
+        "Select startup mode:",
+        "--------------------",
+        "1) ssh-opencode",
+        "2) ssh-claude",
+        "3) ssh-codex",
+        "4) web-opencode",
+        "5) ssh-shell",
+        "",
+        "Enter choice: ",
       ].join("\n"),
     );
   });

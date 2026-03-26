@@ -1,7 +1,7 @@
 import { posix } from "node:path";
 import type { loadConfig } from "../config/load.js";
 import { selectReposForProvisioning } from "../repo/selection.js";
-import { formatPromptChoice } from "./prompt-style.js";
+import { formatPromptChoice, formatPromptSectionHeader } from "./prompt-style.js";
 import { promptWithReadline } from "./readline-prompt.js";
 
 interface RepoSelectionDeps {
@@ -34,8 +34,9 @@ export async function resolveSelectedRepos(
   if (active === "prompt" && isInteractiveTerminal()) {
     const prompt = deps.promptInput ?? ((question: string) => promptWithReadline(question));
     const question = [
-      "Multiple repos available. Select one:",
+      formatPromptSectionHeader("Multiple repos available. Select one:"),
       ...repos.map((repo, index) => formatPromptChoice(index + 1, repo.name)),
+      "",
       `Enter choice [1-${repos.length}]: `,
     ].join("\n");
     const selectedIndex = Number.parseInt((await prompt(question)).trim(), 10);

@@ -26,7 +26,7 @@ const commands = new Set<CliCommandName>([
 export function parseGlobalCliOptions(argv: string[]): GlobalCliOptions {
   let verbose = false;
   const args: string[] = [];
-  const firstCommand = argv.find((token) => commands.has(token as CliCommandName));
+  const firstCommand = argv.find((token) => commands.has(token as CliCommandName) || token === "ls");
   const firstCommandIndex = firstCommand ? argv.indexOf(firstCommand) : -1;
   const stopAtDoubleDash = firstCommand === "command";
 
@@ -74,6 +74,10 @@ export function resolveCliCommand(argv: string[]): ResolvedCliCommand {
     return { command: "version", args: [] };
   }
 
+  if (first === "ls") {
+    return { command: "list", args: rest };
+  }
+
   if (commands.has(first as CliCommandName)) {
     return { command: first as CliCommandName, args: rest };
   }
@@ -99,6 +103,7 @@ export function renderHelp(): string {
     "  connect  Connect to an existing sandbox and launch mode",
     "  resume   Reconnect using the last saved sandbox/mode",
     "  list     List available sandboxes",
+    "  ls       Alias for list",
     "  command  Run a command in a selected sandbox",
     "  wipe     Delete a sandbox by prompt or --sandbox-id",
     "  wipe-all Delete all sandboxes (use --yes to skip prompt)",

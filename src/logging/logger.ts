@@ -5,6 +5,8 @@ type LogLevel = "info" | "warn" | "error";
 let verboseEnabled = false;
 let loadingFrame = 0;
 let loadingIntervalId: NodeJS.Timeout | null = null;
+let deferredLoadingWarnings: string[] = [];
+const TOOLING_SYNC_UNSUPPORTED_WARNING_PREFIX = "Tooling sync skipped unsupported extensions";
 
 const levelPrefix: Record<LogLevel, string> = {
   info: "INFO",
@@ -43,6 +45,20 @@ function formatPrefix(level: LogLevel, output: NodeJS.WriteStream): string {
 }
 
 function write(level: LogLevel, message: string): void {
+  if (
+    level === "warn" &&
+    loadingIntervalId &&
+    process.stdout.isTTY &&
+    message.startsWith(TOOLING_SYNC_UNSUPPORTED_WARNING_PREFIX)
+  ) {
+    deferredLoadingWarnings.push(message);
+    return;
+  }
+
+  if (loadingIntervalId && process.stdout.isTTY) {
+    process.stdout.write("\r\u001b[2K\n");
+  }
+
   const output = level === "error" ? process.stderr : process.stdout;
   const safeMessage = level === "error" ? redactSensitiveText(message) : message;
   const line = `${formatPrefix(level, output)} ${safeMessage}`;
@@ -56,6 +72,10 @@ function write(level: LogLevel, message: string): void {
 
 export function setVerboseLoggingEnabled(enabled: boolean): void {
   verboseEnabled = enabled;
+}
+
+export function isVerboseLoggingEnabled(): boolean {
+  return verboseEnabled;
 }
 
 export const logger = {
@@ -107,6 +127,14 @@ export const logger = {
       if (loadingIntervalId === intervalId) {
         loadingIntervalId = null;
         process.stdout.write("\r\u001b[2K");
+      }
+
+      if (deferredLoadingWarnings.length > 0) {
+        const warningsToFlush = deferredLoadingWarnings;
+        deferredLoadingWarnings = [];
+        for (const deferredWarning of warningsToFlush) {
+          write("warn", deferredWarning);
+        }
       }
     };
   },

@@ -1,21 +1,26 @@
 import { createInterface } from "node:readline/promises";
 import type { StartupMode } from "../types/index.js";
 import { normalizePromptCancelledError } from "./prompt-cancelled.js";
-import { formatPromptChoice, formatPromptHeader } from "./prompt-style.js";
+import { formatPromptChoice, formatPromptSectionHeader, renderPromptWizardHeader } from "./prompt-style.js";
 
 const PROMPT_FALLBACK_MODE: Exclude<StartupMode, "prompt"> = "ssh-opencode";
 const PROMPT_MAX_ATTEMPTS = 3;
+const WEB_PROMPT_LABEL = "web-opencode";
 const PROMPT_CHOICE_NUMBERS: Record<string, Exclude<StartupMode, "prompt">> = {
   "1": "ssh-opencode",
-  "2": "ssh-codex",
-  "3": "web",
-  "4": "ssh-shell",
-  "5": "ssh-claude",
+  "2": "ssh-claude",
+  "3": "ssh-codex",
+  "4": "web",
+  "5": "ssh-shell",
 };
 
 export interface StartupModePromptDeps {
   isInteractiveTerminal: () => boolean;
   promptInput: (question: string) => Promise<string>;
+}
+
+export interface StartupModePromptOptions {
+  prefaceLines?: string[];
 }
 
 const defaultDeps: StartupModePromptDeps = {
@@ -26,6 +31,7 @@ const defaultDeps: StartupModePromptDeps = {
 export async function resolvePromptStartupMode(
   requestedMode: StartupMode,
   deps: StartupModePromptDeps = defaultDeps,
+  options: StartupModePromptOptions = {},
 ): Promise<StartupMode> {
   if (requestedMode !== "prompt") {
     return requestedMode;
@@ -36,14 +42,17 @@ export async function resolvePromptStartupMode(
   }
 
   const question = [
-    formatPromptHeader("ez-devbox"),
-    "Select startup mode:",
+    renderPromptWizardHeader("ez-devbox"),
+    ...(options.prefaceLines && options.prefaceLines.length > 0 ? ["", ...options.prefaceLines] : []),
+    "",
+    formatPromptSectionHeader("Select startup mode:"),
     formatPromptChoice(1, "ssh-opencode"),
-    formatPromptChoice(2, "ssh-codex"),
-    formatPromptChoice(3, "web"),
-    formatPromptChoice(4, "ssh-shell"),
-    formatPromptChoice(5, "ssh-claude"),
-    `Enter choice [1/${PROMPT_FALLBACK_MODE}]: `,
+    formatPromptChoice(2, "ssh-claude"),
+    formatPromptChoice(3, "ssh-codex"),
+    formatPromptChoice(4, WEB_PROMPT_LABEL),
+    formatPromptChoice(5, "ssh-shell"),
+    "",
+    "Enter choice: ",
   ].join("\n");
   for (let attempt = 0; attempt < PROMPT_MAX_ATTEMPTS; attempt += 1) {
     const answer = (await deps.promptInput(question)).trim().toLowerCase();
@@ -55,7 +64,7 @@ export async function resolvePromptStartupMode(
   }
 
   throw new Error(
-    `Invalid startup mode selection after ${PROMPT_MAX_ATTEMPTS} attempts. Expected one of ssh-opencode|ssh-codex|ssh-claude|web|ssh-shell.`,
+    `Invalid startup mode selection after ${PROMPT_MAX_ATTEMPTS} attempts. Expected one of ssh-opencode|ssh-claude|ssh-codex|${WEB_PROMPT_LABEL}|ssh-shell.`,
   );
 }
 
@@ -70,6 +79,10 @@ function isConcreteStartupMode(value: string): value is Exclude<StartupMode, "pr
 }
 
 function resolvePromptAnswer(value: string): Exclude<StartupMode, "prompt"> | undefined {
+  if (value === WEB_PROMPT_LABEL) {
+    return "web";
+  }
+
   if (isConcreteStartupMode(value)) {
     return value;
   }

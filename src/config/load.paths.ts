@@ -3,6 +3,7 @@ import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { createInterface } from "node:readline/promises";
 import { normalizePromptCancelledError } from "../cli/prompt-cancelled.js";
+import { formatPromptChoice, formatPromptSectionHeader } from "../cli/prompt-style.js";
 import type { LoadConfigOptions, LoadedLauncherConfig } from "./load.types.js";
 
 const LAUNCHER_CONFIG_FILENAME = "launcher.config.toml";
@@ -115,10 +116,11 @@ async function promptForConfigScope(
   prompt: (question: string) => Promise<string>,
 ): Promise<LoadedLauncherConfig["scope"] | undefined> {
   const question = [
-    "No launcher config found. Where should ez-devbox create one?",
-    `1) Local (current directory): ${localPath}`,
-    `2) Global (user config): ${globalPath}`,
-    "3) Cancel",
+    formatPromptSectionHeader("No launcher config found. Where should ez-devbox create one?"),
+    formatPromptChoice(1, `Local (current directory): ${localPath}`),
+    formatPromptChoice(2, `Global (user config): ${globalPath}`),
+    formatPromptChoice(3, "Cancel"),
+    "",
     `Enter choice [1/${CONFIG_PROMPT_DEFAULT_SCOPE}]: `,
   ].join("\n");
   const answer = (await prompt(question)).trim().toLowerCase();

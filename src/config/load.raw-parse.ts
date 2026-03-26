@@ -64,6 +64,11 @@ export function parseRawLauncherConfig(rawConfig: JsonRecord): ResolvedLauncherC
       config_dir:
         getOptionalString(opencodeRaw, "config_dir", "opencode.config_dir") ?? defaultConfig.opencode.config_dir,
       auth_path: getOptionalString(opencodeRaw, "auth_path", "opencode.auth_path") ?? defaultConfig.opencode.auth_path,
+      ...(getOptionalBoolean(opencodeRaw, "match_local_version", "opencode.match_local_version") !== undefined
+        ? {
+            match_local_version: getOptionalBoolean(opencodeRaw, "match_local_version", "opencode.match_local_version"),
+          }
+        : {}),
     },
     codex: {
       config_dir: getOptionalString(codexRaw, "config_dir", "codex.config_dir") ?? defaultConfig.codex.config_dir,

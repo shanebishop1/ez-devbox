@@ -21,12 +21,18 @@ export interface ModeLaunchResult {
 export interface LaunchContextOptions {
   workingDirectory?: string;
   startupEnv?: Record<string, string>;
+  onBeforeInteractiveSession?: () => void;
+  onLaunchStageUpdate?: (loadingMessage: string, completionMessage: string) => void;
+  matchLocalOpenCodeVersion?: boolean;
 }
 
 export interface LaunchModeOptions {
   promptFallbackMode?: ConcreteStartupMode;
   workingDirectory?: string;
   startupEnv?: Record<string, string>;
+  onBeforeInteractiveSession?: () => void;
+  onLaunchStageUpdate?: (loadingMessage: string, completionMessage: string) => void;
+  matchLocalOpenCodeVersion?: boolean;
 }
 
 type ConcreteModeRunner = (handle: SandboxHandle, options?: LaunchContextOptions) => Promise<ModeLaunchResult>;
@@ -54,7 +60,20 @@ export async function launchMode(
   mode: StartupMode,
   options: LaunchModeOptions = {},
 ): Promise<ModeLaunchResult> {
-  const { promptFallbackMode, workingDirectory, startupEnv } = options;
+  const {
+    promptFallbackMode,
+    workingDirectory,
+    startupEnv,
+    onBeforeInteractiveSession,
+    onLaunchStageUpdate,
+    matchLocalOpenCodeVersion,
+  } = options;
   const resolvedMode = resolveStartupMode(mode, { promptFallbackMode });
-  return MODE_RUNNERS[resolvedMode](handle, { workingDirectory, startupEnv });
+  return MODE_RUNNERS[resolvedMode](handle, {
+    workingDirectory,
+    startupEnv,
+    onBeforeInteractiveSession,
+    onLaunchStageUpdate,
+    matchLocalOpenCodeVersion,
+  });
 }
