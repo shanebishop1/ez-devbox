@@ -42,6 +42,7 @@ export interface ResolvedLauncherConfig {
   opencode: {
     config_dir: string;
     auth_path: string;
+    match_local_version?: boolean;
   };
   codex: {
     config_dir: string;

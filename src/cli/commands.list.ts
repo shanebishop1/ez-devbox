@@ -2,6 +2,7 @@ import { type ListSandboxesOptions, listSandboxes, type SandboxListItem } from "
 import type { CommandResult } from "../types/index.js";
 import { applyEnvDefaults } from "./env-defaults.js";
 import { loadCliEnvSource } from "./env-source.js";
+import { formatPromptSectionHeader } from "./prompt-style.js";
 import { formatSandboxDisplayLabel } from "./sandbox-display-name.js";
 
 export interface ListCommandDeps {
@@ -49,7 +50,7 @@ export async function runListCommand(_args: string[], deps: ListCommandDeps = de
   });
 
   return {
-    message: lines.join("\n"),
+    message: [formatPromptSectionHeader("SANDBOXES"), ...lines].join("\n"),
     exitCode: 0,
   };
 }

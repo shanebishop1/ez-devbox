@@ -25,6 +25,7 @@ import { parseConnectArgs } from "./commands.connect.args.js";
 import { resolveGhRuntimeEnv } from "./commands.connect.env.js";
 import { resolvePreferredActiveRepo, resolveSandboxTarget } from "./commands.connect.target.js";
 import { loadCliEnvSource } from "./env-source.js";
+import { renderPromptWizardHeader, SSH_SUSPEND_RESUME_HINT } from "./prompt-style.js";
 import { resolvePromptStartupMode } from "./startup-mode-prompt.js";
 
 export interface ConnectCommandDeps {
@@ -41,7 +42,12 @@ export interface ConnectCommandDeps {
   launchMode: (
     handle: SandboxHandle,
     mode: StartupMode,
-    options?: { workingDirectory?: string; startupEnv?: Record<string, string> },
+    options?: {
+      workingDirectory?: string;
+      startupEnv?: Record<string, string>;
+      matchLocalOpenCodeVersion?: boolean;
+      onBeforeInteractiveSession?: () => void;
+    },
   ) => Promise<ModeLaunchResult>;
   resolveEnvSource?: () => Promise<Record<string, string | undefined>>;
   resolveSandboxCreateEnv?: (
@@ -77,6 +83,8 @@ const defaultDeps: ConnectCommandDeps = {
 
 export interface ConnectCommandOptions {
   skipLastRun?: boolean;
+  skipDetachHint?: boolean;
+  skipInteractiveHeader?: boolean;
 }
 
 export async function runConnectCommand(
@@ -87,23 +95,62 @@ export async function runConnectCommand(
   const parsed = parseConnectArgs(args);
   const loadedConfig = deps.loadConfigWithMetadata ? await deps.loadConfigWithMetadata() : undefined;
   const config = loadedConfig ? loadedConfig.config : await deps.loadConfig();
-  if (loadedConfig) {
-    logger.info(`Using launcher config: ${loadedConfig.configPath}`);
+  const isInteractive = (deps.isInteractiveTerminal ?? (() => Boolean(process.stdin.isTTY && process.stdout.isTTY)))();
+  const requestedMode = parsed.mode ?? config.startup.mode;
+  const showsPromptInCurrentSession = requestedMode === "prompt" && isInteractive;
+
+  if (!parsed.json && isInteractive && !options.skipInteractiveHeader && !showsPromptInCurrentSession) {
+    process.stdout.write(`${renderPromptWizardHeader("ez-devbox")}\n\n`);
+  }
+  if (!parsed.json && isInteractive && !options.skipDetachHint && !showsPromptInCurrentSession) {
+    logger.info(SSH_SUSPEND_RESUME_HINT);
+    process.stdout.write("\n");
   }
 
+  const showLoading = Boolean(process.stdout.isTTY && !parsed.json);
+  let stopLoading: (() => void) | undefined;
+  let completedStageMessage: string | undefined;
+  const clearLoadingIfRunning = (): void => {
+    stopLoading?.();
+    stopLoading = undefined;
+    completedStageMessage = undefined;
+  };
+  const stopLoadingWithCompletion = (): void => {
+    stopLoading?.();
+    stopLoading = undefined;
+    if (completedStageMessage && showLoading) {
+      process.stdout.write(`${formatCompletedStage(completedStageMessage)}\n`);
+    }
+    completedStageMessage = undefined;
+  };
+  const setLoadingStage = (message: string, completionMessage: string): void => {
+    if (!showLoading) {
+      return;
+    }
+    stopLoadingWithCompletion();
+    completedStageMessage = completionMessage;
+    stopLoading = logger.startLoading(message);
+  };
+  setLoadingStage("Preparing tunnel...", "Prepared tunnel");
+
   return withConfiguredTunnel(config, async (tunnelRuntimeEnv) => {
+    setLoadingStage("Resolving target sandbox...", "Resolved target sandbox");
     const target = await resolveSandboxTarget(parsed.sandboxId, deps, options);
     const targetLabel = target.label ?? target.sandboxId;
-    const requestedMode = parsed.mode ?? config.startup.mode;
     logger.verbose(`Resolving startup mode from '${requestedMode}'.`);
     const mode = await deps.resolvePromptStartupMode(requestedMode);
     const resolvedMode = resolveStartupMode(mode);
     if (requestedMode === "prompt") {
       logger.verbose(`Startup mode selected via prompt: ${mode}.`);
+      if (!parsed.json && isInteractive && !options.skipDetachHint) {
+        logger.info(SSH_SUSPEND_RESUME_HINT);
+        process.stdout.write("\n");
+      }
     }
     const preferredActiveRepo = await resolvePreferredActiveRepo(config, target.sandboxId, deps, options);
 
     logger.verbose(`Connecting to sandbox ${targetLabel}.`);
+    setLoadingStage("Connecting to sandbox...", "Connected to sandbox");
     const handle = await deps.connectSandbox(target.sandboxId, config);
     logger.verbose(`Connected to sandbox ${targetLabel}.`);
 
@@ -128,6 +175,7 @@ export async function runConnectCommand(
     });
     const webServerPassword = resolveWebServerPassword(envSource);
 
+    setLoadingStage("Bootstrapping workspace...", "Bootstrapped workspace");
     const bootstrapResult = await (deps.bootstrapProjectWorkspace ?? bootstrapProjectWorkspace)(handle, config, {
       isConnect: true,
       preferredActiveRepo,
@@ -137,7 +185,13 @@ export async function runConnectCommand(
     logger.verbose(`Selected repos summary: ${formatSelectedReposSummary(bootstrapResult.selectedRepoNames)}.`);
     logger.verbose(`Setup outcome summary: ${formatSetupOutcomeSummary(bootstrapResult.setup)}.`);
 
+    if (!parsed.json && showLoading && resolvedMode !== "web") {
+      logger.info(`Connected to sandbox ${targetLabel}.`);
+      process.stdout.write("\n");
+    }
+
     logger.verbose(`Launching startup mode '${mode}'.`);
+    setLoadingStage(`Launching ${resolvedMode}...`, `Launched ${resolvedMode}`);
     const launched = await deps.launchMode(handle, mode, {
       workingDirectory: bootstrapResult.workingDirectory,
       startupEnv: addWebServerPasswordForWebMode(
@@ -148,7 +202,21 @@ export async function runConnectCommand(
         resolvedMode,
         webServerPassword,
       ),
+      ...(resolvedMode === "ssh-opencode"
+        ? {
+            matchLocalOpenCodeVersion: config.opencode.match_local_version ?? true,
+          }
+        : {}),
+      ...(resolvedMode !== "web" && showLoading
+        ? {
+            onBeforeInteractiveSession: () => {
+              stopLoadingWithCompletion();
+              process.stdout.write("\n");
+            },
+          }
+        : {}),
     });
+    stopLoadingWithCompletion();
 
     const activeRepo =
       bootstrapResult.selectedRepoNames.length === 1 ? bootstrapResult.selectedRepoNames[0] : undefined;
@@ -159,6 +227,10 @@ export async function runConnectCommand(
       activeRepo,
       updatedAt: deps.now(),
     });
+
+    if (!parsed.json && showLoading && resolvedMode !== "web") {
+      process.stdout.write("\n");
+    }
 
     if (parsed.json) {
       return {
@@ -180,9 +252,25 @@ export async function runConnectCommand(
       };
     }
 
-    return {
-      message: `Connected to sandbox ${targetLabel}. ${launched.message}`,
-      exitCode: 0,
-    };
+    return !parsed.json && showLoading && resolvedMode !== "web"
+      ? {
+          message: launched.message,
+          exitCode: 0,
+        }
+      : {
+          message: `Connected to sandbox ${targetLabel}. ${launched.message}`,
+          exitCode: 0,
+        };
+  }).finally(() => {
+    clearLoadingIfRunning();
   });
+}
+
+const ANSI_GREEN = "\u001b[32m";
+const ANSI_RESET = "\u001b[0m";
+
+function formatCompletedStage(message: string): string {
+  const shouldColorize = process.stdout.isTTY === true && process.env.NO_COLOR === undefined;
+  const check = shouldColorize ? `${ANSI_GREEN}✓${ANSI_RESET}` : "✓";
+  return `${check} ${message}`;
 }

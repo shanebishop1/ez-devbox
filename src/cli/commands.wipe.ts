@@ -9,6 +9,7 @@ import { clearLastRunState, type LastRunState, loadLastRunState } from "../state
 import type { CommandResult } from "../types/index.js";
 import { applyEnvDefaults } from "./env-defaults.js";
 import { loadCliEnvSource } from "./env-source.js";
+import { formatPromptChoice, formatPromptSectionHeader } from "./prompt-style.js";
 import { promptWithReadline } from "./readline-prompt.js";
 import { formatSandboxDisplayLabel } from "./sandbox-display-name.js";
 
@@ -99,10 +100,15 @@ async function selectSandboxInteractively(
     throw new Error("No sandboxes are available to wipe.");
   }
 
-  const choices = sandboxes.map(
-    (sandbox, index) => `${index + 1}) ${formatSandboxDisplayLabel(sandbox.sandboxId, sandbox.metadata)}`,
+  const choices = sandboxes.map((sandbox, index) =>
+    formatPromptChoice(index + 1, formatSandboxDisplayLabel(sandbox.sandboxId, sandbox.metadata)),
   );
-  const question = ["Select sandbox to wipe:", ...choices, "Enter choice number: "].join("\n");
+  const question = [
+    formatPromptSectionHeader("Select sandbox to wipe:"),
+    ...choices,
+    "",
+    `Enter choice [1-${sandboxes.length}]: `,
+  ].join("\n");
   const answer = (await deps.promptInput(question)).trim();
 
   if (!/^\d+$/.test(answer)) {

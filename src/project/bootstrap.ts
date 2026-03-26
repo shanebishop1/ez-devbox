@@ -37,6 +37,7 @@ export interface BootstrapProjectWorkspaceOptions {
   isInteractiveTerminal?: () => boolean;
   promptInput?: (question: string) => Promise<string>;
   preferredActiveRepo?: string;
+  selectedReposOverride?: ResolvedProjectRepoConfig[];
   runtimeEnv?: Record<string, string>;
   onProgress?: (message: string) => void;
   deps?: Partial<BootstrapProjectWorkspaceDeps>;
@@ -63,13 +64,15 @@ export async function bootstrapProjectWorkspace(
   const setupRuntimeEnv = await resolveSetupRuntimeEnv(handle, runtimeEnv, timeoutMs);
   await deps.ensureProjectDirectory(handle, config.project.dir, { timeoutMs });
 
-  const selectedRepos = await selectRepos(config.project.repos, config.project.mode, config.project.active, {
-    isInteractiveTerminal: options.isInteractiveTerminal,
-    promptInput: options.promptInput,
-    preferredActiveRepo: options.preferredActiveRepo,
-    activeName: config.project.active_name,
-    activeIndex: config.project.active_index,
-  });
+  const selectedRepos = options.selectedReposOverride
+    ? [...options.selectedReposOverride]
+    : await selectRepos(config.project.repos, config.project.mode, config.project.active, {
+        isInteractiveTerminal: options.isInteractiveTerminal,
+        promptInput: options.promptInput,
+        preferredActiveRepo: options.preferredActiveRepo,
+        activeName: config.project.active_name,
+        activeIndex: config.project.active_index,
+      });
   options.onProgress?.(
     selectedRepos.length === 0
       ? "Bootstrap repos: none selected"

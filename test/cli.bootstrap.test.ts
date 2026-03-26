@@ -37,6 +37,13 @@ describe("CLI bootstrap routing", () => {
     expect(resolved.args).toEqual(["--verbose"]);
   });
 
+  it("routes ls alias to list command", () => {
+    const resolved = resolveCliCommand(["ls", "--json"]);
+
+    expect(resolved.command).toBe("list");
+    expect(resolved.args).toEqual(["--json"]);
+  });
+
   it("routes --version to version command", () => {
     const resolved = resolveCliCommand(["--version"]);
 
@@ -100,6 +107,10 @@ describe("CLI bootstrap routing", () => {
 
   it("includes list in help text", () => {
     expect(renderHelp()).toContain("list     List available sandboxes");
+  });
+
+  it("includes ls alias in help text", () => {
+    expect(renderHelp()).toContain("ls       Alias for list");
   });
 
   it("includes command in help text", () => {
