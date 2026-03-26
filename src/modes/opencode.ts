@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process";
 import type { SandboxHandle } from "../e2b/lifecycle.js";
 import { logger } from "../logging/logger.js";
 import type { LaunchContextOptions, ModeLaunchResult } from "./index.js";
@@ -30,14 +31,21 @@ const COMMAND_RETRY_TIMEOUT_MS = 60_000;
 const COMMAND_MAX_ATTEMPTS = 2;
 const SERVER_START_TIMEOUT_MS = 10_000;
 const SERVER_READY_TIMEOUT_MS = 35_000;
+const VERSION_CHECK_TIMEOUT_MS = 20_000;
+const VERSION_UPGRADE_TIMEOUT_MS = 90_000;
+const LOCAL_VERSION_TIMEOUT_MS = 8_000;
+const OPEN_CODE_UPGRADE_COMMAND_PREFIX = "opencode upgrade";
 
-type OpenCodeModeDeps = SshModeDeps;
+type OpenCodeModeDeps = SshModeDeps & {
+  resolveLocalOpenCodeVersion?: () => string | undefined;
+};
 
 const defaultDeps: OpenCodeModeDeps = {
   isInteractiveTerminal: () => Boolean(process.stdin.isTTY && process.stdout.isTTY),
   prepareSession: prepareSshBridgeSession,
   runInteractiveSession: runInteractiveSshSession,
   cleanupSession: cleanupSshBridgeSession,
+  resolveLocalOpenCodeVersion,
 };
 
 export async function startOpenCodeMode(
@@ -51,17 +59,33 @@ export async function startOpenCodeMode(
     return runSmokeCheck(handle, commandContext);
   }
 
+  launchContext.onLaunchStageUpdate?.(
+    "Launching ssh-opencode: checking OpenCode version...",
+    "Checked OpenCode version",
+  );
+  await inspectAndMaybeMatchOpenCodeVersion(
+    handle,
+    commandContext,
+    launchContext.matchLocalOpenCodeVersion ?? true,
+    deps.resolveLocalOpenCodeVersion ?? resolveLocalOpenCodeVersion,
+    launchContext.onLaunchStageUpdate,
+  );
+
+  launchContext.onLaunchStageUpdate?.("Launching ssh-opencode: starting OpenCode server...", "OpenCode server ready");
   await ensurePersistentServerReady(handle, commandContext);
 
+  launchContext.onLaunchStageUpdate?.("Launching ssh-opencode: preparing SSH bridge...", "SSH bridge ready");
   logger.verbose("Preparing secure SSH bridge (first run may install packages).");
   const session = await deps.prepareSession(handle);
 
   try {
+    launchContext.onLaunchStageUpdate?.("Launching ssh-opencode: preparing SSH handoff...", "Prepared SSH handoff");
     const envScriptPath = await stageInteractiveStartupEnv(handle, session, commandContext.envs);
     logger.verbose(
       "OpenCode SSH mode uses a persistent tmux session; Ctrl+C detaches your terminal while tasks continue.",
     );
     logger.verbose("Opening interactive SSH session.");
+    launchContext.onBeforeInteractiveSession?.();
     await deps.runInteractiveSession(
       session,
       buildInteractiveRemoteCommand({
@@ -84,6 +108,115 @@ export async function startOpenCodeMode(
     },
     message: `OpenCode interactive session ended for sandbox ${handle.sandboxId}`,
   };
+}
+
+async function inspectAndMaybeMatchOpenCodeVersion(
+  handle: SandboxHandle,
+  commandContext: { cwd?: string; envs: Record<string, string> },
+  matchLocalVersion: boolean,
+  localVersionResolver: () => string | undefined,
+  onLaunchStageUpdate?: (loadingMessage: string, completionMessage: string) => void,
+): Promise<void> {
+  const localVersion = localVersionResolver();
+  const sandboxVersion = await resolveSandboxOpenCodeVersion(handle, commandContext);
+
+  if (localVersion && sandboxVersion) {
+    logger.info(`OpenCode versions: local=${localVersion}, sandbox=${sandboxVersion}`);
+  } else if (sandboxVersion) {
+    logger.info(`OpenCode version in sandbox: ${sandboxVersion} (local version unavailable)`);
+  } else if (localVersion) {
+    logger.info(`OpenCode version on host: ${localVersion} (sandbox version unavailable)`);
+  } else {
+    logger.warn("OpenCode version check unavailable on both host and sandbox.");
+    return;
+  }
+
+  if (!matchLocalVersion) {
+    logger.verbose("OpenCode local/sandbox version matching disabled by config (opencode.match_local_version=false).");
+    return;
+  }
+
+  if (!localVersion || !sandboxVersion || localVersion === sandboxVersion) {
+    return;
+  }
+
+  onLaunchStageUpdate?.(
+    `Launching ssh-opencode: matching OpenCode version (${sandboxVersion} -> ${localVersion})...`,
+    "Finished OpenCode version match attempt",
+  );
+  logger.info(`Attempting to match sandbox OpenCode version to local ${localVersion}.`);
+
+  const commandOptions = {
+    ...(commandContext.cwd ? { cwd: commandContext.cwd } : {}),
+    ...(Object.keys(commandContext.envs).length > 0 ? { envs: commandContext.envs } : {}),
+  };
+
+  try {
+    await handle.run(`${OPEN_CODE_UPGRADE_COMMAND_PREFIX} ${localVersion} -m npm`, {
+      ...commandOptions,
+      timeoutMs: VERSION_UPGRADE_TIMEOUT_MS,
+    });
+  } catch (error) {
+    logger.warn(`OpenCode version match failed before launch: ${toErrorMessage(error)}`);
+    return;
+  }
+
+  const afterMatchVersion = await resolveSandboxOpenCodeVersion(handle, commandContext);
+  if (afterMatchVersion === localVersion) {
+    logger.info(`Matched sandbox OpenCode version to local ${localVersion}.`);
+    return;
+  }
+
+  if (afterMatchVersion) {
+    logger.warn(
+      `OpenCode version match incomplete: local=${localVersion}, sandbox=${afterMatchVersion}. Template-managed sandbox binary may not be replaceable in this environment.`,
+    );
+    return;
+  }
+
+  logger.warn(
+    `OpenCode version match attempted but post-check version is unavailable (local=${localVersion}, sandbox(before)=${sandboxVersion}).`,
+  );
+}
+
+async function resolveSandboxOpenCodeVersion(
+  handle: SandboxHandle,
+  commandContext: { cwd?: string; envs: Record<string, string> },
+): Promise<string | undefined> {
+  const commandOptions = {
+    ...(commandContext.cwd ? { cwd: commandContext.cwd } : {}),
+    ...(Object.keys(commandContext.envs).length > 0 ? { envs: commandContext.envs } : {}),
+  };
+
+  try {
+    const currentResult = await handle.run(OPEN_CODE_SMOKE_COMMAND, {
+      ...commandOptions,
+      timeoutMs: VERSION_CHECK_TIMEOUT_MS,
+    });
+    return parseSemver(currentResult.stdout);
+  } catch (error) {
+    logger.verbose(`Unable to read current OpenCode version in sandbox: ${toErrorMessage(error)}.`);
+    return undefined;
+  }
+}
+
+function resolveLocalOpenCodeVersion(): string | undefined {
+  const result = spawnSync("opencode", ["--version"], {
+    encoding: "utf8",
+    timeout: LOCAL_VERSION_TIMEOUT_MS,
+  });
+
+  if (result.error) {
+    logger.verbose(`Unable to read local OpenCode version: ${result.error.message}`);
+    return undefined;
+  }
+
+  if (result.status !== 0) {
+    logger.verbose("Unable to read local OpenCode version: command returned non-zero status.");
+    return undefined;
+  }
+
+  return parseSemver(result.stdout ?? "");
 }
 
 async function ensurePersistentServerReady(
@@ -174,4 +307,17 @@ function isCommandTimeoutError(error: unknown): boolean {
 
   const normalizedMessage = error.message.toLowerCase();
   return normalizedMessage.includes("deadline_exceeded") || normalizedMessage.includes("timed out");
+}
+
+function parseSemver(value: string): string | undefined {
+  const match = value.match(/\b\d+\.\d+\.\d+\b/);
+  return match?.[0];
+}
+
+function toErrorMessage(error: unknown): string {
+  if (error instanceof Error && error.message.trim() !== "") {
+    return error.message;
+  }
+
+  return "unknown error";
 }

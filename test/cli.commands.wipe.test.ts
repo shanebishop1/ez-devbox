@@ -64,7 +64,14 @@ describe("runWipeCommand", () => {
     });
 
     expect(promptInput).toHaveBeenCalledWith(
-      ["Select sandbox to wipe:", "1) Alpha (sbx-1)", "2) Beta (sbx-2)", "Enter choice number: "].join("\n"),
+      [
+        "Select sandbox to wipe:",
+        "-----------------------",
+        "1) Alpha (sbx-1)",
+        "2) Beta (sbx-2)",
+        "",
+        "Enter choice [1-2]: ",
+      ].join("\n"),
     );
     expect(killSandbox).toHaveBeenCalledWith("sbx-2");
     expect(result.message).toBe("Wiped sandbox Beta (sbx-2).");

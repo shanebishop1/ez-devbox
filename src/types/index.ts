@@ -13,5 +13,6 @@ export type CliCommandName =
 
 export interface CommandResult {
   message: string;
+  postMessages?: string[];
   exitCode?: number;
 }

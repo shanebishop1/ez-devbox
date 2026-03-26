@@ -90,9 +90,14 @@ describe("runCommandCommand", () => {
     });
 
     expect(promptInput).toHaveBeenCalledWith(
-      ["Multiple sandboxes available. Select one:", "1) Alpha (sbx-1)", "2) Beta (sbx-2)", "Enter choice [1-2]: "].join(
-        "\n",
-      ),
+      [
+        "Multiple sandboxes available. Select one:",
+        "-----------------------------------------",
+        "1) Alpha (sbx-1)",
+        "2) Beta (sbx-2)",
+        "",
+        "Enter choice [1-2]: ",
+      ].join("\n"),
     );
     expect(connectSandbox).toHaveBeenCalledWith("sbx-2", baseConfig);
     expect(result.message).toContain("Ran command in sandbox Beta (sbx-2).");

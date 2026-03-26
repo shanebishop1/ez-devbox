@@ -72,7 +72,9 @@ describe("runListCommand", () => {
       ]),
     });
 
-    expect(result.message).toBe(["1) Alpha (sbx-1) [running]", "2) sbx-2 [paused]"].join("\n"));
+    expect(result.message).toBe(
+      ["SANDBOXES", "---------", "1) Alpha (sbx-1) [running]", "2) sbx-2 [paused]"].join("\n"),
+    );
     expect(result.exitCode).toBe(0);
   });
 

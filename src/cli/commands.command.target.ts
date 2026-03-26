@@ -1,6 +1,6 @@
 import type { SandboxListItem } from "../e2b/lifecycle.js";
 import type { LastRunState } from "../state/lastRun.js";
-import { formatPromptChoice } from "./prompt-style.js";
+import { formatPromptChoice, formatPromptSectionHeader } from "./prompt-style.js";
 import { promptWithReadline } from "./readline-prompt.js";
 import { formatSandboxDisplayLabel } from "./sandbox-display-name.js";
 
@@ -72,8 +72,9 @@ async function promptForSandboxSelection(
   });
 
   const question = [
-    "Multiple sandboxes available. Select one:",
+    formatPromptSectionHeader("Multiple sandboxes available. Select one:"),
     ...options.map((option) => formatPromptChoice(option.index, option.label)),
+    "",
     `Enter choice [1-${options.length}]: `,
   ].join("\n");
   const selectedIndex = Number.parseInt((await prompt(question)).trim(), 10);

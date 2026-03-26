@@ -17,7 +17,10 @@ describe("runResumeCommand", () => {
       runConnectCommand,
     });
 
-    expect(runConnectCommand).toHaveBeenCalledWith(["--sandbox-id", "sbx-123", "--mode", "ssh-codex"]);
+    expect(runConnectCommand).toHaveBeenCalledWith(
+      ["--sandbox-id", "sbx-123", "--mode", "ssh-codex"],
+      expect.objectContaining({ skipDetachHint: true, skipInteractiveHeader: true }),
+    );
     expect(result).toEqual({
       message: "Connected to sandbox sbx-123.",
       exitCode: 0,
@@ -36,7 +39,10 @@ describe("runResumeCommand", () => {
       runConnectCommand,
     });
 
-    expect(runConnectCommand).toHaveBeenCalledWith(["--sandbox-id", "sbx-123", "--mode", "ssh-opencode"]);
+    expect(runConnectCommand).toHaveBeenCalledWith(
+      ["--sandbox-id", "sbx-123", "--mode", "ssh-opencode"],
+      expect.objectContaining({ skipDetachHint: true, skipInteractiveHeader: true }),
+    );
   });
 
   it("passes through ssh-claude mode when resuming", async () => {
@@ -51,7 +57,10 @@ describe("runResumeCommand", () => {
       runConnectCommand,
     });
 
-    expect(runConnectCommand).toHaveBeenCalledWith(["--sandbox-id", "sbx-123", "--mode", "ssh-claude"]);
+    expect(runConnectCommand).toHaveBeenCalledWith(
+      ["--sandbox-id", "sbx-123", "--mode", "ssh-claude"],
+      expect.objectContaining({ skipDetachHint: true, skipInteractiveHeader: true }),
+    );
   });
 
   it("errors when no prior run exists", async () => {

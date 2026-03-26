@@ -188,4 +188,61 @@ describe("logger formatting", () => {
       restoreStdout();
     }
   });
+
+  it("prints non-tooling warnings on a fresh line while spinner is active", () => {
+    delete process.env.NO_COLOR;
+    delete process.env.FORCE_COLOR;
+    const restoreStdout = setTty(process.stdout, true);
+    const writeSpy = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    vi.useFakeTimers();
+
+    try {
+      const stop = logger.startLoading("Transferring auth/config...");
+      vi.advanceTimersByTime(90);
+
+      logger.warn("Tunnel: quick tunnel is rate-limited (HTTP 429/1015); trying Docker fallback.");
+
+      expect(writeSpy).toHaveBeenCalledWith("\r\u001b[2K\n");
+      expect(logSpy).toHaveBeenCalledWith(
+        "\u001b[33m[WARN]\u001b[0m Tunnel: quick tunnel is rate-limited (HTTP 429/1015); trying Docker fallback.",
+      );
+
+      stop();
+    } finally {
+      vi.useRealTimers();
+      logSpy.mockRestore();
+      writeSpy.mockRestore();
+      restoreStdout();
+    }
+  });
+
+  it("defers tooling unsupported-extension warnings until spinner stops", () => {
+    delete process.env.NO_COLOR;
+    delete process.env.FORCE_COLOR;
+    const restoreStdout = setTty(process.stdout, true);
+    const writeSpy = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    vi.useFakeTimers();
+
+    try {
+      const stop = logger.startLoading("Transferring auth/config...");
+      vi.advanceTimersByTime(90);
+
+      logger.warn("Tooling sync skipped unsupported extensions in '/tmp': .png (3)");
+      expect(logSpy).not.toHaveBeenCalled();
+
+      stop();
+
+      expect(logSpy).toHaveBeenCalledWith(
+        "\u001b[33m[WARN]\u001b[0m Tooling sync skipped unsupported extensions in '/tmp': .png (3)",
+      );
+      expect(writeSpy).toHaveBeenCalledWith("\r\u001b[2K");
+    } finally {
+      vi.useRealTimers();
+      logSpy.mockRestore();
+      writeSpy.mockRestore();
+      restoreStdout();
+    }
+  });
 });

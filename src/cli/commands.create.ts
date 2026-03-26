@@ -1,12 +1,15 @@
 import { type LoadConfigOptions, loadConfig, loadConfigWithMetadata } from "../config/load.js";
+import type { ResolvedProjectRepoConfig } from "../config/schema.js";
 import { resolveSandboxCreateEnv, type SandboxCreateEnvResolution } from "../e2b/env.js";
 import { type CreateSandboxOptions, createSandbox, type SandboxHandle } from "../e2b/lifecycle.js";
-import { logger } from "../logging/logger.js";
+import { isVerboseLoggingEnabled, logger } from "../logging/logger.js";
 import { type ConcreteStartupMode, launchMode, type ModeLaunchResult, resolveStartupMode } from "../modes/index.js";
 import { type BootstrapProjectWorkspaceResult, bootstrapProjectWorkspace } from "../project/bootstrap.js";
+import { type SelectReposOptions, selectRepos } from "../project/bootstrap.repo-selection.js";
 import { type LastRunState, saveLastRunState } from "../state/lastRun.js";
 import type { ToolingSyncSummary } from "../tooling/host-sandbox-sync.js";
 import { type WithConfiguredTunnel, withConfiguredTunnel } from "../tunnel/cloudflared.js";
+import { resolveTunnelPorts } from "../tunnel/cloudflared.spawn.js";
 import type { CommandResult, StartupMode } from "../types/index.js";
 import {
   addWebServerPasswordForWebMode,
@@ -16,13 +19,23 @@ import {
   resolveWebServerPassword,
 } from "./command-shared.js";
 import { parseCreateArgs } from "./commands.create.args.js";
-import { formatEnvVarNames, hasPublicTunnelRuntimeEnv, resolveGhRuntimeEnv } from "./commands.create.env.js";
+import { formatEnvVarNames, resolveGhRuntimeEnv } from "./commands.create.env.js";
 import { formatToolingSyncSummary, syncToolingForMode } from "./commands.create.sync.js";
 import { resolveTemplateForMode } from "./commands.create.template.js";
 import { loadCliEnvSource } from "./env-source.js";
 import { isPromptCancelledError, PromptCancelledError } from "./prompt-cancelled.js";
+import { formatPromptLogTag, renderPromptWizardHeader, SSH_SUSPEND_RESUME_HINT } from "./prompt-style.js";
 import { buildSandboxDisplayName, formatSandboxDisplayLabel } from "./sandbox-display-name.js";
-import { resolvePromptStartupMode } from "./startup-mode-prompt.js";
+import {
+  resolvePromptStartupMode,
+  type StartupModePromptDeps,
+  type StartupModePromptOptions,
+} from "./startup-mode-prompt.js";
+
+const TUNNEL_URL_WARNING_MESSAGE =
+  "Anyone with access to your Tunnel URL can access the forwarded service/data. Treat tunnel URLs as secrets.";
+const ANSI_GREEN = "\u001b[32m";
+const ANSI_RESET = "\u001b[0m";
 
 export interface CreateCommandDeps {
   loadConfig: (options?: LoadConfigOptions) => ReturnType<typeof loadConfig>;
@@ -37,16 +50,39 @@ export interface CreateCommandDeps {
     envSource?: Record<string, string | undefined>,
   ) => SandboxCreateEnvResolution;
   resolveHostGhToken?: (env: NodeJS.ProcessEnv) => Promise<string | undefined>;
-  resolvePromptStartupMode: (requestedMode: StartupMode) => Promise<StartupMode>;
+  resolvePromptStartupMode: (
+    requestedMode: StartupMode,
+    deps?: StartupModePromptDeps,
+    options?: StartupModePromptOptions,
+  ) => Promise<StartupMode>;
+  selectReposForCreate?: (
+    repos: ResolvedProjectRepoConfig[],
+    mode: "single" | "all",
+    active: "prompt" | "name" | "index",
+    options: SelectReposOptions,
+  ) => Promise<ResolvedProjectRepoConfig[]>;
+  isInteractiveTerminal?: () => boolean;
+  promptInput?: (question: string) => Promise<string>;
   launchMode: (
     handle: SandboxHandle,
     mode: StartupMode,
-    options?: { workingDirectory?: string; startupEnv?: Record<string, string> },
+    options?: {
+      workingDirectory?: string;
+      startupEnv?: Record<string, string>;
+      onBeforeInteractiveSession?: () => void;
+      onLaunchStageUpdate?: (loadingMessage: string, completionMessage: string) => void;
+      matchLocalOpenCodeVersion?: boolean;
+    },
   ) => Promise<ModeLaunchResult>;
   bootstrapProjectWorkspace?: (
     handle: SandboxHandle,
     config: Awaited<ReturnType<typeof loadConfig>>,
-    options?: { isConnect?: boolean; runtimeEnv?: Record<string, string>; onProgress?: (message: string) => void },
+    options?: {
+      isConnect?: boolean;
+      runtimeEnv?: Record<string, string>;
+      onProgress?: (message: string) => void;
+      selectedReposOverride?: ResolvedProjectRepoConfig[];
+    },
   ) => Promise<BootstrapProjectWorkspaceResult>;
   syncToolingToSandbox: (
     config: Awaited<ReturnType<typeof loadConfig>>,
@@ -75,36 +111,112 @@ export async function runCreateCommand(args: string[], deps: CreateCommandDeps =
   const parsed = parseCreateArgs(args);
   const loadedConfig = deps.loadConfigWithMetadata ? await deps.loadConfigWithMetadata() : undefined;
   const config = loadedConfig ? loadedConfig.config : await deps.loadConfig();
-  if (loadedConfig) {
-    logger.info(`Using launcher config: ${loadedConfig.configPath}`);
+  const requestedMode = parsed.mode ?? config.startup.mode;
+  const isInteractiveTerminal =
+    deps.isInteractiveTerminal ?? (() => Boolean(process.stdin.isTTY && process.stdout.isTTY));
+  const showsRepoPromptInCurrentSession =
+    isInteractiveTerminal() &&
+    config.project.mode === "single" &&
+    config.project.active === "prompt" &&
+    config.project.repos.length > 1;
+  const tunnelConfigured = resolveTunnelPorts(config.tunnel.ports, config.tunnel.targets).length > 0;
+  const showsPromptInCurrentSession = requestedMode === "prompt" && isInteractiveTerminal();
+  const promptPrefaceLines: string[] = [];
+  if (isInteractiveTerminal() && !parsed.json) {
+    promptPrefaceLines.push(`${formatPromptLogTag("info")} ${SSH_SUSPEND_RESUME_HINT}`);
   }
+  if (loadedConfig) {
+    promptPrefaceLines.push(`${formatPromptLogTag("info")} Using launcher config: ${loadedConfig.configPath}`);
+  }
+  if (tunnelConfigured) {
+    promptPrefaceLines.push(`${formatPromptLogTag("warn")} ${TUNNEL_URL_WARNING_MESSAGE}`);
+  }
+  const promptOptions =
+    showsPromptInCurrentSession && promptPrefaceLines.length > 0
+      ? {
+          prefaceLines: promptPrefaceLines,
+        }
+      : undefined;
+
+  if (isInteractiveTerminal() && !showsPromptInCurrentSession) {
+    process.stdout.write(`${renderPromptWizardHeader("ez-devbox")}\n\n`);
+  }
+
+  if (!showsPromptInCurrentSession) {
+    if (isInteractiveTerminal() && !parsed.json) {
+      logger.info(SSH_SUSPEND_RESUME_HINT);
+    }
+    if (loadedConfig) {
+      logger.info(`Using launcher config: ${loadedConfig.configPath}`);
+    }
+    if (tunnelConfigured) {
+      logger.warn(TUNNEL_URL_WARNING_MESSAGE);
+    }
+    if (showsRepoPromptInCurrentSession && (loadedConfig || tunnelConfigured)) {
+      process.stdout.write("\n");
+    }
+  }
+
+  logger.verbose(`Resolving startup mode from '${requestedMode}'.`);
+  const mode = await deps.resolvePromptStartupMode(requestedMode, undefined, promptOptions);
+  if (requestedMode === "prompt") {
+    logger.verbose(`Startup mode selected via prompt: ${mode}.`);
+  }
+  if (showsPromptInCurrentSession) {
+    process.stdout.write("\n");
+  }
+
+  const selectReposForCreate = deps.selectReposForCreate ?? selectRepos;
+  const selectedRepos = await selectReposForCreate(config.project.repos, config.project.mode, config.project.active, {
+    isInteractiveTerminal,
+    promptInput: deps.promptInput,
+    preferredActiveRepo: undefined,
+    activeName: config.project.active_name,
+    activeIndex: config.project.active_index,
+  });
+  if (showsRepoPromptInCurrentSession) {
+    process.stdout.write("\n");
+  }
+
+  let stopLoading: (() => void) | undefined;
+  let completedStageMessage: string | undefined;
+  const showStageCompletion = process.stdout.isTTY === true && !isVerboseLoggingEnabled();
+  const clearLoadingIfRunning = (): void => {
+    stopLoading?.();
+    stopLoading = undefined;
+    completedStageMessage = undefined;
+  };
+  const stopLoadingWithCompletion = (): void => {
+    stopLoading?.();
+    stopLoading = undefined;
+    if (completedStageMessage && showStageCompletion) {
+      process.stdout.write(`${formatCompletedStage(completedStageMessage)}\n`);
+    }
+    completedStageMessage = undefined;
+  };
+  const setLoadingStage = (message: string, completionMessage: string): void => {
+    stopLoadingWithCompletion();
+    completedStageMessage = completionMessage;
+    stopLoading = logger.startLoading(message);
+  };
+  setLoadingStage("Preparing tunnel...", "Prepared tunnel");
+
+  const resolvedMode = resolveStartupMode(mode);
+  const displayName = buildSandboxDisplayName(config.project.repos, deps.now());
+  const templateResolution = resolveTemplateForMode(config.sandbox.template, resolvedMode);
+  const createConfig =
+    templateResolution.template === config.sandbox.template
+      ? config
+      : {
+          ...config,
+          sandbox: {
+            ...config.sandbox,
+            template: templateResolution.template,
+          },
+        };
   const runWithTunnel = deps.withConfiguredTunnel ?? withConfiguredTunnel;
   return runWithTunnel(config, async (tunnelRuntimeEnv) => {
-    if (hasPublicTunnelRuntimeEnv(tunnelRuntimeEnv)) {
-      logger.warn(
-        "Tunnel URL warning: anyone with the URL can access the forwarded service/data. Treat tunnel URLs as secrets.",
-      );
-    }
-
-    const requestedMode = parsed.mode ?? config.startup.mode;
-    logger.verbose(`Resolving startup mode from '${requestedMode}'.`);
-    const mode = await deps.resolvePromptStartupMode(requestedMode);
-    if (requestedMode === "prompt") {
-      logger.verbose(`Startup mode selected via prompt: ${mode}.`);
-    }
-    const resolvedMode = resolveStartupMode(mode);
-    const displayName = buildSandboxDisplayName(config.project.repos, deps.now());
-    const templateResolution = resolveTemplateForMode(config.sandbox.template, resolvedMode);
-    const createConfig =
-      templateResolution.template === config.sandbox.template
-        ? config
-        : {
-            ...config,
-            sandbox: {
-              ...config.sandbox,
-              template: templateResolution.template,
-            },
-          };
+    setLoadingStage("Resolving environment...", "Resolved environment");
     const envSource = await deps.resolveEnvSource();
     const envResolution = deps.resolveSandboxCreateEnv(config, envSource);
     const ghRuntimeEnv = await resolveGhRuntimeEnv(config, envSource, deps.resolveHostGhToken);
@@ -118,6 +230,7 @@ export async function runCreateCommand(args: string[], deps: CreateCommandDeps =
     logger.verbose(`Creating sandbox with envs: ${formatEnvVarNames(createEnvs)}`);
 
     logger.verbose(`Creating sandbox '${displayName}' with template '${createConfig.sandbox.template}'.`);
+    setLoadingStage("Creating sandbox...", "Created sandbox");
     const handle = await deps.createSandbox(createConfig, {
       envs: createEnvs,
       metadata: {
@@ -127,16 +240,6 @@ export async function runCreateCommand(args: string[], deps: CreateCommandDeps =
     const sandboxLabel = formatSandboxDisplayLabel(handle.sandboxId, { "launcher.name": displayName });
     logger.verbose(`Sandbox ready: ${sandboxLabel}.`);
 
-    let stopLoading: (() => void) | undefined;
-    const stopLoadingIfRunning = (): void => {
-      stopLoading?.();
-      stopLoading = undefined;
-    };
-    const ensureLoading = (): void => {
-      if (!stopLoading) {
-        stopLoading = logger.startLoading("Bootstrapping...");
-      }
-    };
     try {
       await deps.saveLastRunState({
         sandboxId: handle.sandboxId,
@@ -146,22 +249,23 @@ export async function runCreateCommand(args: string[], deps: CreateCommandDeps =
       });
 
       logger.verbose("Syncing local tooling config/auth.");
+      setLoadingStage("Transferring auth/config...", "Transferred auth/config");
       const syncSummary = await deps.syncToolingToSandbox(config, handle, resolvedMode);
+      logger.verbose(`Tooling sync: ${formatToolingSyncSummary(syncSummary)}.`);
 
+      setLoadingStage("Bootstrapping workspace...", "Bootstrapped workspace");
       const bootstrapResult = await (deps.bootstrapProjectWorkspace ?? bootstrapProjectWorkspace)(handle, config, {
         isConnect: false,
         runtimeEnv,
-        onProgress: (message) => {
-          ensureLoading();
-          logger.verbose(`Bootstrap: ${message}`);
-        },
+        selectedReposOverride: selectedRepos,
+        onProgress: (message) => logger.verbose(`Bootstrap: ${message}`),
       });
-      stopLoadingIfRunning();
       logger.verbose(`Selected repos summary: ${formatSelectedReposSummary(bootstrapResult.selectedRepoNames)}.`);
       logger.verbose(`Setup outcome summary: ${formatSetupOutcomeSummary(bootstrapResult.setup)}.`);
 
       logger.verbose(`Launching startup mode '${mode}'.`);
-      const launched = await deps.launchMode(handle, mode, {
+      setLoadingStage(`Launching ${resolvedMode}...`, `Launched ${resolvedMode}`);
+      const launchOptions = {
         workingDirectory: bootstrapResult.workingDirectory,
         startupEnv: addWebServerPasswordForWebMode(
           {
@@ -171,7 +275,30 @@ export async function runCreateCommand(args: string[], deps: CreateCommandDeps =
           resolvedMode,
           webServerPassword,
         ),
-      });
+        ...(resolvedMode === "ssh-opencode"
+          ? {
+              matchLocalOpenCodeVersion: config.opencode.match_local_version ?? true,
+            }
+          : {}),
+        ...(isInteractiveTerminal() && resolvedMode === "ssh-opencode"
+          ? {
+              onLaunchStageUpdate: (loadingMessage: string, completionMessage: string) =>
+                setLoadingStage(loadingMessage, completionMessage),
+            }
+          : {}),
+      };
+      const shouldDelaySpinnerStopForInteractive = resolvedMode !== "web" && isInteractiveTerminal();
+      const launched = await deps.launchMode(
+        handle,
+        mode,
+        shouldDelaySpinnerStopForInteractive
+          ? {
+              ...launchOptions,
+              onBeforeInteractiveSession: stopLoadingWithCompletion,
+            }
+          : launchOptions,
+      );
+      stopLoadingWithCompletion();
 
       const activeRepo =
         bootstrapResult.selectedRepoNames.length === 1 ? bootstrapResult.selectedRepoNames[0] : undefined;
@@ -186,7 +313,6 @@ export async function runCreateCommand(args: string[], deps: CreateCommandDeps =
       const templateSuffix = templateResolution.autoSelected
         ? `\nTemplate auto-selected for ${resolvedMode}: ${templateResolution.template}`
         : "";
-      const syncSuffix = `\nTooling sync: ${formatToolingSyncSummary(syncSummary)}`;
 
       if (parsed.json) {
         return {
@@ -211,7 +337,8 @@ export async function runCreateCommand(args: string[], deps: CreateCommandDeps =
       }
 
       return {
-        message: `Created sandbox ${sandboxLabel}. ${launched.message}${templateSuffix}${syncSuffix}`,
+        message: `Created sandbox ${sandboxLabel}.${templateSuffix}`,
+        postMessages: [launched.message],
         exitCode: 0,
       };
     } catch (error) {
@@ -233,9 +360,28 @@ export async function runCreateCommand(args: string[], deps: CreateCommandDeps =
         cause: error,
       });
     } finally {
-      stopLoadingIfRunning();
+      clearLoadingIfRunning();
     }
   });
+}
+
+function formatCompletedStage(message: string): string {
+  const shouldColorize = shouldUseColor(process.stdout);
+  const check = shouldColorize ? `${ANSI_GREEN}✓${ANSI_RESET}` : "✓";
+  return `${check} ${message}`;
+}
+
+function shouldUseColor(output: NodeJS.WriteStream): boolean {
+  if (process.env.NO_COLOR !== undefined) {
+    return false;
+  }
+
+  const forceColor = process.env.FORCE_COLOR;
+  if (forceColor !== undefined && forceColor !== "0") {
+    return true;
+  }
+
+  return output.isTTY === true;
 }
 
 function toErrorMessage(error: unknown): string {

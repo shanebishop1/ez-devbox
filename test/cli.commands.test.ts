@@ -8,6 +8,7 @@ import { PromptCancelledError } from "../src/cli/prompt-cancelled.js";
 import { buildSandboxDisplayName } from "../src/cli/sandbox-display-name.js";
 import type { ResolvedLauncherConfig } from "../src/config/schema.js";
 import { logger, setVerboseLoggingEnabled } from "../src/logging/logger.js";
+import type { LastRunState } from "../src/state/lastRun.js";
 
 describe("CLI command integration", () => {
   const tempRoots: string[] = [];
@@ -117,7 +118,7 @@ describe("CLI command integration", () => {
     });
 
     expect(createSandbox).toHaveBeenCalledTimes(1);
-    expect(resolvePromptStartupMode).toHaveBeenCalledWith("prompt");
+    expect(resolvePromptStartupMode).toHaveBeenCalledWith("prompt", undefined, undefined);
     expect(createSandbox).toHaveBeenCalledWith(
       {
         ...config,
@@ -167,7 +168,40 @@ describe("CLI command integration", () => {
     });
 
     expect(syncToolingToSandbox).toHaveBeenCalledTimes(1);
-    expect(result.message).toContain("Tooling sync: discovered=2, written=2, unchanged=0, missingPaths=0");
+    expect(result.message).toContain("Created sandbox");
+    expect(result.postMessages).toEqual(["launched"]);
+  });
+
+  it("create resolves startup mode prompt before starting tunnel setup", async () => {
+    const callOrder: string[] = [];
+
+    await runCreateCommand([], {
+      loadConfig: vi.fn().mockResolvedValue(config),
+      createSandbox: vi.fn().mockResolvedValue({ sandboxId: "sbx-created" }),
+      resolveEnvSource: vi.fn().mockResolvedValue({}),
+      resolveSandboxCreateEnv: vi.fn().mockReturnValue({ envs: {} }),
+      resolvePromptStartupMode: vi.fn().mockImplementation(async () => {
+        callOrder.push("prompt");
+        return "ssh-opencode";
+      }),
+      selectReposForCreate: vi.fn().mockImplementation(async () => {
+        callOrder.push("repo-selection");
+        return [];
+      }),
+      withConfiguredTunnel: async (_cfg, operation) => {
+        callOrder.push("tunnel");
+        return operation({});
+      },
+      launchMode: vi.fn().mockResolvedValue({ mode: "ssh-opencode", command: "opencode", message: "launched" }),
+      bootstrapProjectWorkspace: vi.fn().mockResolvedValue(bootstrapResult),
+      syncToolingToSandbox: vi.fn().mockResolvedValue(syncSummary),
+      saveLastRunState: vi.fn().mockResolvedValue(undefined),
+      now: () => "2026-02-01T00:00:00.000Z",
+    });
+
+    expect(callOrder[0]).toBe("prompt");
+    expect(callOrder[1]).toBe("repo-selection");
+    expect(callOrder[2]).toBe("tunnel");
   });
 
   it("create accepts legacy --yes-sync without changing behavior", async () => {
@@ -247,8 +281,9 @@ describe("CLI command integration", () => {
 
   it("create logs the launcher config path when metadata loader is used", async () => {
     const infoSpy = vi.spyOn(logger, "info").mockImplementation(() => undefined);
+    const resolvePromptStartupMode = vi.fn().mockResolvedValue("ssh-opencode");
 
-    await runCreateCommand(["--mode", "ssh-opencode"], {
+    await runCreateCommand([], {
       loadConfig: vi.fn().mockResolvedValue(config),
       loadConfigWithMetadata: vi.fn().mockResolvedValue({
         config,
@@ -259,7 +294,7 @@ describe("CLI command integration", () => {
       createSandbox: vi.fn().mockResolvedValue({ sandboxId: "sbx-created" }),
       resolveEnvSource: vi.fn().mockResolvedValue({}),
       resolveSandboxCreateEnv: vi.fn().mockReturnValue({ envs: {} }),
-      resolvePromptStartupMode: vi.fn().mockResolvedValue("ssh-opencode"),
+      resolvePromptStartupMode,
       launchMode: vi.fn().mockResolvedValue({ mode: "ssh-opencode", command: "opencode", message: "launched" }),
       bootstrapProjectWorkspace: vi.fn().mockResolvedValue(bootstrapResult),
       syncToolingToSandbox: vi.fn().mockResolvedValue(syncSummary),
@@ -268,6 +303,7 @@ describe("CLI command integration", () => {
     });
 
     expect(infoSpy).toHaveBeenCalledWith("Using launcher config: /tmp/launcher.config.toml");
+    expect(infoSpy.mock.invocationCallOrder[0]).toBeLessThan(resolvePromptStartupMode.mock.invocationCallOrder[0]);
     infoSpy.mockRestore();
   });
 
@@ -275,7 +311,12 @@ describe("CLI command integration", () => {
     const warnSpy = vi.spyOn(logger, "warn").mockImplementation(() => undefined);
 
     await runCreateCommand(["--mode", "ssh-opencode"], {
-      loadConfig: vi.fn().mockResolvedValue(config),
+      loadConfig: vi.fn().mockResolvedValue({
+        ...config,
+        tunnel: {
+          ports: [3002],
+        },
+      }),
       withConfiguredTunnel: async (_cfg, operation) =>
         operation({
           EZ_DEVBOX_TUNNEL_3002_URL: "https://demo.trycloudflare.com",
@@ -292,7 +333,7 @@ describe("CLI command integration", () => {
     });
 
     expect(warnSpy).toHaveBeenCalledWith(
-      "Tunnel URL warning: anyone with the URL can access the forwarded service/data. Treat tunnel URLs as secrets.",
+      "Anyone with access to your Tunnel URL can access the forwarded service/data. Treat tunnel URLs as secrets.",
     );
     warnSpy.mockRestore();
   });
@@ -322,7 +363,7 @@ describe("CLI command integration", () => {
       now: () => "2026-02-01T00:00:00.000Z",
     });
 
-    expect(resolvePromptStartupMode).toHaveBeenCalledWith("ssh-codex");
+    expect(resolvePromptStartupMode).toHaveBeenCalledWith("ssh-codex", undefined, undefined);
     expect(createSandbox).toHaveBeenCalledWith(
       {
         ...config,
@@ -415,6 +456,7 @@ describe("CLI command integration", () => {
       }),
     );
     expect(launchMode).toHaveBeenCalledWith({ sandboxId: "sbx-created" }, "ssh-opencode", {
+      matchLocalOpenCodeVersion: true,
       workingDirectory: undefined,
       startupEnv: {},
     });
@@ -462,6 +504,7 @@ describe("CLI command integration", () => {
       }),
     );
     expect(launchMode).toHaveBeenCalledWith({ sandboxId: "sbx-created" }, "ssh-opencode", {
+      matchLocalOpenCodeVersion: true,
       workingDirectory: undefined,
       startupEnv: {
         NEXT_PUBLIC_APP_ENV: "preview",
@@ -503,6 +546,7 @@ describe("CLI command integration", () => {
       }),
     );
     expect(launchMode).toHaveBeenCalledWith({ sandboxId: "sbx-created" }, "ssh-opencode", {
+      matchLocalOpenCodeVersion: true,
       workingDirectory: undefined,
       startupEnv: {
         FIRECRAWL_API_KEY: "fc-test",
@@ -598,6 +642,7 @@ describe("CLI command integration", () => {
     expect(result.exitCode).toBe(0);
     expect(createSandbox).toHaveBeenCalledWith(expect.any(Object), expect.objectContaining({ envs: {} }));
     expect(launchMode).toHaveBeenCalledWith({ sandboxId: "sbx-created" }, "ssh-opencode", {
+      matchLocalOpenCodeVersion: true,
       workingDirectory: undefined,
       startupEnv: {},
     });
@@ -631,8 +676,8 @@ describe("CLI command integration", () => {
 
     expect(createSandbox).toHaveBeenCalledTimes(1);
     expect(kill).toHaveBeenCalledTimes(1);
-    expect(startLoading).toHaveBeenCalledWith("Bootstrapping...");
-    expect(stopLoading).toHaveBeenCalledTimes(1);
+    expect(startLoading).toHaveBeenCalledWith("Bootstrapping workspace...");
+    expect(stopLoading).toHaveBeenCalled();
     startLoading.mockRestore();
     expect(loggerVerbose).toHaveBeenCalledWith("Setup selection cancelled; wiping newly created sandbox.");
     loggerVerbose.mockRestore();
@@ -684,8 +729,8 @@ describe("CLI command integration", () => {
       }),
     ).rejects.toThrow("bootstrap failed");
 
-    expect(startLoading).toHaveBeenCalledWith("Bootstrapping...");
-    expect(stopLoading).toHaveBeenCalledTimes(1);
+    expect(startLoading).toHaveBeenCalledWith("Bootstrapping workspace...");
+    expect(stopLoading).toHaveBeenCalled();
     startLoading.mockRestore();
     expect(kill).not.toHaveBeenCalled();
   });
@@ -760,6 +805,7 @@ describe("CLI command integration", () => {
     expect(resolvePromptStartupMode).toHaveBeenCalledWith("prompt");
     expect(loggerVerbose).toHaveBeenCalledWith("Bootstrap: Repo clone: /workspace/alpha");
     expect(launchMode).toHaveBeenCalledWith({ sandboxId: "sbx-arg" }, "ssh-opencode", {
+      matchLocalOpenCodeVersion: true,
       workingDirectory: undefined,
       startupEnv: {},
     });
@@ -767,7 +813,7 @@ describe("CLI command integration", () => {
     loggerVerbose.mockRestore();
   });
 
-  it("connect logs the launcher config path when metadata loader is used", async () => {
+  it("connect does not log launcher config path (create-only log)", async () => {
     const infoSpy = vi.spyOn(logger, "info").mockImplementation(() => undefined);
 
     await runConnectCommand(["--sandbox-id", "sbx-arg"], {
@@ -788,7 +834,7 @@ describe("CLI command integration", () => {
       now: () => "2026-02-01T00:00:00.000Z",
     });
 
-    expect(infoSpy).toHaveBeenCalledWith("Using launcher config: /tmp/global/launcher.config.toml");
+    expect(infoSpy).not.toHaveBeenCalledWith("Using launcher config: /tmp/global/launcher.config.toml");
     infoSpy.mockRestore();
   });
 
@@ -928,6 +974,7 @@ describe("CLI command integration", () => {
 
     expect(resolveHostGhToken).toHaveBeenCalledTimes(1);
     expect(launchMode).toHaveBeenCalledWith({ sandboxId: "sbx-arg" }, "ssh-opencode", {
+      matchLocalOpenCodeVersion: true,
       workingDirectory: undefined,
       startupEnv: {
         NEXT_PUBLIC_APP_ENV: "preview",
@@ -1068,8 +1115,10 @@ describe("CLI command integration", () => {
     expect(promptInput).toHaveBeenCalledWith(
       [
         "Multiple sandboxes available. Select one:",
+        "-----------------------------------------",
         "1) Repo One main 2026-02-01 00:00 UTC (sbx-1)",
         "2) Repo Two canary 2026-02-01 00:01 UTC (sbx-2)",
+        "",
         "Enter choice [1-2]: ",
       ].join("\n"),
     );
@@ -1190,6 +1239,7 @@ describe("CLI command integration", () => {
       expect.objectContaining({ isConnect: false, onProgress: expect.any(Function) }),
     );
     expect(launchMode).toHaveBeenCalledWith({ sandboxId: "sbx-created" }, "ssh-opencode", {
+      matchLocalOpenCodeVersion: true,
       workingDirectory: "/workspace/alpha",
       startupEnv: { NEXT_PUBLIC_APP_ENV: "preview" },
     });
@@ -1201,14 +1251,12 @@ describe("CLI command integration", () => {
     });
   });
 
-  it("create starts loading only after bootstrap progress begins", async () => {
+  it("create shows stage-based loading messages", async () => {
     const stopLoading = vi.fn();
     const startLoading = vi.spyOn(logger, "startLoading").mockReturnValue(stopLoading);
 
     const bootstrapProjectWorkspace = vi.fn().mockImplementation(async (_handle, _config, options) => {
-      expect(startLoading).not.toHaveBeenCalled();
       options?.onProgress?.("Repo clone: /workspace/alpha");
-      expect(startLoading).toHaveBeenCalledWith("Bootstrapping...");
       return bootstrapResult;
     });
 
@@ -1225,12 +1273,17 @@ describe("CLI command integration", () => {
       now: () => "2026-02-01T00:00:00.000Z",
     });
 
-    expect(startLoading).toHaveBeenCalledTimes(1);
-    expect(stopLoading).toHaveBeenCalledTimes(1);
+    expect(startLoading).toHaveBeenCalledWith("Preparing tunnel...");
+    expect(startLoading).toHaveBeenCalledWith("Resolving environment...");
+    expect(startLoading).toHaveBeenCalledWith("Creating sandbox...");
+    expect(startLoading).toHaveBeenCalledWith("Transferring auth/config...");
+    expect(startLoading).toHaveBeenCalledWith("Bootstrapping workspace...");
+    expect(startLoading).toHaveBeenCalledWith("Launching ssh-opencode...");
+    expect(stopLoading).toHaveBeenCalled();
     startLoading.mockRestore();
   });
 
-  it("create stops loading before launching startup mode", async () => {
+  it("create keeps loading through startup launch in non-interactive mode", async () => {
     const stopLoading = vi.fn();
     const startLoading = vi.spyOn(logger, "startLoading").mockReturnValue(stopLoading);
     const launchMode = vi.fn().mockResolvedValue({ mode: "ssh-opencode", command: "opencode", message: "launched" });
@@ -1251,9 +1304,10 @@ describe("CLI command integration", () => {
       now: () => "2026-02-01T00:00:00.000Z",
     });
 
-    expect(startLoading).toHaveBeenCalledTimes(1);
-    expect(stopLoading).toHaveBeenCalledTimes(1);
-    expect(stopLoading.mock.invocationCallOrder[0]).toBeLessThan(launchMode.mock.invocationCallOrder[0]);
+    expect(startLoading).toHaveBeenCalledWith("Launching ssh-opencode...");
+    expect(stopLoading).toHaveBeenCalled();
+    const lastStopCallOrder = stopLoading.mock.invocationCallOrder[stopLoading.mock.invocationCallOrder.length - 1];
+    expect(lastStopCallOrder).toBeGreaterThan(launchMode.mock.invocationCallOrder[0]);
     startLoading.mockRestore();
   });
 
@@ -1314,6 +1368,7 @@ describe("CLI command integration", () => {
       expect.objectContaining({ isConnect: true, onProgress: expect.any(Function) }),
     );
     expect(launchMode).toHaveBeenCalledWith({ sandboxId: "sbx-arg" }, "ssh-opencode", {
+      matchLocalOpenCodeVersion: true,
       workingDirectory: "/workspace/alpha",
       startupEnv: { NEXT_PUBLIC_APP_ENV: "preview" },
     });

@@ -100,6 +100,7 @@ describe("loadConfig", () => {
         "[opencode]",
         'config_dir = "/tmp/opencode-config"',
         'auth_path = "/tmp/opencode-auth.json"',
+        "match_local_version = false",
         "",
         "[codex]",
         'config_dir = "/tmp/codex-config"',
@@ -117,6 +118,7 @@ describe("loadConfig", () => {
     expect(resolved.opencode).toEqual({
       config_dir: "/tmp/opencode-config",
       auth_path: "/tmp/opencode-auth.json",
+      match_local_version: false,
     });
     expect(resolved.codex).toEqual({
       config_dir: "/tmp/codex-config",

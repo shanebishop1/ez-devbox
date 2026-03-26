@@ -1,6 +1,6 @@
 import { createInterface } from "node:readline/promises";
 import { normalizePromptCancelledError } from "../cli/prompt-cancelled.js";
-import { formatPromptChoice } from "../cli/prompt-style.js";
+import { formatPromptChoice, formatPromptSectionHeader } from "../cli/prompt-style.js";
 import type { ResolvedLauncherConfig, ResolvedProjectRepoConfig } from "../config/schema.js";
 import { selectReposForProvisioning } from "../repo/selection.js";
 
@@ -61,8 +61,9 @@ export async function selectRepos(
 
   const prompt = options.promptInput ?? promptInput;
   const question = [
-    "Multiple repos available. Select one:",
+    formatPromptSectionHeader("Multiple repos available. Select one:"),
     ...repos.map((repo, index) => formatPromptChoice(index + 1, repo.name)),
+    "",
     `Enter choice [1-${repos.length}]: `,
   ].join("\n");
   const selectedIndex = Number.parseInt((await prompt(question)).trim(), 10);

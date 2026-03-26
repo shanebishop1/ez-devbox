@@ -84,11 +84,16 @@ startup_env = {}
 pass_through = ["OPENROUTER_API_KEY", "CEREBRAS_API_KEY", "FIRECRAWL_API_KEY", "FIRECRAWL_API_URL"]
 
 [opencode]
-# Host paths for OpenCode config/auth sync into the sandbox.
-# Local OpenCode config directory synced to /home/user/.config/opencode in the sandbox.
-config_dir = "./.opencode"
+# Host paths for OpenCode global config/auth sync into the sandbox.
+# Global OpenCode config directory synced to /home/user/.config/opencode in the sandbox.
+# This is a global config dir (typically ~/.config/opencode), not project-level opencode.jsonc.
+# project opencode.jsonc stays a per-repo file at repo root and is not sourced from this setting.
+config_dir = "~/.config/opencode"
 # Local OpenCode auth file synced to /home/user/.local/share/opencode/auth.json in the sandbox.
 auth_path = "~/.local/share/opencode/auth.json"
+# Try to match sandbox OpenCode CLI version to host-local `opencode --version` before interactive launch.
+# Best-effort only; disable if you prefer template-pinned sandbox versions.
+match_local_version = true
 
 [codex]
 # Host paths for Codex config/auth sync into the sandbox.

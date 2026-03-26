@@ -54,6 +54,7 @@ export async function startClaudeMode(
       "Claude SSH mode uses a persistent tmux session; use Ctrl+b d to detach while it continues running in the sandbox.",
     );
     logger.verbose("Opening interactive SSH session.");
+    launchContext.onBeforeInteractiveSession?.();
     await deps.runInteractiveSession(
       session,
       buildInteractiveRemoteCommand({

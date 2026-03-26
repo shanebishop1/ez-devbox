@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { logger, setVerboseLoggingEnabled } from "../logging/logger.js";
+import type { CommandResult } from "../types/index.js";
 import { runCommandCommand } from "./commands.command.js";
 import { runConnectCommand } from "./commands.connect.js";
 import { runCreateCommand } from "./commands.create.js";
@@ -30,43 +31,43 @@ export async function runCli(argv: string[]): Promise<number> {
 
     if (resolved.command === "create") {
       const result = await runCreateCommand(resolved.args);
-      logger.info(result.message);
+      printCommandResult(result);
       return result.exitCode ?? 0;
     }
 
     if (resolved.command === "connect") {
       const result = await runConnectCommand(resolved.args);
-      logger.info(result.message);
+      printCommandResult(result);
       return result.exitCode ?? 0;
     }
 
     if (resolved.command === "resume") {
       const result = await runResumeCommand(resolved.args);
-      logger.info(result.message);
+      printCommandResult(result);
       return result.exitCode ?? 0;
     }
 
     if (resolved.command === "list") {
       const result = await runListCommand(resolved.args);
-      logger.info(result.message);
+      process.stdout.write(`${result.message}\n`);
       return result.exitCode ?? 0;
     }
 
     if (resolved.command === "command") {
       const result = await runCommandCommand(resolved.args);
-      logger.info(result.message);
+      printCommandResult(result);
       return result.exitCode ?? 0;
     }
 
     if (resolved.command === "wipe") {
       const result = await runWipeCommand(resolved.args);
-      logger.info(result.message);
+      printCommandResult(result);
       return result.exitCode ?? 0;
     }
 
     if (resolved.command === "wipe-all") {
       const result = await runWipeAllCommand(resolved.args);
-      logger.info(result.message);
+      printCommandResult(result);
       return result.exitCode ?? 0;
     }
 
@@ -74,6 +75,13 @@ export async function runCli(argv: string[]): Promise<number> {
   } catch (error) {
     logger.error(toUserVisibleCliErrorMessage(error));
     return 1;
+  }
+}
+
+function printCommandResult(result: CommandResult): void {
+  logger.info(result.message);
+  for (const line of result.postMessages ?? []) {
+    logger.info(line);
   }
 }
 
