@@ -37,6 +37,20 @@ describe("CLI bootstrap routing", () => {
     expect(resolved.args).toEqual(["--verbose"]);
   });
 
+  it("routes --version to version command", () => {
+    const resolved = resolveCliCommand(["--version"]);
+
+    expect(resolved.command).toBe("version");
+    expect(resolved.args).toEqual([]);
+  });
+
+  it("routes -V to version command", () => {
+    const resolved = resolveCliCommand(["-V"]);
+
+    expect(resolved.command).toBe("version");
+    expect(resolved.args).toEqual([]);
+  });
+
   it("extracts global --verbose before command routing", () => {
     const parsed = parseGlobalCliOptions(["--verbose", "connect", "--sandbox-id", "sbx-1"]);
 
@@ -46,6 +60,13 @@ describe("CLI bootstrap routing", () => {
 
   it("rejects unknown global options before the command", () => {
     expect(() => parseGlobalCliOptions(["--bad-flag", "list"])).toThrow("Unknown global option: --bad-flag");
+  });
+
+  it("allows --version before a command without global parse failure", () => {
+    const parsed = parseGlobalCliOptions(["--version", "list"]);
+
+    expect(parsed.verbose).toBe(false);
+    expect(parsed.args).toEqual(["--version", "list"]);
   });
 
   it("extracts global --verbose after -- for non-command commands", () => {
@@ -95,6 +116,10 @@ describe("CLI bootstrap routing", () => {
 
   it("includes json option in help text", () => {
     expect(renderHelp()).toContain("--json                Structured JSON output (list, command, create, connect)");
+  });
+
+  it("includes version option in help text", () => {
+    expect(renderHelp()).toContain("-V, --version         Show CLI version");
   });
 
   it("does not include create tooling sync prompt option in help text", () => {
