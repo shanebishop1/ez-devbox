@@ -46,7 +46,9 @@ export function formatSetupOutcomeSummary(setup: BootstrapProjectWorkspaceResult
 
 export function parseStartupModeValue(value: string | undefined): StartupMode {
   if (!isStartupMode(value)) {
-    throw new Error("Invalid value for --mode. Expected one of prompt|ssh-opencode|ssh-codex|ssh-claude|web|ssh-shell.");
+    throw new Error(
+      "Invalid value for --mode. Expected one of prompt|ssh-opencode|ssh-codex|ssh-claude|web|ssh-shell.",
+    );
   }
 
   return value;
