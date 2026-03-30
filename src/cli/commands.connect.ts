@@ -131,24 +131,22 @@ export async function runConnectCommand(
     completedStageMessage = completionMessage;
     stopLoading = logger.startLoading(message);
   };
-  setLoadingStage("Preparing tunnel...", "Prepared tunnel");
-
-  return withConfiguredTunnel(config, async (tunnelRuntimeEnv) => {
-    setLoadingStage("Resolving target sandbox...", "Resolved target sandbox");
-    const target = await resolveSandboxTarget(parsed.sandboxId, deps, options);
-    const targetLabel = target.label ?? target.sandboxId;
-    logger.verbose(`Resolving startup mode from '${requestedMode}'.`);
-    const mode = await deps.resolvePromptStartupMode(requestedMode);
-    const resolvedMode = resolveStartupMode(mode);
-    if (requestedMode === "prompt") {
-      logger.verbose(`Startup mode selected via prompt: ${mode}.`);
-      if (!parsed.json && isInteractive && !options.skipDetachHint) {
-        logger.info(SSH_SUSPEND_RESUME_HINT);
-        process.stdout.write("\n");
-      }
+  const target = await resolveSandboxTarget(parsed.sandboxId, deps, options);
+  const targetLabel = target.label ?? target.sandboxId;
+  logger.verbose(`Resolving startup mode from '${requestedMode}'.`);
+  const mode = await deps.resolvePromptStartupMode(requestedMode);
+  const resolvedMode = resolveStartupMode(mode);
+  if (requestedMode === "prompt") {
+    logger.verbose(`Startup mode selected via prompt: ${mode}.`);
+    if (!parsed.json && isInteractive && !options.skipDetachHint) {
+      logger.info(SSH_SUSPEND_RESUME_HINT);
+      process.stdout.write("\n");
     }
-    const preferredActiveRepo = await resolvePreferredActiveRepo(config, target.sandboxId, deps, options);
+  }
+  const preferredActiveRepo = await resolvePreferredActiveRepo(config, target.sandboxId, deps, options);
 
+  setLoadingStage("Preparing tunnel...", "Prepared tunnel");
+  return withConfiguredTunnel(config, async (tunnelRuntimeEnv) => {
     logger.verbose(`Connecting to sandbox ${targetLabel}.`);
     setLoadingStage("Connecting to sandbox...", "Connected to sandbox");
     const handle = await deps.connectSandbox(target.sandboxId, config);

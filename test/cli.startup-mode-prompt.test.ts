@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { PromptCancelledError } from "../src/cli/prompt-cancelled.js";
 import { resolvePromptStartupMode } from "../src/cli/startup-mode-prompt.js";
 
 describe("resolvePromptStartupMode", () => {
@@ -70,6 +71,26 @@ describe("resolvePromptStartupMode", () => {
     ).rejects.toThrow("Invalid startup mode selection after 3 attempts");
   });
 
+  it("adds a newline before bubbling prompt cancellation", async () => {
+    const promptInput = vi.fn().mockRejectedValue(new PromptCancelledError("Startup mode selection cancelled."));
+    const writeSpy = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+    const originalIsTTY = process.stdout.isTTY;
+    Object.defineProperty(process.stdout, "isTTY", { value: true, configurable: true });
+
+    try {
+      await expect(
+        resolvePromptStartupMode("prompt", {
+          isInteractiveTerminal: () => true,
+          promptInput,
+        }),
+      ).rejects.toThrow("Startup mode selection cancelled.");
+      expect(writeSpy).toHaveBeenCalledWith("\n");
+    } finally {
+      Object.defineProperty(process.stdout, "isTTY", { value: originalIsTTY, configurable: true });
+      writeSpy.mockRestore();
+    }
+  });
+
   it("shows numbered choices in the prompt text", async () => {
     const promptInput = vi.fn().mockResolvedValue("1");
 
@@ -107,7 +128,7 @@ describe("resolvePromptStartupMode", () => {
         promptInput,
       },
       {
-        prefaceLines: ["[INFO] Using launcher config: /tmp/launcher.config.toml"],
+        prefaceLines: ["[INFO] Using launcher config: /tmp/ez-devbox.config.toml"],
       },
     );
 
@@ -117,7 +138,7 @@ describe("resolvePromptStartupMode", () => {
         "| ez-devbox |",
         "+-----------+",
         "",
-        "[INFO] Using launcher config: /tmp/launcher.config.toml",
+        "[INFO] Using launcher config: /tmp/ez-devbox.config.toml",
         "",
         "Select startup mode:",
         "--------------------",

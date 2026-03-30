@@ -64,12 +64,26 @@ describe("runResumeCommand", () => {
   });
 
   it("errors when no prior run exists", async () => {
-    await expect(
-      runResumeCommand([], {
-        loadLastRunState: vi.fn().mockResolvedValue(null),
-        runConnectCommand: vi.fn(),
-      }),
-    ).rejects.toThrow("No last-run state found");
+    const writeSpy = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+    const originalStdinTTY = process.stdin.isTTY;
+    const originalStdoutTTY = process.stdout.isTTY;
+    Object.defineProperty(process.stdin, "isTTY", { value: true, configurable: true });
+    Object.defineProperty(process.stdout, "isTTY", { value: true, configurable: true });
+
+    try {
+      await expect(
+        runResumeCommand([], {
+          loadLastRunState: vi.fn().mockResolvedValue(null),
+          runConnectCommand: vi.fn(),
+        }),
+      ).rejects.toThrow("No last-run state found");
+
+      expect(writeSpy).not.toHaveBeenCalled();
+    } finally {
+      Object.defineProperty(process.stdin, "isTTY", { value: originalStdinTTY, configurable: true });
+      Object.defineProperty(process.stdout, "isTTY", { value: originalStdoutTTY, configurable: true });
+      writeSpy.mockRestore();
+    }
   });
 
   it("rejects unexpected args", async () => {

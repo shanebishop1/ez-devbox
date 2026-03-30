@@ -448,7 +448,7 @@ describe("runCommandCommand", () => {
       loadConfig: vi.fn().mockResolvedValue(baseConfig),
       loadConfigWithMetadata: vi.fn().mockResolvedValue({
         config: baseConfig,
-        configPath: "/tmp/launcher.config.toml",
+        configPath: "/tmp/ez-devbox.config.toml",
         createdConfig: false,
         scope: "local",
       }),
@@ -457,7 +457,7 @@ describe("runCommandCommand", () => {
       loadLastRunState: vi.fn().mockResolvedValue(null),
     });
 
-    expect(infoSpy).toHaveBeenCalledWith("Using launcher config: /tmp/launcher.config.toml");
+    expect(infoSpy).toHaveBeenCalledWith("Using launcher config: /tmp/ez-devbox.config.toml");
     infoSpy.mockRestore();
   });
 });

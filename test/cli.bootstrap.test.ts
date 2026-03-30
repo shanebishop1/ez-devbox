@@ -109,8 +109,8 @@ describe("CLI bootstrap routing", () => {
     expect(renderHelp()).toContain("list     List available sandboxes");
   });
 
-  it("includes ls alias in help text", () => {
-    expect(renderHelp()).toContain("ls       Alias for list");
+  it("keeps list alias out of help command list", () => {
+    expect(renderHelp()).not.toContain("ls       Alias for list");
   });
 
   it("includes command in help text", () => {
@@ -131,6 +131,17 @@ describe("CLI bootstrap routing", () => {
 
   it("includes version option in help text", () => {
     expect(renderHelp()).toContain("-V, --version         Show CLI version");
+  });
+
+  it("clarifies development invocation in help text", () => {
+    expect(renderHelp()).toContain("In this repo (development):");
+    expect(renderHelp()).toContain("npm run dev -- <command> [options]");
+  });
+
+  it("clarifies config lookup order in help text", () => {
+    expect(renderHelp()).toContain("Config lookup order:");
+    expect(renderHelp()).toContain("1) ./ez-devbox.config.toml");
+    expect(renderHelp()).toContain("2) ~/.config/ez-devbox/ez-devbox.config.toml");
   });
 
   it("does not include create tooling sync prompt option in help text", () => {

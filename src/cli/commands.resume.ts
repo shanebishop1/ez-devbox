@@ -22,13 +22,15 @@ export async function runResumeCommand(args: string[], deps: ResumeCommandDeps =
     throw new Error(`Unexpected positional argument for resume: '${args[0]}'. Use --help for usage.`);
   }
 
-  if (process.stdin.isTTY && process.stdout.isTTY) {
-    process.stdout.write(`${renderPromptWizardHeader("ez-devbox")}\n\n`);
-  }
-
   const lastRun = await deps.loadLastRunState();
   if (!lastRun) {
-    throw new Error("No last-run state found. Run 'ez-devbox create' or 'ez-devbox connect' first.");
+    throw new Error(
+      "No last-run state found. Run 'ez-devbox create' first, or use 'ez-devbox connect --sandbox-id <sandbox-id>' to choose a sandbox.",
+    );
+  }
+
+  if (process.stdin.isTTY && process.stdout.isTTY) {
+    process.stdout.write(`${renderPromptWizardHeader("ez-devbox")}\n\n`);
   }
 
   const resumeMode = toConcreteStartupMode(lastRun.mode);

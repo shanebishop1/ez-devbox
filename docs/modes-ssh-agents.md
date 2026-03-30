@@ -42,7 +42,7 @@ For agent modes to work as expected in sandbox:
 - Those local auth files must already exist on your machine before `create`.
 - Claude login is browser-driven. In remote SSH workflows, browser prompts can open on the wrong machine; if sync is unavailable, run `claude` in the sandbox and complete `/login` manually.
 
-Example `launcher.config.toml` values (typical macOS/Linux):
+Example `ez-devbox.config.toml` values (typical macOS/Linux):
 
 ```toml
 [opencode]
