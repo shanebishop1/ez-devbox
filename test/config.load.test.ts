@@ -26,7 +26,7 @@ describe("loadConfig", () => {
   });
 
   it("loads valid config and applies defaults", async () => {
-    const configPath = join(tempDir, "launcher.config.toml");
+    const configPath = join(tempDir, "ez-devbox.config.toml");
     const envPath = join(tempDir, ".env");
 
     await writeFile(
@@ -91,7 +91,7 @@ describe("loadConfig", () => {
   });
 
   it("supports opencode/codex/claude path overrides", async () => {
-    const configPath = join(tempDir, "launcher.config.toml");
+    const configPath = join(tempDir, "ez-devbox.config.toml");
     const envPath = join(tempDir, ".env");
 
     await writeFile(
@@ -131,7 +131,7 @@ describe("loadConfig", () => {
   });
 
   it("supports gh sync config overrides", async () => {
-    const configPath = join(tempDir, "launcher.config.toml");
+    const configPath = join(tempDir, "ez-devbox.config.toml");
     const envPath = join(tempDir, ".env");
 
     await writeFile(configPath, ["[gh]", "enabled = true", 'config_dir = "/tmp/gh-config"'].join("\n"));
@@ -146,7 +146,7 @@ describe("loadConfig", () => {
   });
 
   it("rejects empty gh.config_dir", async () => {
-    const configPath = join(tempDir, "launcher.config.toml");
+    const configPath = join(tempDir, "ez-devbox.config.toml");
     const envPath = join(tempDir, ".env");
 
     await writeFile(configPath, ["[gh]", 'config_dir = ""'].join("\n"));
@@ -156,7 +156,7 @@ describe("loadConfig", () => {
   });
 
   it("rejects invalid startup mode", async () => {
-    const configPath = join(tempDir, "launcher.config.toml");
+    const configPath = join(tempDir, "ez-devbox.config.toml");
     const envPath = join(tempDir, ".env");
 
     await writeFile(configPath, ["[startup]", 'mode = "bad-mode"'].join("\n"));
@@ -166,7 +166,7 @@ describe("loadConfig", () => {
   });
 
   it("accepts project.working_dir path override", async () => {
-    const configPath = join(tempDir, "launcher.config.toml");
+    const configPath = join(tempDir, "ez-devbox.config.toml");
     const envPath = join(tempDir, ".env");
 
     await writeFile(configPath, ["[project]", 'working_dir = "./custom-cwd"'].join("\n"));
@@ -178,7 +178,7 @@ describe("loadConfig", () => {
   });
 
   it("rejects empty project.working_dir", async () => {
-    const configPath = join(tempDir, "launcher.config.toml");
+    const configPath = join(tempDir, "ez-devbox.config.toml");
     const envPath = join(tempDir, ".env");
 
     await writeFile(configPath, ["[project]", 'working_dir = ""'].join("\n"));
@@ -188,7 +188,7 @@ describe("loadConfig", () => {
   });
 
   it("accepts project.setup_concurrency override", async () => {
-    const configPath = join(tempDir, "launcher.config.toml");
+    const configPath = join(tempDir, "ez-devbox.config.toml");
     const envPath = join(tempDir, ".env");
 
     await writeFile(configPath, ["[project]", "setup_concurrency = 3"].join("\n"));
@@ -199,7 +199,7 @@ describe("loadConfig", () => {
   });
 
   it("rejects invalid project.setup_concurrency", async () => {
-    const configPath = join(tempDir, "launcher.config.toml");
+    const configPath = join(tempDir, "ez-devbox.config.toml");
     const envPath = join(tempDir, ".env");
 
     await writeFile(configPath, ["[project]", "setup_concurrency = 0"].join("\n"));
@@ -209,7 +209,7 @@ describe("loadConfig", () => {
   });
 
   it("rejects missing E2B_API_KEY", async () => {
-    const configPath = join(tempDir, "launcher.config.toml");
+    const configPath = join(tempDir, "ez-devbox.config.toml");
     const envPath = join(tempDir, ".env");
 
     await writeFile(configPath, '[startup]\nmode = "prompt"\n');
@@ -219,7 +219,7 @@ describe("loadConfig", () => {
   });
 
   it("hydrates process.env from .env when options.env is omitted", async () => {
-    const configPath = join(tempDir, "launcher.config.toml");
+    const configPath = join(tempDir, "ez-devbox.config.toml");
     const envPath = join(tempDir, ".env");
 
     await writeFile(configPath, '[startup]\nmode = "prompt"\n');
@@ -231,7 +231,7 @@ describe("loadConfig", () => {
   });
 
   it("uses options.env when provided even if process env is empty", async () => {
-    const configPath = join(tempDir, "launcher.config.toml");
+    const configPath = join(tempDir, "ez-devbox.config.toml");
     const envPath = join(tempDir, ".env");
 
     await writeFile(configPath, '[startup]\nmode = "prompt"\n');
@@ -247,7 +247,7 @@ describe("loadConfig", () => {
   });
 
   it("does not implicitly read process.env when options.env is provided", async () => {
-    const configPath = join(tempDir, "launcher.config.toml");
+    const configPath = join(tempDir, "ez-devbox.config.toml");
     const envPath = join(tempDir, ".env");
     process.env.E2B_API_KEY = "from-process-env";
 
@@ -264,7 +264,7 @@ describe("loadConfig", () => {
   });
 
   it("uses injected options.env instead of process.env when provided", async () => {
-    const configPath = join(tempDir, "launcher.config.toml");
+    const configPath = join(tempDir, "ez-devbox.config.toml");
     const envPath = join(tempDir, ".env");
 
     process.env.E2B_API_KEY = "from-process";
@@ -291,7 +291,7 @@ describe("loadConfig", () => {
   });
 
   it("applies E2B_API_KEY precedence as .env then options.env override", async () => {
-    const configPath = join(tempDir, "launcher.config.toml");
+    const configPath = join(tempDir, "ez-devbox.config.toml");
     const envPath = join(tempDir, ".env");
 
     await writeFile(configPath, '[startup]\nmode = "prompt"\n');
@@ -317,7 +317,7 @@ describe("loadConfig", () => {
   });
 
   it("accepts project.active_name when active mode is name", async () => {
-    const configPath = join(tempDir, "launcher.config.toml");
+    const configPath = join(tempDir, "ez-devbox.config.toml");
     const envPath = join(tempDir, ".env");
 
     await writeFile(
@@ -344,7 +344,7 @@ describe("loadConfig", () => {
   });
 
   it("rejects active=name when project.active_name is missing", async () => {
-    const configPath = join(tempDir, "launcher.config.toml");
+    const configPath = join(tempDir, "ez-devbox.config.toml");
     const envPath = join(tempDir, ".env");
 
     await writeFile(configPath, ["[project]", 'active = "name"'].join("\n"));
@@ -354,7 +354,7 @@ describe("loadConfig", () => {
   });
 
   it("accepts project.active_index when active mode is index", async () => {
-    const configPath = join(tempDir, "launcher.config.toml");
+    const configPath = join(tempDir, "ez-devbox.config.toml");
     const envPath = join(tempDir, ".env");
 
     await writeFile(
@@ -381,7 +381,7 @@ describe("loadConfig", () => {
   });
 
   it("rejects out-of-range project.active_index for active=index", async () => {
-    const configPath = join(tempDir, "launcher.config.toml");
+    const configPath = join(tempDir, "ez-devbox.config.toml");
     const envPath = join(tempDir, ".env");
 
     await writeFile(
@@ -402,7 +402,7 @@ describe("loadConfig", () => {
   });
 
   it("accepts tunnel.ports override", async () => {
-    const configPath = join(tempDir, "launcher.config.toml");
+    const configPath = join(tempDir, "ez-devbox.config.toml");
     const envPath = join(tempDir, ".env");
 
     await writeFile(configPath, ["[tunnel]", "ports = [3002, 8080]"].join("\n"));
@@ -413,7 +413,7 @@ describe("loadConfig", () => {
   });
 
   it("accepts tunnel.targets override", async () => {
-    const configPath = join(tempDir, "launcher.config.toml");
+    const configPath = join(tempDir, "ez-devbox.config.toml");
     const envPath = join(tempDir, ".env");
 
     await writeFile(configPath, ["[tunnel]", "", "[tunnel.targets]", '"3002" = "http://10.0.0.20:3002"'].join("\n"));
@@ -427,7 +427,7 @@ describe("loadConfig", () => {
   });
 
   it("uses tunnel.targets as authoritative ports when both are provided", async () => {
-    const configPath = join(tempDir, "launcher.config.toml");
+    const configPath = join(tempDir, "ez-devbox.config.toml");
     const envPath = join(tempDir, ".env");
 
     await writeFile(
@@ -444,7 +444,7 @@ describe("loadConfig", () => {
   });
 
   it("rejects invalid tunnel.targets keys", async () => {
-    const configPath = join(tempDir, "launcher.config.toml");
+    const configPath = join(tempDir, "ez-devbox.config.toml");
     const envPath = join(tempDir, ".env");
 
     await writeFile(
@@ -457,7 +457,7 @@ describe("loadConfig", () => {
   });
 
   it("rejects invalid tunnel.targets URL values", async () => {
-    const configPath = join(tempDir, "launcher.config.toml");
+    const configPath = join(tempDir, "ez-devbox.config.toml");
     const envPath = join(tempDir, ".env");
 
     await writeFile(configPath, ["[tunnel]", "", "[tunnel.targets]", '"3002" = "not-a-url"'].join("\n"));
@@ -467,7 +467,7 @@ describe("loadConfig", () => {
   });
 
   it("accepts localhost tunnel.targets", async () => {
-    const configPath = join(tempDir, "launcher.config.toml");
+    const configPath = join(tempDir, "ez-devbox.config.toml");
     const envPath = join(tempDir, ".env");
 
     await writeFile(configPath, ["[tunnel]", "", "[tunnel.targets]", '"3002" = "http://127.0.0.1:3002"'].join("\n"));
@@ -480,7 +480,7 @@ describe("loadConfig", () => {
   });
 
   it("accepts IPv6 localhost tunnel.targets", async () => {
-    const configPath = join(tempDir, "launcher.config.toml");
+    const configPath = join(tempDir, "ez-devbox.config.toml");
     const envPath = join(tempDir, ".env");
 
     await writeFile(configPath, ["[tunnel]", "", "[tunnel.targets]", '"3002" = "http://[::1]:3002"'].join("\n"));
@@ -493,7 +493,7 @@ describe("loadConfig", () => {
   });
 
   it("rejects tunnel.targets URLs that contain credentials", async () => {
-    const configPath = join(tempDir, "launcher.config.toml");
+    const configPath = join(tempDir, "ez-devbox.config.toml");
     const envPath = join(tempDir, ".env");
 
     await writeFile(
@@ -506,7 +506,7 @@ describe("loadConfig", () => {
   });
 
   it("rejects tunnel.targets URLs with query or fragment", async () => {
-    const configPath = join(tempDir, "launcher.config.toml");
+    const configPath = join(tempDir, "ez-devbox.config.toml");
     const envPath = join(tempDir, ".env");
 
     await writeFile(
@@ -519,7 +519,7 @@ describe("loadConfig", () => {
   });
 
   it("rejects invalid tunnel.ports values", async () => {
-    const configPath = join(tempDir, "launcher.config.toml");
+    const configPath = join(tempDir, "ez-devbox.config.toml");
     const envPath = join(tempDir, ".env");
 
     await writeFile(configPath, ["[tunnel]", "ports = [70000]"].join("\n"));
@@ -529,7 +529,7 @@ describe("loadConfig", () => {
   });
 
   it("rejects duplicate tunnel.ports entries", async () => {
-    const configPath = join(tempDir, "launcher.config.toml");
+    const configPath = join(tempDir, "ez-devbox.config.toml");
     const envPath = join(tempDir, ".env");
 
     await writeFile(configPath, ["[tunnel]", "ports = [3002, 3002]"].join("\n"));
@@ -539,9 +539,9 @@ describe("loadConfig", () => {
   });
 
   it("prefers local launcher config over global", async () => {
-    const localConfigPath = join(tempDir, "launcher.config.toml");
+    const localConfigPath = join(tempDir, "ez-devbox.config.toml");
     const globalConfigRoot = join(tempDir, "xdg");
-    const globalConfigPath = join(globalConfigRoot, "ez-devbox", "launcher.config.toml");
+    const globalConfigPath = join(globalConfigRoot, "ez-devbox", "ez-devbox.config.toml");
     const envPath = join(tempDir, ".env");
 
     await writeFile(localConfigPath, '[sandbox]\nname = "local"\n');
@@ -562,7 +562,7 @@ describe("loadConfig", () => {
 
   it("falls back to global launcher config when local is missing", async () => {
     const globalConfigRoot = join(tempDir, "xdg");
-    const globalConfigPath = join(globalConfigRoot, "ez-devbox", "launcher.config.toml");
+    const globalConfigPath = join(globalConfigRoot, "ez-devbox", "ez-devbox.config.toml");
     const envPath = join(tempDir, ".env");
 
     await mkdir(join(globalConfigRoot, "ez-devbox"), { recursive: true });
@@ -582,7 +582,7 @@ describe("loadConfig", () => {
 
   it("creates local launcher config from prompt choice", async () => {
     const envPath = join(tempDir, ".env");
-    const localConfigPath = join(tempDir, "launcher.config.toml");
+    const localConfigPath = join(tempDir, "ez-devbox.config.toml");
 
     await writeFile(envPath, "E2B_API_KEY=test-e2b-key\n");
 
@@ -604,7 +604,7 @@ describe("loadConfig", () => {
   it("creates global launcher config from prompt choice", async () => {
     const envPath = join(tempDir, ".env");
     const globalConfigRoot = join(tempDir, "xdg");
-    const globalConfigPath = join(globalConfigRoot, "ez-devbox", "launcher.config.toml");
+    const globalConfigPath = join(globalConfigRoot, "ez-devbox", "ez-devbox.config.toml");
 
     await writeFile(envPath, "E2B_API_KEY=test-e2b-key\n");
 
@@ -636,7 +636,7 @@ describe("loadConfig", () => {
         env: { XDG_CONFIG_HOME: globalConfigRoot },
       }),
     ).rejects.toThrow(
-      `Create one at '${join(tempDir, "launcher.config.toml")}' or '${join(globalConfigRoot, "ez-devbox", "launcher.config.toml")}'.`,
+      `Create one at '${join(tempDir, "ez-devbox.config.toml")}' or '${join(globalConfigRoot, "ez-devbox", "ez-devbox.config.toml")}'.`,
     );
   });
 });

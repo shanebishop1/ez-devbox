@@ -1,11 +1,11 @@
-# launcher.config.toml reference
+# ez-devbox.config.toml reference
 
 ez-devbox resolves config in this order:
 
-1. Local `./launcher.config.toml` (current working directory)
-2. Global user config `launcher.config.toml`
-   - macOS/Linux: `~/.config/ez-devbox/launcher.config.toml`
-   - Windows: `%APPDATA%\\ez-devbox\\launcher.config.toml`
+1. Local `./ez-devbox.config.toml` (current working directory)
+2. Global user config `ez-devbox.config.toml`
+   - macOS/Linux: `~/.config/ez-devbox/ez-devbox.config.toml`
+   - Windows: `%APPDATA%\\ez-devbox\\ez-devbox.config.toml`
 
 If neither file exists and a TTY is available, ez-devbox prompts to create a starter config locally or globally.
 
@@ -21,7 +21,7 @@ Compatibility behavior:
 
 ## Starter config
 
-Copy/paste this starter file into `launcher.config.toml` if you are setting up a new workspace:
+Copy/paste this starter file into `ez-devbox.config.toml` if you are setting up a new workspace:
 
 ```toml
 [sandbox]

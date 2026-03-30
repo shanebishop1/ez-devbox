@@ -287,7 +287,7 @@ describe("CLI command integration", () => {
       loadConfig: vi.fn().mockResolvedValue(config),
       loadConfigWithMetadata: vi.fn().mockResolvedValue({
         config,
-        configPath: "/tmp/launcher.config.toml",
+        configPath: "/tmp/ez-devbox.config.toml",
         createdConfig: false,
         scope: "local",
       }),
@@ -302,7 +302,7 @@ describe("CLI command integration", () => {
       now: () => "2026-02-01T00:00:00.000Z",
     });
 
-    expect(infoSpy).toHaveBeenCalledWith("Using launcher config: /tmp/launcher.config.toml");
+    expect(infoSpy).toHaveBeenCalledWith("Using launcher config: /tmp/ez-devbox.config.toml");
     expect(infoSpy.mock.invocationCallOrder[0]).toBeLessThan(resolvePromptStartupMode.mock.invocationCallOrder[0]);
     infoSpy.mockRestore();
   });
@@ -820,7 +820,7 @@ describe("CLI command integration", () => {
       loadConfig: vi.fn().mockResolvedValue(config),
       loadConfigWithMetadata: vi.fn().mockResolvedValue({
         config,
-        configPath: "/tmp/global/launcher.config.toml",
+        configPath: "/tmp/global/ez-devbox.config.toml",
         createdConfig: false,
         scope: "global",
       }),
@@ -834,7 +834,7 @@ describe("CLI command integration", () => {
       now: () => "2026-02-01T00:00:00.000Z",
     });
 
-    expect(infoSpy).not.toHaveBeenCalledWith("Using launcher config: /tmp/global/launcher.config.toml");
+    expect(infoSpy).not.toHaveBeenCalledWith("Using launcher config: /tmp/global/ez-devbox.config.toml");
     infoSpy.mockRestore();
   });
 
@@ -1087,6 +1087,33 @@ describe("CLI command integration", () => {
 
     expect(connectSandbox).toHaveBeenCalledWith("sbx-list", config);
     expect(loadLastRunState).not.toHaveBeenCalled();
+  });
+
+  it("connect fails fast without tunnel setup when no sandboxes exist", async () => {
+    const startLoading = vi.spyOn(logger, "startLoading").mockReturnValue(vi.fn());
+    const originalIsTTY = process.stdout.isTTY;
+    Object.defineProperty(process.stdout, "isTTY", { value: true, configurable: true });
+
+    try {
+      await expect(
+        runConnectCommand([], {
+          loadConfig: vi.fn().mockResolvedValue(config),
+          connectSandbox: vi.fn(),
+          loadLastRunState: vi.fn().mockResolvedValue(null),
+          listSandboxes: vi.fn().mockResolvedValue([]),
+          resolvePromptStartupMode: vi.fn(),
+          launchMode: vi.fn(),
+          bootstrapProjectWorkspace: vi.fn().mockResolvedValue(bootstrapResult),
+          saveLastRunState: vi.fn().mockResolvedValue(undefined),
+          now: () => "2026-02-01T00:00:00.000Z",
+        }),
+      ).rejects.toThrow("No sandboxes are available to connect.");
+
+      expect(startLoading).not.toHaveBeenCalled();
+    } finally {
+      Object.defineProperty(process.stdout, "isTTY", { value: originalIsTTY, configurable: true });
+      startLoading.mockRestore();
+    }
   });
 
   it("connect prompts for selection when multiple sandboxes exist in interactive terminals", async () => {

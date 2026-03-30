@@ -1,6 +1,6 @@
 import { createInterface } from "node:readline/promises";
 import type { StartupMode } from "../types/index.js";
-import { normalizePromptCancelledError } from "./prompt-cancelled.js";
+import { isPromptCancelledError, normalizePromptCancelledError } from "./prompt-cancelled.js";
 import { formatPromptChoice, formatPromptSectionHeader, renderPromptWizardHeader } from "./prompt-style.js";
 
 const PROMPT_FALLBACK_MODE: Exclude<StartupMode, "prompt"> = "ssh-opencode";
@@ -55,7 +55,15 @@ export async function resolvePromptStartupMode(
     "Enter choice: ",
   ].join("\n");
   for (let attempt = 0; attempt < PROMPT_MAX_ATTEMPTS; attempt += 1) {
-    const answer = (await deps.promptInput(question)).trim().toLowerCase();
+    let answer: string;
+    try {
+      answer = (await deps.promptInput(question)).trim().toLowerCase();
+    } catch (error) {
+      if (isPromptCancelledError(error) && process.stdout.isTTY) {
+        process.stdout.write("\n");
+      }
+      throw error;
+    }
     const resolved = resolvePromptAnswer(answer);
 
     if (resolved) {

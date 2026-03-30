@@ -28,7 +28,7 @@ This tool is for a workflow where you want disposable cloud sandboxes without gi
 
 ## Install
 
-Prereqs: Node.js 20+, `E2B_API_KEY`, and a `launcher.config.toml` (local or global). Docker/`cloudflared` only if you use tunnel features.
+Prereqs: Node.js 20+, `E2B_API_KEY`, and a `ez-devbox.config.toml` (local or global). Docker/`cloudflared` only if you use tunnel features.
 
 Choose one:
 
@@ -87,21 +87,21 @@ cp .env.example .env
 E2B_API_KEY=your_key_here
 ```
 
-2. Create/edit `launcher.config.toml`.
+2. Create/edit `ez-devbox.config.toml`.
 
 Config lookup order:
 
-- Local: `./launcher.config.toml` (from the directory where you run `ez-devbox`)
+- Local: `./ez-devbox.config.toml` (from the directory where you run `ez-devbox`)
 - Global: user config file
-  - macOS/Linux: `~/.config/ez-devbox/launcher.config.toml`
-  - Windows: `%APPDATA%\\ez-devbox\\launcher.config.toml`
+  - macOS/Linux: `~/.config/ez-devbox/ez-devbox.config.toml`
+  - Windows: `%APPDATA%\\ez-devbox\\ez-devbox.config.toml`
 
 If neither file exists and you're in an interactive terminal, ez-devbox prompts you to create a starter config locally or globally, then continues with it. In non-interactive environments, it exits with an error listing both expected paths.
 
 If you do not already have one, create a starter config:
 
 ```bash
-cat > launcher.config.toml <<'EOF'
+cat > ez-devbox.config.toml <<'EOF'
 [sandbox]
 template = "opencode"
 name = "ez-devbox"
@@ -165,10 +165,10 @@ Tip: optional fields are omitted when undefined (for example `url` is absent for
 
 ## Config files
 
-- `launcher.config.toml`: ez-devbox behavior (sandbox, startup, project, env pass-through, tooling auth sync, tunnel). Resolved from local-first then global fallback.
+- `ez-devbox.config.toml`: ez-devbox behavior (sandbox, startup, project, env pass-through, tooling auth sync, tunnel). Resolved from local-first then global fallback.
 - `.env`: secrets and local env values
 - last-run state: by default stored at `${TMPDIR}/ez-devbox/last-run/cwd-state/<sha1(cwd)>/.ez-devbox-last-run.json` (legacy `.agent-box-last-run.json` in the current directory is still read as a fallback)
-- `docs/launcher-config-reference.md`: full `launcher.config.toml` field reference
+- `docs/launcher-config-reference.md`: full `ez-devbox.config.toml` field reference
 
 ### Tunnel targets
 
@@ -197,6 +197,6 @@ On `create`, ez-devbox prints a warning that tunnel URLs are effectively bearer 
 - Tunnel command issues:
   - ensure `cloudflared` is installed, or Docker is available for fallback.
 
-## launcher.config.toml reference
+## ez-devbox.config.toml reference
 
 See `docs/launcher-config-reference.md`.

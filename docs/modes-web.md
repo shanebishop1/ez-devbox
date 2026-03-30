@@ -13,11 +13,11 @@ Use web mode when you want a browser URL to an OpenCode server running inside th
 
 For web mode to be usable in sandbox:
 
-- Your `launcher.config.toml` must point `[opencode].config_dir` and `[opencode].auth_path` to valid local OpenCode config/auth paths.
+- Your `ez-devbox.config.toml` must point `[opencode].config_dir` and `[opencode].auth_path` to valid local OpenCode config/auth paths.
 - Those local OpenCode auth/config files must already exist on your machine.
 - If you want password-protected web access, set `OPENCODE_SERVER_PASSWORD` in `.env`.
 
-Example `launcher.config.toml` values (typical macOS/Linux):
+Example `ez-devbox.config.toml` values (typical macOS/Linux):
 
 ```toml
 [opencode]

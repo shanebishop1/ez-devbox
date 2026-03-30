@@ -6,7 +6,7 @@ import { normalizePromptCancelledError } from "../cli/prompt-cancelled.js";
 import { formatPromptChoice, formatPromptSectionHeader } from "../cli/prompt-style.js";
 import type { LoadConfigOptions, LoadedLauncherConfig } from "./load.types.js";
 
-const LAUNCHER_CONFIG_FILENAME = "launcher.config.toml";
+const LAUNCHER_CONFIG_FILENAME = "ez-devbox.config.toml";
 const CONFIG_PROMPT_DEFAULT_SCOPE: LoadedLauncherConfig["scope"] = "local";
 const DEFAULT_LAUNCHER_CONFIG = [
   "[sandbox]",

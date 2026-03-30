@@ -49,7 +49,11 @@ export async function runCli(argv: string[]): Promise<number> {
 
     if (resolved.command === "list") {
       const result = await runListCommand(resolved.args);
-      process.stdout.write(`${result.message}\n`);
+      if (result.message === "No sandboxes found.") {
+        logger.info(result.message);
+      } else {
+        process.stdout.write(`${result.message}\n`);
+      }
       return result.exitCode ?? 0;
     }
 
