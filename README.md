@@ -167,7 +167,7 @@ Tip: optional fields are omitted when undefined (for example `url` is absent for
 
 - `ez-devbox.config.toml`: ez-devbox behavior (sandbox, startup, project, env pass-through, tooling auth sync, tunnel). Resolved from local-first then global fallback.
 - `.env`: secrets and local env values
-- last-run state: by default stored at `${TMPDIR}/ez-devbox/last-run/cwd-state/<sha1(cwd)>/.ez-devbox-last-run.json` (legacy `.agent-box-last-run.json` in the current directory is still read as a fallback)
+- last-run state: by default stored at `${TMPDIR}/ez-devbox/last-run/cwd-state/<sha1(cwd)>/.ez-devbox-last-run.json` (legacy `.agent-box-last-run.json` in the current directory is still read only for persisted-data compatibility)
 - `docs/launcher-config-reference.md`: full `ez-devbox.config.toml` field reference
 
 ### Tunnel targets

@@ -60,7 +60,7 @@ function write(level: LogLevel, message: string): void {
   }
 
   const output = level === "error" ? process.stderr : process.stdout;
-  const safeMessage = level === "error" ? redactSensitiveText(message) : message;
+  const safeMessage = level === "info" ? message : redactSensitiveText(message);
   const line = `${formatPrefix(level, output)} ${safeMessage}`;
   if (level === "error") {
     console.error(line);

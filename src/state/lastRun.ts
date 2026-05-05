@@ -14,6 +14,7 @@ export interface LastRunState {
 type LastRunStateJson = Partial<LastRunState>;
 
 const DEFAULT_LAST_RUN_FILENAME = ".ez-devbox-last-run.json";
+// Legacy compatibility fallback for pre-rename persisted state files.
 const LEGACY_LAST_RUN_FILENAME = ".agent-box-last-run.json";
 const DEFAULT_LAST_RUN_DIR = join(tmpdir(), "ez-devbox", "last-run", "cwd-state");
 const STARTUP_MODES: ReadonlySet<StartupMode> = new Set([
