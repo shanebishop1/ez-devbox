@@ -85,6 +85,20 @@ describe("logger formatting", () => {
     }
   });
 
+  it("redacts sensitive values in warning logs", () => {
+    delete process.env.NO_COLOR;
+    delete process.env.FORCE_COLOR;
+    const restoreStdout = setTty(process.stdout, false);
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => undefined);
+
+    try {
+      logger.warn("careful E2B_API_KEY=secret");
+      expect(logSpy).toHaveBeenCalledWith("[WARN] careful E2B_API_KEY=[REDACTED]");
+    } finally {
+      restoreStdout();
+    }
+  });
+
   it("redacts sensitive values in error logs", () => {
     delete process.env.NO_COLOR;
     delete process.env.FORCE_COLOR;

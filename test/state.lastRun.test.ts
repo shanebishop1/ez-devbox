@@ -56,13 +56,13 @@ describe("last-run state persistence", () => {
     await expect(stat(expectedStatePath)).rejects.toMatchObject({ code: "ENOENT" });
   });
 
-  it("falls back to legacy .agent-box-last-run.json when new default file is missing", async () => {
+  it("falls back to legacy-compatibility .agent-box-last-run.json when new default file is missing", async () => {
     const directory = await mkdtemp(join(tmpdir(), "ez-devbox-last-run-"));
     const newStatePath = join(directory, ".ez-devbox-last-run.json");
-    const legacyStatePath = join(directory, ".agent-box-last-run.json");
+    const legacyCompatStatePath = join(directory, ".agent-box-last-run.json");
 
     await writeFile(
-      legacyStatePath,
+      legacyCompatStatePath,
       JSON.stringify(
         {
           sandboxId: "sbx-legacy",

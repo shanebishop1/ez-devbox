@@ -17,7 +17,7 @@ Last-run state is runtime metadata (not a launcher config field). By default it 
 
 Compatibility behavior:
 
-- If the new default file is missing, ez-devbox still reads legacy `.agent-box-last-run.json` when present.
+- If the new default file is missing, ez-devbox still reads legacy `.agent-box-last-run.json` when present (legacy compatibility only).
 
 ## Starter config
 
