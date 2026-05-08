@@ -1,30 +1,28 @@
 # 🤖 ez-devbox 📦
 
-Run OpenCode, Codex, and Claude Code agents in disposable E2B sandboxes with fast reconnects, repeatable repo setup, and your own local toolchain/auth flow.
+`ez-devbox` runs coding agents in disposable [E2B](https://e2b.dev) sandboxes. It clones your repos, syncs selected tool config and credentials, and lets you reconnect to persistent sessions.
 
-## What it does
+## Features
 
-- Creates or connects to an E2B sandbox
-- Includes the following modes:
-  - `ssh-opencode` (ssh + attach OpenCode TUI to a persistent in-sandbox `opencode serve` backend; leaving the session detaches and reconnect/resume re-attaches to the same in-sandbox session)
-  - `ssh-codex` (ssh + attach Codex inside a persistent in-sandbox `tmux` session)
-  - `ssh-claude` (ssh + attach Claude Code inside a persistent in-sandbox `tmux` session)
-  - `web` (starts `opencode serve` and returns URL)
-  - `ssh-shell` (interactive shell inside a persistent in-sandbox `tmux` session)
-- Automatic repo set-up/bootstrapping during sandbox creation (clone, branch, set up environment, install packages, initialize, etc.)
-- Starts tools in the expected directory (`project.working_dir = "auto"` picks repo or workspace)
-- Syncs local tool auth/config (OpenCode, Codex, Claude Code, GitHub CLI) into sandbox during `create`
-- Supports optional auto-managed port tunneling for sandbox access to your local MCP servers, Docker containers, etc.
+- Launch and reconnect to OpenCode, Codex, Claude Code, or a shell in the same sandbox.
+- Clone repos, check out branches, and run setup commands from a TOML config.
+- Forward selected environment variables and sync local tool auth/config.
+- Reach local MCP servers, Docker containers, or other services through optional tunnels.
 
-## Why This Approach
+## Features Not
 
-This tool is for a workflow where you want disposable cloud sandboxes without giving up local control over setup and credentials:
+- Not a replacement for E2B, Daytona, Coder, Codespaces, or other sandbox/dev-environment infrastructure.
+- Not an autonomous agent platform or task queue.
+- Not a multi-agent planner.
+- Not magic isolation for secrets; you still decide what credentials and env vars get copied or passed through.
 
-- Repeatable repo bootstrapping on sandbox creation, instead of manual shell setup each time.
-- Fast reconnect/resume behavior with saved sandbox + mode state.
-- SSH modes are persistent: disconnecting detaches while the sandbox keeps the session alive, and reconnect/resume attaches you back to it.
-- Controlled env pass-through and auth/config sync (OpenCode/Codex/Claude Code/GitHub) rather than ad-hoc copying.
-- Optional local port tunnel mapping for MCP servers and local services.
+## Agent Modes
+
+- `ssh-opencode`: SSH into the sandbox and attach the OpenCode TUI to a persistent in-sandbox `opencode serve` backend.
+- `ssh-codex`: SSH into the sandbox and attach Codex inside a persistent `tmux` session.
+- `ssh-claude`: SSH into the sandbox and attach Claude Code inside a persistent `tmux` session.
+- `web`: start `opencode serve` and print the URL.
+- `ssh-shell`: SSH into an interactive shell inside a persistent `tmux` session.
 
 ## Install
 
