@@ -9,13 +9,6 @@
 - Forward selected environment variables and sync local tool auth/config.
 - Reach local MCP servers, Docker containers, or other services through optional tunnels.
 
-## Features Not
-
-- Not a replacement for E2B, Daytona, Coder, Codespaces, or other sandbox/dev-environment infrastructure.
-- Not an autonomous agent platform or task queue.
-- Not a multi-agent planner.
-- Not magic isolation for secrets; you still decide what credentials and env vars get copied or passed through.
-
 ## Agent Modes
 
 - `ssh-opencode`: SSH into the sandbox and attach the OpenCode TUI to a persistent in-sandbox `opencode serve` backend.
