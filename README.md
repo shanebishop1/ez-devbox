@@ -12,13 +12,6 @@ The closest alternative is usually a homegrown setup: create an E2B sandbox, clo
 - A controlled way to pass selected env vars and sync local tool auth/config into the sandbox.
 - Optional tunnel setup for reaching local MCP servers, Docker containers, or other services from the sandbox.
 
-## What This Is Not
-
-- Not a replacement for E2B, Daytona, Coder, Codespaces, or other sandbox/dev-environment infrastructure.
-- Not an autonomous agent platform or task queue.
-- Not a multi-agent planner.
-- Not magic isolation for secrets; you still decide what credentials and env vars get copied or passed through.
-
 ## Why Use It
 
 Use `ez-devbox` if your current workflow looks like `git worktree` + `tmux` + SSH + custom E2B scripts + copied config files, and you want that to be less manual.
