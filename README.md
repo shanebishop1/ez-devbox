@@ -1,30 +1,52 @@
 # 🤖 ez-devbox 📦
 
-Run OpenCode, Codex, and Claude Code agents in disposable E2B sandboxes with fast reconnects, repeatable repo setup, and your own local toolchain/auth flow.
+`ez-devbox` is a small CLI for running coding agents in disposable E2B sandboxes without rebuilding the same shell glue every time.
 
-## What it does
+The closest alternative is usually a homegrown setup: create an E2B sandbox, clone the repo, copy auth files, run setup commands, start `tmux`, SSH in, launch OpenCode/Codex/Claude Code, remember the sandbox ID, and reattach later. This tool packages that workflow into repeatable commands and config.
 
-- Creates or connects to an E2B sandbox
-- Includes the following modes:
-  - `ssh-opencode` (ssh + attach OpenCode TUI to a persistent in-sandbox `opencode serve` backend; leaving the session detaches and reconnect/resume re-attaches to the same in-sandbox session)
-  - `ssh-codex` (ssh + attach Codex inside a persistent in-sandbox `tmux` session)
-  - `ssh-claude` (ssh + attach Claude Code inside a persistent in-sandbox `tmux` session)
-  - `web` (starts `opencode serve` and returns URL)
-  - `ssh-shell` (interactive shell inside a persistent in-sandbox `tmux` session)
-- Automatic repo set-up/bootstrapping during sandbox creation (clone, branch, set up environment, install packages, initialize, etc.)
-- Starts tools in the expected directory (`project.working_dir = "auto"` picks repo or workspace)
-- Syncs local tool auth/config (OpenCode, Codex, Claude Code, GitHub CLI) into sandbox during `create`
-- Supports optional auto-managed port tunneling for sandbox access to your local MCP servers, Docker containers, etc.
+## What This Is
 
-## Why This Approach
+- A workflow layer on top of E2B sandboxes.
+- A way to launch and reconnect to OpenCode, Codex, Claude Code, or a shell in the same sandbox.
+- A config-driven bootstrapper for cloning repos, setting branches, installing dependencies, and starting in the right working directory.
+- A controlled way to pass selected env vars and sync local tool auth/config into the sandbox.
+- Optional tunnel setup for reaching local MCP servers, Docker containers, or other services from the sandbox.
 
-This tool is for a workflow where you want disposable cloud sandboxes without giving up local control over setup and credentials:
+## What This Is Not
 
-- Repeatable repo bootstrapping on sandbox creation, instead of manual shell setup each time.
-- Fast reconnect/resume behavior with saved sandbox + mode state.
-- SSH modes are persistent: disconnecting detaches while the sandbox keeps the session alive, and reconnect/resume attaches you back to it.
-- Controlled env pass-through and auth/config sync (OpenCode/Codex/Claude Code/GitHub) rather than ad-hoc copying.
-- Optional local port tunnel mapping for MCP servers and local services.
+- Not a replacement for E2B, Daytona, Coder, Codespaces, or other sandbox/dev-environment infrastructure.
+- Not an autonomous agent platform or task queue.
+- Not a multi-agent planner.
+- Not magic isolation for secrets; you still decide what credentials and env vars get copied or passed through.
+
+## Why Use It
+
+Use `ez-devbox` if your current workflow looks like `git worktree` + `tmux` + SSH + custom E2B scripts + copied config files, and you want that to be less manual.
+
+It handles the repetitive parts:
+
+- create or connect to an E2B sandbox
+- clone/bootstrap one or more repos
+- launch the selected agent mode
+- keep SSH sessions persistent with `tmux` where needed
+- save last-run state so `resume` can reattach
+- sync selected OpenCode, Codex, Claude Code, and GitHub CLI auth/config during `create`
+- optionally expose local services to the sandbox through managed tunnels
+
+## How It Compares
+
+- `git worktree` + `tmux` + SSH: flexible and simple, but you write the lifecycle glue yourself. `ez-devbox` keeps the same terminal-first feel while adding sandbox creation, config sync, bootstrap, and resume state.
+- Raw E2B SDK/CLI scripts: good if you want total control. `ez-devbox` is for the repeated agent workflow around E2B, not for replacing E2B itself.
+- Daytona, Coder, Codespaces, DevPod: infrastructure or dev-environment platforms. They can be useful underneath or alongside this kind of workflow, but `ez-devbox` is focused on launching and reattaching coding-agent sessions with your local config and auth expectations.
+- Full agent platforms: better if you want task queues, PR automation, dashboards, or autonomous background work. `ez-devbox` is deliberately closer to "give me a clean remote box and attach my agent shell."
+
+## Agent Modes
+
+- `ssh-opencode`: SSH into the sandbox and attach the OpenCode TUI to a persistent in-sandbox `opencode serve` backend.
+- `ssh-codex`: SSH into the sandbox and attach Codex inside a persistent `tmux` session.
+- `ssh-claude`: SSH into the sandbox and attach Claude Code inside a persistent `tmux` session.
+- `web`: start `opencode serve` and print the URL.
+- `ssh-shell`: SSH into an interactive shell inside a persistent `tmux` session.
 
 ## Install
 
