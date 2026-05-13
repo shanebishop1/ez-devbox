@@ -5,7 +5,8 @@
   "main": "dist/src/cli/index.js",
   "types": "dist/src/cli/index.d.ts",
   "bin": {
-    "ez-devbox": "dist/src/cli/index.js"
+    "ez-devbox": "dist/src/cli/index.js",
+    "ezdb": "dist/src/cli/index.js"
   },
   "files": [
     "dist",

@@ -39,6 +39,8 @@ or global install:
 ```bash
 npm install -g ez-devbox
 ez-devbox --help
+# Short alias after global install:
+ezdb --help
 ```
 
 ## Environment variables
@@ -124,7 +126,7 @@ npx ez-devbox connect
 
 ## Common commands
 
-Use `npx ez-devbox ...` if the CLI is not globally installed.
+Use `npx ez-devbox ...` if the CLI is not globally installed. After global install, `ezdb` is also available as a short alias for `ez-devbox`.
 
 | Goal | Command |
 | --- | --- |
