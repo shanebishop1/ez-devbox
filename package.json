@@ -85,7 +85,7 @@
     "@biomejs/biome": "^2.4.5",
     "@types/node": "^26.4.0",
     "@typescript/native-preview": "7.0.0-dev.20260223.1",
-    "tsx": "^4.19.3",
+    "tsx": "^4.23.13",
     "typescript": "^5.8.2",
     "vitest": "^4.1.11"
   }
