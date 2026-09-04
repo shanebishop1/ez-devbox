@@ -176,6 +176,7 @@ describe("startup modes orchestrator", () => {
       {},
       {
         isInteractiveTerminal: () => true,
+        resolveLocalOpenCodeVersion: () => undefined,
         prepareSession,
         runInteractiveSession,
         cleanupSession,
@@ -315,6 +316,7 @@ describe("startup modes orchestrator", () => {
       { workingDirectory: "/workspace/repo-a", startupEnv: { PROJECT_NAME: "repo-a" } },
       {
         isInteractiveTerminal: () => true,
+        resolveLocalOpenCodeVersion: () => undefined,
         prepareSession: vi.fn().mockResolvedValue(session),
         runInteractiveSession: vi.fn().mockResolvedValue(undefined),
         cleanupSession: vi.fn().mockResolvedValue(undefined),
@@ -645,6 +647,7 @@ describe("startup modes orchestrator", () => {
       { workingDirectory: "/workspace/repo-a", startupEnv: { PROJECT_NAME: "repo-a" } },
       {
         isInteractiveTerminal: () => true,
+        resolveLocalOpenCodeVersion: () => undefined,
         prepareSession: vi.fn().mockResolvedValue(session),
         runInteractiveSession: opencodeRunInteractiveSession,
         cleanupSession: vi.fn().mockResolvedValue(undefined),
