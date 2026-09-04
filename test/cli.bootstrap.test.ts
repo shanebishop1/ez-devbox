@@ -136,6 +136,7 @@ describe("CLI bootstrap routing", () => {
   it("does not include development invocation in help text", () => {
     expect(renderHelp()).not.toContain("In this repo (development):");
     expect(renderHelp()).not.toContain("npm run dev -- <command> [options]");
+    expect(renderHelp()).not.toContain("node dist/src/cli/index.js <command> [options]");
   });
 
   it("clarifies config lookup order in help text", () => {

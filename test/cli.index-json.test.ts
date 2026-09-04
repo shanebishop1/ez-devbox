@@ -14,6 +14,8 @@ vi.mock("../src/cli/commands.list.js", () => ({ runListCommand: commandMocks.lis
 vi.mock("../src/cli/commands.command.js", () => ({ runCommandCommand: commandMocks.command }));
 
 import { runCli } from "../src/cli/index.js";
+import { renderHelp } from "../src/cli/router.js";
+import { readCliVersion } from "../src/cli/version.js";
 import { logger } from "../src/logging/logger.js";
 
 describe("CLI process JSON output", () => {
@@ -61,5 +63,26 @@ describe("CLI process JSON output", () => {
       error: "list failed E2B_API_KEY=[REDACTED]",
     });
     expect(consoleError).not.toHaveBeenCalled();
+  });
+});
+
+describe("CLI direct output", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it.each([
+    ["help", ["--help"], renderHelp],
+    ["version", ["--version"], readCliVersion],
+  ] as const)("writes %s to stdout without routing through the logger", async (_name, argv, renderOutput) => {
+    const stdout = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+    const loggerInfo = vi.spyOn(logger, "info").mockImplementation(() => undefined);
+
+    const exitCode = await runCli([...argv]);
+
+    expect(exitCode).toBe(0);
+    expect(stdout).toHaveBeenCalledOnce();
+    expect(stdout).toHaveBeenCalledWith(`${renderOutput()}\n`);
+    expect(loggerInfo).not.toHaveBeenCalled();
   });
 });
