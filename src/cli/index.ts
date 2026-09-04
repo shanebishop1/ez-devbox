@@ -23,12 +23,12 @@ export async function runCli(argv: string[]): Promise<number> {
     const resolved = resolveCliCommand(globalOptions.args);
 
     if (resolved.command === "help") {
-      logger.info(renderHelp());
+      process.stdout.write(`${renderHelp()}\n`);
       return 0;
     }
 
     if (resolved.command === "version") {
-      logger.info(readCliVersion());
+      process.stdout.write(`${readCliVersion()}\n`);
       return 0;
     }
 

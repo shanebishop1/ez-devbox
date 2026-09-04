@@ -133,9 +133,9 @@ describe("CLI bootstrap routing", () => {
     expect(renderHelp()).toContain("-V, --version         Show CLI version");
   });
 
-  it("clarifies development invocation in help text", () => {
-    expect(renderHelp()).toContain("In this repo (development):");
-    expect(renderHelp()).toContain("npm run dev -- <command> [options]");
+  it("does not include development invocation in help text", () => {
+    expect(renderHelp()).not.toContain("In this repo (development):");
+    expect(renderHelp()).not.toContain("npm run dev -- <command> [options]");
   });
 
   it("clarifies config lookup order in help text", () => {
