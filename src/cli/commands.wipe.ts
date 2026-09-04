@@ -15,7 +15,7 @@ import { formatSandboxDisplayLabel } from "./sandbox-display-name.js";
 
 export interface WipeCommandDeps {
   listSandboxes: (options?: ListSandboxesOptions) => Promise<SandboxListItem[]>;
-  killSandbox: (sandboxId: string, options?: LifecycleOperationOptions) => Promise<void>;
+  killSandbox: (sandboxId: string, options?: LifecycleOperationOptions) => Promise<boolean>;
   isInteractiveTerminal: () => boolean;
   promptInput: (question: string) => Promise<string>;
   loadLastRunState: () => Promise<LastRunState | null>;
@@ -50,7 +50,10 @@ export async function runWipeCommand(args: string[], deps: WipeCommandDeps = def
       : await selectSandboxInteractively(sandboxes, deps);
 
   const selectedLabel = formatSandboxDisplayLabel(selected.sandboxId, selected.metadata);
-  await deps.killSandbox(selected.sandboxId);
+  const killed = await deps.killSandbox(selected.sandboxId);
+  if (!killed) {
+    throw new Error(`Sandbox '${selected.sandboxId}' was not wiped because E2B reported it was not killed.`);
+  }
 
   const lastRun = await deps.loadLastRunState();
   if (lastRun?.sandboxId === selected.sandboxId) {

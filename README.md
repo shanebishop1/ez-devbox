@@ -1,5 +1,10 @@
 # 🤖 ez-devbox 📦
 
+[![CI](https://github.com/shanebishop1/ez-devbox/actions/workflows/ci.yml/badge.svg)](https://github.com/shanebishop1/ez-devbox/actions/workflows/ci.yml)
+[![npm version](https://img.shields.io/npm/v/ez-devbox.svg)](https://www.npmjs.com/package/ez-devbox)
+[![Node.js 20+](https://img.shields.io/badge/node-%3E%3D20-339933?logo=node.js&logoColor=white)](https://nodejs.org/)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/shanebishop1/ez-devbox/blob/main/LICENSE)
+
 `ez-devbox` runs coding agents in disposable [E2B](https://e2b.dev) sandboxes. It clones your repos, syncs selected tool config and credentials, and lets you reconnect to persistent sessions.
 
 ## Features
@@ -19,7 +24,12 @@
 
 ## Install
 
-Prereqs: Node.js 20+, `E2B_API_KEY`, and a `ez-devbox.config.toml` (local or global). Docker/`cloudflared` only if you use tunnel features.
+Prerequisites:
+
+- Node.js 20 or newer on macOS or Linux. Windows config paths are supported, but Windows host SSH/tunnel workflows are not currently tested in CI.
+- An [E2B API key](https://e2b.dev/docs/getting-started/api-key).
+- `ssh` for SSH modes and `tmux` in the E2B template. Docker or `cloudflared` is needed only for tunnel features.
+- An `ez-devbox.config.toml`, created during onboarding below or by the interactive first-run prompt.
 
 Choose one:
 
@@ -39,15 +49,15 @@ or global install:
 ```bash
 npm install -g ez-devbox
 ez-devbox --help
-# Short alias after global install:
-ezdb --help
 ```
+
+Use `ez-devbox` in portable instructions. The short `ezdb` binary is declared by the current package and will first be available on npm in the release after `0.5.5`; npm `0.5.5` exposes only `ez-devbox`. Once you install a version that includes it, `ezdb --help` is equivalent.
 
 ## Environment variables
 
 You can set variables in your shell or put them in a local `.env` file.
 
-Quick start:
+For a source checkout, copy the template:
 
 ```bash
 cp .env.example .env
@@ -64,23 +74,24 @@ Common optional vars:
 - `GITHUB_TOKEN` / `GH_TOKEN`: used for GitHub auth flows (especially when `[gh].enabled = true`).
 - `OPENCODE_SERVER_PASSWORD`: used for `web` mode auth.
 
-Template file:
-
-- `.env.example` includes the expected keys.
+The npm package also ships `.env.example`. Do not commit `.env`; it contains local secrets.
 
 ## Quick start
 
-1. Create `.env` and set at least:
+1. Make a project directory, then create `.env` and set at least:
 
 ```bash
-cp .env.example .env
+printf 'E2B_API_KEY=%s\n' 'your_key_here' > .env
 ```
 
-```env
-E2B_API_KEY=your_key_here
+2. Download the complete minimal config, then edit its repo URL, branch, and setup command:
+
+```bash
+curl -fsSLo ez-devbox.config.toml \
+  https://raw.githubusercontent.com/shanebishop1/ez-devbox/main/examples/minimal/ez-devbox.config.toml
 ```
 
-2. Create/edit `ez-devbox.config.toml`.
+The same example is shipped inside an installed package at `node_modules/ez-devbox/examples/minimal/ez-devbox.config.toml`. See the [minimal workflow](https://github.com/shanebishop1/ez-devbox/tree/main/examples/minimal) for a runnable public-repo example.
 
 Config lookup order:
 
@@ -91,7 +102,7 @@ Config lookup order:
 
 If neither file exists and you're in an interactive terminal, ez-devbox prompts you to create a starter config locally or globally, then continues with it. In non-interactive environments, it exits with an error listing both expected paths.
 
-If you do not already have one, create a starter config:
+If you prefer not to download a file, this is the smallest useful custom-project config:
 
 ```bash
 cat > ez-devbox.config.toml <<'EOF'
@@ -110,7 +121,7 @@ setup_command = "npm install"
 EOF
 ```
 
-Then set each repo's `setup_command` as needed. For the full field reference, see `docs/launcher-config-reference.md`.
+Then set each repo's `setup_command` as needed. For every field, see the [config reference](https://github.com/shanebishop1/ez-devbox/blob/main/docs/launcher-config-reference.md).
 
 3. Run commands (`npx` if not globally installed):
 
@@ -121,12 +132,12 @@ npx ez-devbox connect
 
 ## Mode guides
 
-- [Web mode (OpenCode in browser)](docs/modes-web.md)
-- [SSH agent modes (OpenCode, Codex, and Claude Code)](docs/modes-ssh-agents.md)
+- [Web mode (OpenCode in browser)](https://github.com/shanebishop1/ez-devbox/blob/main/docs/modes-web.md)
+- [SSH agent modes (OpenCode, Codex, and Claude Code)](https://github.com/shanebishop1/ez-devbox/blob/main/docs/modes-ssh-agents.md)
 
 ## Common commands
 
-Use `npx ez-devbox ...` if the CLI is not globally installed. After global install, `ezdb` is also available as a short alias for `ez-devbox`.
+Use `npx ez-devbox ...` if the CLI is not globally installed.
 
 | Goal | Command |
 | --- | --- |
@@ -161,7 +172,15 @@ Optional fields are omitted when undefined (for example `url` is absent for SSH 
 - `ez-devbox.config.toml`: ez-devbox behavior (sandbox, startup, project, env pass-through, tooling auth sync, tunnel). Resolved from local-first then global fallback.
 - `.env`: secrets and local env values
 - last-run state: by default stored at `${TMPDIR}/ez-devbox/last-run/cwd-state/<sha1(cwd)>/.ez-devbox-last-run.json` (legacy `.agent-box-last-run.json` in the current directory is still read only for persisted-data compatibility)
-- `docs/launcher-config-reference.md`: full `ez-devbox.config.toml` field reference
+- [Config reference](https://github.com/shanebishop1/ez-devbox/blob/main/docs/launcher-config-reference.md): full `ez-devbox.config.toml` field reference
+
+## Credentials, tunnels, and resource lifecycle
+
+- `E2B_API_KEY` stays on the host and is used by the E2B SDK; it is not one of the sandbox pass-through variables. Values selected by built-in forwarding or `[env].pass_through` are sent into the sandbox during creation and may also be supplied to setup/startup commands on reconnect.
+- Tool auth/config sync is explicit and create-time only. Configured OpenCode, Codex, Claude, and optional GitHub CLI files are copied from the host into the sandbox; treat the sandbox as credential-bearing and use only trusted templates and repositories.
+- Quick-tunnel URLs are temporary bearer links with no access control supplied by ez-devbox. Anyone with a URL can reach its upstream while the host CLI operation and tunnel process remain active. Use upstream authentication and never expose an untrusted administrative service.
+- Sandboxes are disposable but not automatically deleted when you detach or exit. `sandbox.timeout_ms` sets the E2B timeout at creation; reconnecting does not reset it, and the reserved `reuse` and `delete_on_exit` fields do not currently alter lifecycle behavior.
+- Use `wipe --sandbox-id <id>` or `wipe-all --yes` to delete E2B resources explicitly. A newly created sandbox is auto-wiped only when interactive repository selection is cancelled after creation.
 
 ### Tunnel targets
 
@@ -190,6 +209,8 @@ On `create`, ez-devbox prints a warning that tunnel URLs are effectively bearer 
 - Tunnel command issues:
   - ensure `cloudflared` is installed, or Docker is available for fallback.
 
-## ez-devbox.config.toml reference
+## Contributing
 
-See `docs/launcher-config-reference.md`.
+- Security reports: [SECURITY.md](https://github.com/shanebishop1/ez-devbox/blob/main/SECURITY.md)
+- Contributions: [CONTRIBUTING.md](https://github.com/shanebishop1/ez-devbox/blob/main/CONTRIBUTING.md)
+- Release notes: [CHANGELOG.md](https://github.com/shanebishop1/ez-devbox/blob/main/CHANGELOG.md)

@@ -1,6 +1,3 @@
-# Neutral repo-root starter config. Copy it into your own repository and edit
-# the repo URL and setup command. Local config takes priority over global config.
-
 [sandbox]
 template = "opencode"
 name = "devbox"

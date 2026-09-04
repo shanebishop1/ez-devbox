@@ -1,5 +1,6 @@
 import type { SandboxHandle } from "../e2b/lifecycle.js";
 import type { LaunchContextOptions, ModeLaunchResult } from "./index.js";
+import { assertRemoteCommandSucceeded } from "./remote-command.js";
 
 const WEB_COMMAND = "nohup opencode serve --hostname 0.0.0.0 --port 3000 >/tmp/opencode-serve.log 2>&1 &";
 const WEB_READINESS_COMMAND =
@@ -18,21 +19,24 @@ export async function startWebMode(
     envs: launchContext.startupEnv ?? {},
   };
 
-  await handle.run(WEB_COMMAND, {
+  const startResult = await handle.run(WEB_COMMAND, {
     ...(commandContext.cwd ? { cwd: commandContext.cwd } : {}),
     ...(Object.keys(commandContext.envs).length > 0 ? { envs: commandContext.envs } : {}),
     timeoutMs: WEB_START_TIMEOUT_MS,
   });
-  await handle.run(WEB_READINESS_COMMAND, {
+  assertRemoteCommandSucceeded(startResult, "Web mode server start");
+  const readinessResult = await handle.run(WEB_READINESS_COMMAND, {
     ...(commandContext.cwd ? { cwd: commandContext.cwd } : {}),
     ...(Object.keys(commandContext.envs).length > 0 ? { envs: commandContext.envs } : {}),
     timeoutMs: WEB_READY_TIMEOUT_MS,
   });
+  assertRemoteCommandSucceeded(readinessResult, "Web mode readiness check");
   const authProbe = await handle.run(WEB_AUTH_PROBE_COMMAND, {
     ...(commandContext.cwd ? { cwd: commandContext.cwd } : {}),
     ...(Object.keys(commandContext.envs).length > 0 ? { envs: commandContext.envs } : {}),
     timeoutMs: WEB_AUTH_TIMEOUT_MS,
   });
+  assertRemoteCommandSucceeded(authProbe, "Web mode authentication probe");
 
   const host = await handle.getHost(3000);
   const url = ensureHttps(host);

@@ -3,6 +3,7 @@ import { redactSensitiveText } from "../security/redaction.js";
 type LogLevel = "info" | "warn" | "error";
 
 let verboseEnabled = false;
+let jsonOutputEnabled = false;
 let loadingFrame = 0;
 let loadingIntervalId: NodeJS.Timeout | null = null;
 let deferredLoadingWarnings: string[] = [];
@@ -45,6 +46,10 @@ function formatPrefix(level: LogLevel, output: NodeJS.WriteStream): string {
 }
 
 function write(level: LogLevel, message: string): void {
+  if (jsonOutputEnabled && level !== "error") {
+    return;
+  }
+
   if (
     level === "warn" &&
     loadingIntervalId &&
@@ -60,7 +65,7 @@ function write(level: LogLevel, message: string): void {
   }
 
   const output = level === "error" ? process.stderr : process.stdout;
-  const safeMessage = level === "info" ? message : redactSensitiveText(message);
+  const safeMessage = redactSensitiveText(message);
   const line = `${formatPrefix(level, output)} ${safeMessage}`;
   if (level === "error") {
     console.error(line);
@@ -76,6 +81,10 @@ export function setVerboseLoggingEnabled(enabled: boolean): void {
 
 export function isVerboseLoggingEnabled(): boolean {
   return verboseEnabled;
+}
+
+export function setJsonOutputEnabled(enabled: boolean): void {
+  jsonOutputEnabled = enabled;
 }
 
 export const logger = {
@@ -95,6 +104,10 @@ export const logger = {
     write("error", message);
   },
   startLoading(message: string): () => void {
+    if (jsonOutputEnabled) {
+      return () => {};
+    }
+
     if (verboseEnabled || !process.stdout.isTTY) {
       write("info", message);
       return () => {};

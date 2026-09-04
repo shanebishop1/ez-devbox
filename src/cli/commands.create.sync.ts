@@ -19,23 +19,35 @@ const TOOLING_SYNC_PROGRESS_LOG_INTERVAL = 50;
 
 export async function syncToolingForMode(
   config: Awaited<ReturnType<typeof loadConfig>>,
-  sandbox: Pick<SandboxHandle, "writeFile">,
-  _mode: ConcreteStartupMode,
+  sandbox: Pick<SandboxHandle, "run" | "writeFile">,
+  mode: ConcreteStartupMode,
 ): Promise<ToolingSyncSummary> {
   const ghConfig = await maybeSyncGhConfig(config, sandbox);
+  let opencodeConfig: PathSyncSummary | null = null;
+  let opencodeAuth: PathSyncSummary | null = null;
+  let codexConfig: PathSyncSummary | null = null;
+  let codexAuth: PathSyncSummary | null = null;
+  let claudeConfig: PathSyncSummary | null = null;
+  let claudeState: PathSyncSummary | null = null;
 
-  const opencodeConfig = await runSyncUnit("OpenCode config", (onProgress) =>
-    syncOpenCodeConfigDir(config, sandbox, { onProgress }),
-  );
-  const opencodeAuth = await runSyncUnit("OpenCode auth", () => syncOpenCodeAuthFile(config, sandbox));
-  const codexConfig = await runSyncUnit("Codex config", (onProgress) =>
-    syncCodexConfigDir(config, sandbox, { onProgress }),
-  );
-  const codexAuth = await runSyncUnit("Codex auth", () => syncCodexAuthFile(config, sandbox));
-  const claudeConfig = await runSyncUnit("Claude config", (onProgress) =>
-    syncClaudeConfigDir(config, sandbox, { onProgress }),
-  );
-  const claudeState = await runSyncUnit("Claude state", () => syncClaudeStateFile(config, sandbox));
+  if (mode === "ssh-opencode" || mode === "web") {
+    opencodeConfig = await runSyncUnit("OpenCode config", (onProgress) =>
+      syncOpenCodeConfigDir(config, sandbox, { onProgress }),
+    );
+    opencodeAuth = await runSyncUnit("OpenCode auth", () => syncOpenCodeAuthFile(config, sandbox));
+  } else if (mode === "ssh-codex") {
+    codexConfig = await runSyncUnit("Codex config", (onProgress) =>
+      syncCodexConfigDir(config, sandbox, { onProgress }),
+    );
+    codexAuth = await runSyncUnit("Codex auth", () => syncCodexAuthFile(config, sandbox));
+  } else if (mode === "ssh-claude") {
+    claudeConfig = await runSyncUnit("Claude config", (onProgress) =>
+      syncClaudeConfigDir(config, sandbox, { onProgress }),
+    );
+    claudeState = await runSyncUnit("Claude state", () => syncClaudeStateFile(config, sandbox));
+  } else {
+    logger.verbose(`Tooling sync: no agent config/auth applies to mode '${mode}'.`);
+  }
   return summarizeToolingSync(
     opencodeConfig,
     opencodeAuth,
@@ -50,7 +62,7 @@ export async function syncToolingForMode(
 
 async function maybeSyncGhConfig(
   config: Awaited<ReturnType<typeof loadConfig>>,
-  sandbox: Pick<SandboxHandle, "writeFile">,
+  sandbox: Pick<SandboxHandle, "run" | "writeFile">,
 ): Promise<PathSyncSummary | null> {
   if (!config.gh.enabled) {
     return null;

@@ -1,4 +1,5 @@
-import { join } from "node:path";
+import { posix } from "node:path";
+import { redactSensitiveText } from "../security/redaction.js";
 
 export interface RepoSpec {
   name: string;
@@ -13,6 +14,7 @@ export interface GitAdapter {
 
 export interface RepoExecutor {
   clone(url: string, targetPath: string): Promise<void>;
+  getOriginUrl(repoPath: string): Promise<string>;
   getCurrentBranch(repoPath: string): Promise<string>;
   checkoutBranch(repoPath: string, branch: string): Promise<void>;
 }
@@ -36,7 +38,7 @@ export async function provisionRepos(input: ProvisionReposInput): Promise<Provis
   const summaries: ProvisionedRepoSummary[] = [];
 
   for (const repo of input.repos) {
-    const path = join(input.projectDir, repo.name);
+    const path = posix.join(input.projectDir, repo.name);
     const exists = await input.git.exists(path);
 
     let cloned = false;
@@ -50,6 +52,14 @@ export async function provisionRepos(input: ProvisionReposInput): Promise<Provis
       if (!gitRepo) {
         throw new Error(
           `Cannot provision repo '${repo.name}' at '${path}': directory exists but is not a git repository.`,
+        );
+      }
+      const originUrl = (await input.executor.getOriginUrl(path)).trim();
+      if (normalizeRepoUrl(originUrl) !== normalizeRepoUrl(repo.url)) {
+        throw new Error(
+          redactSensitiveText(
+            `Cannot reuse repo '${repo.name}' at '${path}': origin URL '${originUrl || "(missing)"}' does not match configured URL '${repo.url}'.`,
+          ),
         );
       }
       reused = true;
@@ -75,4 +85,19 @@ export async function provisionRepos(input: ProvisionReposInput): Promise<Provis
   }
 
   return summaries;
+}
+
+function normalizeRepoUrl(value: string): string {
+  const trimmed = value.trim();
+  try {
+    const parsed = new URL(trimmed);
+    if (parsed.protocol === "http:" || parsed.protocol === "https:") {
+      parsed.username = "";
+      parsed.password = "";
+      return parsed.href;
+    }
+  } catch {
+    // Non-URL git remotes such as git@host:owner/repo.git are compared as-is.
+  }
+  return trimmed;
 }

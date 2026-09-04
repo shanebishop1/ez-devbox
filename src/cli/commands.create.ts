@@ -11,6 +11,7 @@ import type { ToolingSyncSummary } from "../tooling/host-sandbox-sync.js";
 import { type WithConfiguredTunnel, withConfiguredTunnel } from "../tunnel/cloudflared.js";
 import { resolveTunnelPorts } from "../tunnel/cloudflared.spawn.js";
 import type { CommandResult, StartupMode } from "../types/index.js";
+import { createLoadingStageController } from "./command-loading.js";
 import {
   addWebServerPasswordForWebMode,
   formatSelectedReposSummary,
@@ -34,9 +35,6 @@ import {
 
 const TUNNEL_URL_WARNING_MESSAGE =
   "Anyone with access to your Tunnel URL can access the forwarded service/data. Treat tunnel URLs as secrets.";
-const ANSI_GREEN = "\u001b[32m";
-const ANSI_RESET = "\u001b[0m";
-
 export interface CreateCommandDeps {
   loadConfig: (options?: LoadConfigOptions) => ReturnType<typeof loadConfig>;
   loadConfigWithMetadata?: (options?: LoadConfigOptions) => ReturnType<typeof loadConfigWithMetadata>;
@@ -69,6 +67,7 @@ export interface CreateCommandDeps {
     options?: {
       workingDirectory?: string;
       startupEnv?: Record<string, string>;
+      nonInteractive?: boolean;
       onBeforeInteractiveSession?: () => void;
       onLaunchStageUpdate?: (loadingMessage: string, completionMessage: string) => void;
       matchLocalOpenCodeVersion?: boolean;
@@ -86,7 +85,7 @@ export interface CreateCommandDeps {
   ) => Promise<BootstrapProjectWorkspaceResult>;
   syncToolingToSandbox: (
     config: Awaited<ReturnType<typeof loadConfig>>,
-    sandbox: Pick<SandboxHandle, "writeFile">,
+    sandbox: Pick<SandboxHandle, "run" | "writeFile">,
     mode: ConcreteStartupMode,
   ) => Promise<ToolingSyncSummary>;
   saveLastRunState: (state: LastRunState) => Promise<void>;
@@ -112,8 +111,9 @@ export async function runCreateCommand(args: string[], deps: CreateCommandDeps =
   const loadedConfig = deps.loadConfigWithMetadata ? await deps.loadConfigWithMetadata() : undefined;
   const config = loadedConfig ? loadedConfig.config : await deps.loadConfig();
   const requestedMode = parsed.mode ?? config.startup.mode;
-  const isInteractiveTerminal =
+  const configuredInteractiveTerminal =
     deps.isInteractiveTerminal ?? (() => Boolean(process.stdin.isTTY && process.stdout.isTTY));
+  const isInteractiveTerminal = parsed.json ? () => false : configuredInteractiveTerminal;
   const showsRepoPromptInCurrentSession =
     isInteractiveTerminal() &&
     config.project.mode === "single" &&
@@ -138,7 +138,7 @@ export async function runCreateCommand(args: string[], deps: CreateCommandDeps =
         }
       : undefined;
 
-  if (isInteractiveTerminal() && !showsPromptInCurrentSession) {
+  if (!parsed.json && isInteractiveTerminal() && !showsPromptInCurrentSession) {
     process.stdout.write(`${renderPromptWizardHeader("ez-devbox")}\n\n`);
   }
 
@@ -146,10 +146,10 @@ export async function runCreateCommand(args: string[], deps: CreateCommandDeps =
     if (isInteractiveTerminal() && !parsed.json) {
       logger.info(SSH_SUSPEND_RESUME_HINT);
     }
-    if (loadedConfig) {
+    if (loadedConfig && !parsed.json) {
       logger.info(`Using launcher config: ${loadedConfig.configPath}`);
     }
-    if (tunnelConfigured) {
+    if (tunnelConfigured && !parsed.json) {
       logger.warn(TUNNEL_URL_WARNING_MESSAGE);
     }
     if (showsRepoPromptInCurrentSession && (loadedConfig || tunnelConfigured)) {
@@ -158,7 +158,16 @@ export async function runCreateCommand(args: string[], deps: CreateCommandDeps =
   }
 
   logger.verbose(`Resolving startup mode from '${requestedMode}'.`);
-  const mode = await deps.resolvePromptStartupMode(requestedMode, undefined, promptOptions);
+  const mode = await deps.resolvePromptStartupMode(
+    requestedMode,
+    parsed.json
+      ? {
+          isInteractiveTerminal: () => false,
+          promptInput: async () => "",
+        }
+      : undefined,
+    promptOptions,
+  );
   if (requestedMode === "prompt") {
     logger.verbose(`Startup mode selected via prompt: ${mode}.`);
   }
@@ -178,28 +187,12 @@ export async function runCreateCommand(args: string[], deps: CreateCommandDeps =
     process.stdout.write("\n");
   }
 
-  let stopLoading: (() => void) | undefined;
-  let completedStageMessage: string | undefined;
-  const showStageCompletion = process.stdout.isTTY === true && !isVerboseLoggingEnabled();
-  const clearLoadingIfRunning = (): void => {
-    stopLoading?.();
-    stopLoading = undefined;
-    completedStageMessage = undefined;
-  };
-  const stopLoadingWithCompletion = (): void => {
-    stopLoading?.();
-    stopLoading = undefined;
-    if (completedStageMessage && showStageCompletion) {
-      process.stdout.write(`${formatCompletedStage(completedStageMessage)}\n`);
-    }
-    completedStageMessage = undefined;
-  };
-  const setLoadingStage = (message: string, completionMessage: string): void => {
-    stopLoadingWithCompletion();
-    completedStageMessage = completionMessage;
-    stopLoading = logger.startLoading(message);
-  };
-  setLoadingStage("Preparing tunnel...", "Prepared tunnel");
+  const loading = createLoadingStageController({
+    enabled: !parsed.json,
+    showCompletion: process.stdout.isTTY === true && !isVerboseLoggingEnabled(),
+    honorForceColor: true,
+  });
+  loading.setStage("Preparing tunnel...", "Prepared tunnel");
 
   const resolvedMode = resolveStartupMode(mode);
   const displayName = buildSandboxDisplayName(config.project.repos, deps.now());
@@ -216,7 +209,7 @@ export async function runCreateCommand(args: string[], deps: CreateCommandDeps =
         };
   const runWithTunnel = deps.withConfiguredTunnel ?? withConfiguredTunnel;
   return runWithTunnel(config, async (tunnelRuntimeEnv) => {
-    setLoadingStage("Resolving environment...", "Resolved environment");
+    loading.setStage("Resolving environment...", "Resolved environment");
     const envSource = await deps.resolveEnvSource();
     const envResolution = deps.resolveSandboxCreateEnv(config, envSource);
     const ghRuntimeEnv = await resolveGhRuntimeEnv(config, envSource, deps.resolveHostGhToken);
@@ -230,7 +223,7 @@ export async function runCreateCommand(args: string[], deps: CreateCommandDeps =
     logger.verbose(`Creating sandbox with envs: ${formatEnvVarNames(createEnvs)}`);
 
     logger.verbose(`Creating sandbox '${displayName}' with template '${createConfig.sandbox.template}'.`);
-    setLoadingStage("Creating sandbox...", "Created sandbox");
+    loading.setStage("Creating sandbox...", "Created sandbox");
     const handle = await deps.createSandbox(createConfig, {
       envs: createEnvs,
       metadata: {
@@ -249,11 +242,11 @@ export async function runCreateCommand(args: string[], deps: CreateCommandDeps =
       });
 
       logger.verbose("Syncing local tooling config/auth.");
-      setLoadingStage("Transferring auth/config...", "Transferred auth/config");
+      loading.setStage("Transferring auth/config...", "Transferred auth/config");
       const syncSummary = await deps.syncToolingToSandbox(config, handle, resolvedMode);
       logger.verbose(`Tooling sync: ${formatToolingSyncSummary(syncSummary)}.`);
 
-      setLoadingStage("Bootstrapping workspace...", "Bootstrapped workspace");
+      loading.setStage("Bootstrapping workspace...", "Bootstrapped workspace");
       const bootstrapResult = await (deps.bootstrapProjectWorkspace ?? bootstrapProjectWorkspace)(handle, config, {
         isConnect: false,
         runtimeEnv,
@@ -264,9 +257,10 @@ export async function runCreateCommand(args: string[], deps: CreateCommandDeps =
       logger.verbose(`Setup outcome summary: ${formatSetupOutcomeSummary(bootstrapResult.setup)}.`);
 
       logger.verbose(`Launching startup mode '${mode}'.`);
-      setLoadingStage(`Launching ${resolvedMode}...`, `Launched ${resolvedMode}`);
+      loading.setStage(`Launching ${resolvedMode}...`, `Launched ${resolvedMode}`);
       const launchOptions = {
         workingDirectory: bootstrapResult.workingDirectory,
+        ...(parsed.json ? { nonInteractive: true } : {}),
         startupEnv: addWebServerPasswordForWebMode(
           {
             ...bootstrapResult.startupEnv,
@@ -283,7 +277,7 @@ export async function runCreateCommand(args: string[], deps: CreateCommandDeps =
         ...(isInteractiveTerminal() && resolvedMode === "ssh-opencode"
           ? {
               onLaunchStageUpdate: (loadingMessage: string, completionMessage: string) =>
-                setLoadingStage(loadingMessage, completionMessage),
+                loading.setStage(loadingMessage, completionMessage),
             }
           : {}),
       };
@@ -294,11 +288,11 @@ export async function runCreateCommand(args: string[], deps: CreateCommandDeps =
         shouldDelaySpinnerStopForInteractive
           ? {
               ...launchOptions,
-              onBeforeInteractiveSession: stopLoadingWithCompletion,
+              onBeforeInteractiveSession: loading.finish,
             }
           : launchOptions,
       );
-      stopLoadingWithCompletion();
+      loading.finish();
 
       const activeRepo =
         bootstrapResult.selectedRepoNames.length === 1 ? bootstrapResult.selectedRepoNames[0] : undefined;
@@ -333,6 +327,7 @@ export async function runCreateCommand(args: string[], deps: CreateCommandDeps =
             2,
           ),
           exitCode: 0,
+          json: true,
         };
       }
 
@@ -360,28 +355,9 @@ export async function runCreateCommand(args: string[], deps: CreateCommandDeps =
         cause: error,
       });
     } finally {
-      clearLoadingIfRunning();
+      loading.clear();
     }
   });
-}
-
-function formatCompletedStage(message: string): string {
-  const shouldColorize = shouldUseColor(process.stdout);
-  const check = shouldColorize ? `${ANSI_GREEN}✓${ANSI_RESET}` : "✓";
-  return `${check} ${message}`;
-}
-
-function shouldUseColor(output: NodeJS.WriteStream): boolean {
-  if (process.env.NO_COLOR !== undefined) {
-    return false;
-  }
-
-  const forceColor = process.env.FORCE_COLOR;
-  if (forceColor !== undefined && forceColor !== "0") {
-    return true;
-  }
-
-  return output.isTTY === true;
 }
 
 function toErrorMessage(error: unknown): string {

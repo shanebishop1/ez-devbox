@@ -15,4 +15,5 @@ export interface CommandResult {
   message: string;
   postMessages?: string[];
   exitCode?: number;
+  json?: boolean;
 }

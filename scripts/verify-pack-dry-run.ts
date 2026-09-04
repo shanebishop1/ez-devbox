@@ -5,6 +5,14 @@ const REQUIRED_PATHS = [
   "package.json",
   "README.md",
   "LICENSE",
+  "CHANGELOG.md",
+  "CONTRIBUTING.md",
+  "SECURITY.md",
+  ".env.example",
+  "ez-devbox.config.toml",
+  "docs/launcher-config-reference.md",
+  "examples/minimal/README.md",
+  "examples/minimal/ez-devbox.config.toml",
   "dist/src/cli/index.js",
   "dist/src/cli/index.d.ts",
   "scripts/ws-ssh-proxy.mjs",
@@ -22,6 +30,8 @@ interface NpmPackDryRunRecord {
 interface PackageJsonShape {
   bin?: Record<string, string>;
 }
+
+const REQUIRED_BINS = ["ez-devbox", "ezdb"] as const;
 
 function parsePackDryRunOutput(output: string): NpmPackDryRunRecord {
   const parsed: unknown = JSON.parse(output);
@@ -53,7 +63,13 @@ function assertRequiredPaths(filesSet: ReadonlySet<string>): void {
 
 function assertBinTarget(filesSet: ReadonlySet<string>): void {
   const packageJson = JSON.parse(readFileSync("package.json", "utf8")) as PackageJsonShape;
-  const binEntries = Object.values(packageJson.bin ?? {});
+  const bins = packageJson.bin ?? {};
+  const missingBins = REQUIRED_BINS.filter((name) => typeof bins[name] !== "string");
+  if (missingBins.length > 0) {
+    throw new Error(`package.json is missing required executable aliases: ${missingBins.join(", ")}`);
+  }
+
+  const binEntries = Object.values(bins);
   for (const relativePath of binEntries) {
     if (!filesSet.has(relativePath)) {
       throw new Error(`Pack dry-run is missing bin target '${relativePath}'.`);

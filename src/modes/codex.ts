@@ -1,6 +1,7 @@
 import type { SandboxHandle } from "../e2b/lifecycle.js";
 import { logger } from "../logging/logger.js";
 import type { LaunchContextOptions, ModeLaunchResult } from "./index.js";
+import { assertRemoteCommandSucceeded } from "./remote-command.js";
 import {
   buildInteractiveRemoteCommand,
   cleanupSshBridgeSession,
@@ -40,7 +41,7 @@ export async function startCodexMode(
   const commandContext = resolveCommandContext(launchContext);
   await ensureCodexCliAvailable(handle, commandContext);
 
-  if (!deps.isInteractiveTerminal()) {
+  if (launchContext.nonInteractive || !deps.isInteractiveTerminal()) {
     return runSmokeCheck(handle, commandContext);
   }
 
@@ -88,6 +89,7 @@ async function ensureCodexCliAvailable(
     ...(Object.keys(commandContext.envs).length > 0 ? { envs: commandContext.envs } : {}),
     timeoutMs: COMMAND_TIMEOUT_MS,
   });
+  assertRemoteCommandSucceeded(checkResult, "Codex CLI availability check");
 
   if (checkResult.stdout.trim() === "PRESENT") {
     logger.verbose("Codex CLI is available in sandbox.");
@@ -113,6 +115,7 @@ async function ensureCodexCliAvailable(
     ...(Object.keys(commandContext.envs).length > 0 ? { envs: commandContext.envs } : {}),
     timeoutMs: COMMAND_TIMEOUT_MS,
   });
+  assertRemoteCommandSucceeded(verifyResult, "Codex CLI post-install availability check");
 
   if (verifyResult.stdout.trim() !== "PRESENT") {
     throw new Error(
@@ -132,6 +135,7 @@ async function runSmokeCheck(
     ...(Object.keys(commandContext.envs).length > 0 ? { envs: commandContext.envs } : {}),
     timeoutMs: COMMAND_TIMEOUT_MS,
   });
+  assertRemoteCommandSucceeded(result, "Codex CLI smoke check");
 
   const output = firstNonEmptyLine(result.stdout, result.stderr);
 

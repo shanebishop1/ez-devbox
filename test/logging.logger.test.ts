@@ -99,6 +99,18 @@ describe("logger formatting", () => {
     }
   });
 
+  it("redacts sensitive values in info logs", () => {
+    const restoreStdout = setTty(process.stdout, false);
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => undefined);
+
+    try {
+      logger.info("loaded GH_TOKEN=secret");
+      expect(logSpy).toHaveBeenCalledWith("[INFO] loaded GH_TOKEN=[REDACTED]");
+    } finally {
+      restoreStdout();
+    }
+  });
+
   it("redacts sensitive values in error logs", () => {
     delete process.env.NO_COLOR;
     delete process.env.FORCE_COLOR;
@@ -145,6 +157,19 @@ describe("logger formatting", () => {
     try {
       logger.verbose("detail");
       expect(logSpy).toHaveBeenCalledWith("[INFO] detail");
+    } finally {
+      restoreStdout();
+    }
+  });
+
+  it("redacts sensitive values in verbose logs", () => {
+    const restoreStdout = setTty(process.stdout, false);
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    setVerboseLoggingEnabled(true);
+
+    try {
+      logger.verbose("detail OPENAI_API_KEY=secret");
+      expect(logSpy).toHaveBeenCalledWith("[INFO] detail OPENAI_API_KEY=[REDACTED]");
     } finally {
       restoreStdout();
     }

@@ -801,6 +801,9 @@ describe("project bootstrap", () => {
       if (command.includes("if [ -d '/workspace/alpha/.git' ]")) {
         return { stdout: "EZBOX_TRUE", stderr: "", exitCode: 0 };
       }
+      if (command === "git -C '/workspace/alpha' remote get-url origin") {
+        return { stdout: "https://example.com/alpha.git\n", stderr: "", exitCode: 0 };
+      }
       if (command.includes("rev-parse --abbrev-ref HEAD")) {
         return { stdout: "main\n", stderr: "", exitCode: 0 };
       }
@@ -855,6 +858,9 @@ describe("project bootstrap", () => {
       }
       if (command.includes("if [ -d '/workspace/alpha/.git' ]")) {
         return { stdout: "EZBOX_TRUE", stderr: "", exitCode: 0 };
+      }
+      if (command === "git -C '/workspace/alpha' remote get-url origin") {
+        return { stdout: "https://example.com/alpha.git\n", stderr: "", exitCode: 0 };
       }
       if (command.includes("rev-parse --abbrev-ref HEAD")) {
         return { stdout: "main\n", stderr: "", exitCode: 0 };

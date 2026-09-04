@@ -22,6 +22,10 @@ export async function allocateSshBridgePorts(
         { timeoutMs: SSH_SHORT_TIMEOUT_MS },
       );
 
+      if (result.exitCode !== 0) {
+        continue;
+      }
+
       const parsed = parseAllocatedPorts(result.stdout);
       if (parsed) {
         return parsed;

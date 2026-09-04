@@ -127,8 +127,7 @@ function main(): void {
     run("git", ["pull", "--ff-only", "origin", "main"]);
 
     run("npm", ["ci"]);
-    run("npm", ["run", "validate"]);
-    run("npm", ["run", "pack:check"]);
+    run("npm", ["run", "validate:offline"]);
 
     run("npm", ["version", bump]);
 

@@ -14,6 +14,7 @@ import { type BootstrapProjectWorkspaceResult, bootstrapProjectWorkspace } from 
 import { type LastRunState, loadLastRunState, saveLastRunState } from "../state/lastRun.js";
 import { withConfiguredTunnel } from "../tunnel/cloudflared.js";
 import type { CommandResult, StartupMode } from "../types/index.js";
+import { createLoadingStageController } from "./command-loading.js";
 import {
   addWebServerPasswordForWebMode,
   formatSelectedReposSummary,
@@ -26,7 +27,7 @@ import { resolveGhRuntimeEnv } from "./commands.connect.env.js";
 import { resolvePreferredActiveRepo, resolveSandboxTarget } from "./commands.connect.target.js";
 import { loadCliEnvSource } from "./env-source.js";
 import { renderPromptWizardHeader, SSH_SUSPEND_RESUME_HINT } from "./prompt-style.js";
-import { resolvePromptStartupMode } from "./startup-mode-prompt.js";
+import { resolvePromptStartupMode, type StartupModePromptDeps } from "./startup-mode-prompt.js";
 
 export interface ConnectCommandDeps {
   loadConfig: (options?: LoadConfigOptions) => ReturnType<typeof loadConfig>;
@@ -38,13 +39,14 @@ export interface ConnectCommandDeps {
   ) => Promise<SandboxHandle>;
   loadLastRunState: () => Promise<LastRunState | null>;
   listSandboxes: (options?: ListSandboxesOptions) => Promise<SandboxListItem[]>;
-  resolvePromptStartupMode: (requestedMode: StartupMode) => Promise<StartupMode>;
+  resolvePromptStartupMode: (requestedMode: StartupMode, deps?: StartupModePromptDeps) => Promise<StartupMode>;
   launchMode: (
     handle: SandboxHandle,
     mode: StartupMode,
     options?: {
       workingDirectory?: string;
       startupEnv?: Record<string, string>;
+      nonInteractive?: boolean;
       matchLocalOpenCodeVersion?: boolean;
       onBeforeInteractiveSession?: () => void;
     },
@@ -58,7 +60,12 @@ export interface ConnectCommandDeps {
   bootstrapProjectWorkspace?: (
     handle: SandboxHandle,
     config: Awaited<ReturnType<typeof loadConfig>>,
-    options?: { isConnect?: boolean; runtimeEnv?: Record<string, string>; onProgress?: (message: string) => void },
+    options?: {
+      isConnect?: boolean;
+      isInteractiveTerminal?: () => boolean;
+      runtimeEnv?: Record<string, string>;
+      onProgress?: (message: string) => void;
+    },
   ) => Promise<BootstrapProjectWorkspaceResult>;
   saveLastRunState: (state: LastRunState) => Promise<void>;
   isInteractiveTerminal?: () => boolean;
@@ -95,7 +102,8 @@ export async function runConnectCommand(
   const parsed = parseConnectArgs(args);
   const loadedConfig = deps.loadConfigWithMetadata ? await deps.loadConfigWithMetadata() : undefined;
   const config = loadedConfig ? loadedConfig.config : await deps.loadConfig();
-  const isInteractive = (deps.isInteractiveTerminal ?? (() => Boolean(process.stdin.isTTY && process.stdout.isTTY)))();
+  const isInteractive =
+    !parsed.json && (deps.isInteractiveTerminal ?? (() => Boolean(process.stdin.isTTY && process.stdout.isTTY)))();
   const requestedMode = parsed.mode ?? config.startup.mode;
   const showsPromptInCurrentSession = requestedMode === "prompt" && isInteractive;
 
@@ -108,33 +116,23 @@ export async function runConnectCommand(
   }
 
   const showLoading = Boolean(process.stdout.isTTY && !parsed.json);
-  let stopLoading: (() => void) | undefined;
-  let completedStageMessage: string | undefined;
-  const clearLoadingIfRunning = (): void => {
-    stopLoading?.();
-    stopLoading = undefined;
-    completedStageMessage = undefined;
-  };
-  const stopLoadingWithCompletion = (): void => {
-    stopLoading?.();
-    stopLoading = undefined;
-    if (completedStageMessage && showLoading) {
-      process.stdout.write(`${formatCompletedStage(completedStageMessage)}\n`);
-    }
-    completedStageMessage = undefined;
-  };
-  const setLoadingStage = (message: string, completionMessage: string): void => {
-    if (!showLoading) {
-      return;
-    }
-    stopLoadingWithCompletion();
-    completedStageMessage = completionMessage;
-    stopLoading = logger.startLoading(message);
-  };
-  const target = await resolveSandboxTarget(parsed.sandboxId, deps, options);
+  const loading = createLoadingStageController({ enabled: showLoading, showCompletion: showLoading });
+  const target = await resolveSandboxTarget(
+    parsed.sandboxId,
+    {
+      ...deps,
+      ...(parsed.json ? { isInteractiveTerminal: () => false } : {}),
+    },
+    options,
+  );
   const targetLabel = target.label ?? target.sandboxId;
   logger.verbose(`Resolving startup mode from '${requestedMode}'.`);
-  const mode = await deps.resolvePromptStartupMode(requestedMode);
+  const mode = parsed.json
+    ? await deps.resolvePromptStartupMode(requestedMode, {
+        isInteractiveTerminal: () => false,
+        promptInput: async () => "",
+      })
+    : await deps.resolvePromptStartupMode(requestedMode);
   const resolvedMode = resolveStartupMode(mode);
   if (requestedMode === "prompt") {
     logger.verbose(`Startup mode selected via prompt: ${mode}.`);
@@ -145,10 +143,10 @@ export async function runConnectCommand(
   }
   const preferredActiveRepo = await resolvePreferredActiveRepo(config, target.sandboxId, deps, options);
 
-  setLoadingStage("Preparing tunnel...", "Prepared tunnel");
+  loading.setStage("Preparing tunnel...", "Prepared tunnel");
   return withConfiguredTunnel(config, async (tunnelRuntimeEnv) => {
     logger.verbose(`Connecting to sandbox ${targetLabel}.`);
-    setLoadingStage("Connecting to sandbox...", "Connected to sandbox");
+    loading.setStage("Connecting to sandbox...", "Connected to sandbox");
     const handle = await deps.connectSandbox(target.sandboxId, config);
     logger.verbose(`Connected to sandbox ${targetLabel}.`);
 
@@ -173,9 +171,10 @@ export async function runConnectCommand(
     });
     const webServerPassword = resolveWebServerPassword(envSource);
 
-    setLoadingStage("Bootstrapping workspace...", "Bootstrapped workspace");
+    loading.setStage("Bootstrapping workspace...", "Bootstrapped workspace");
     const bootstrapResult = await (deps.bootstrapProjectWorkspace ?? bootstrapProjectWorkspace)(handle, config, {
       isConnect: true,
+      ...(parsed.json ? { isInteractiveTerminal: () => false } : {}),
       preferredActiveRepo,
       runtimeEnv,
       onProgress: (message) => logger.verbose(`Bootstrap: ${message}`),
@@ -189,9 +188,10 @@ export async function runConnectCommand(
     }
 
     logger.verbose(`Launching startup mode '${mode}'.`);
-    setLoadingStage(`Launching ${resolvedMode}...`, `Launched ${resolvedMode}`);
+    loading.setStage(`Launching ${resolvedMode}...`, `Launched ${resolvedMode}`);
     const launched = await deps.launchMode(handle, mode, {
       workingDirectory: bootstrapResult.workingDirectory,
+      ...(parsed.json ? { nonInteractive: true } : {}),
       startupEnv: addWebServerPasswordForWebMode(
         {
           ...bootstrapResult.startupEnv,
@@ -208,13 +208,13 @@ export async function runConnectCommand(
       ...(resolvedMode !== "web" && showLoading
         ? {
             onBeforeInteractiveSession: () => {
-              stopLoadingWithCompletion();
+              loading.finish();
               process.stdout.write("\n");
             },
           }
         : {}),
     });
-    stopLoadingWithCompletion();
+    loading.finish();
 
     const activeRepo =
       bootstrapResult.selectedRepoNames.length === 1 ? bootstrapResult.selectedRepoNames[0] : undefined;
@@ -247,6 +247,7 @@ export async function runConnectCommand(
           2,
         ),
         exitCode: 0,
+        json: true,
       };
     }
 
@@ -260,15 +261,6 @@ export async function runConnectCommand(
           exitCode: 0,
         };
   }).finally(() => {
-    clearLoadingIfRunning();
+    loading.clear();
   });
-}
-
-const ANSI_GREEN = "\u001b[32m";
-const ANSI_RESET = "\u001b[0m";
-
-function formatCompletedStage(message: string): string {
-  const shouldColorize = process.stdout.isTTY === true && process.env.NO_COLOR === undefined;
-  const check = shouldColorize ? `${ANSI_GREEN}✓${ANSI_RESET}` : "✓";
-  return `${check} ${message}`;
 }

@@ -55,18 +55,22 @@ export async function runCommandCommand(
   const parsed = parseCommandArgs(args);
   const loadedConfig = deps.loadConfigWithMetadata ? await deps.loadConfigWithMetadata() : undefined;
   const config = loadedConfig ? loadedConfig.config : await deps.loadConfig();
-  if (loadedConfig) {
+  const commandDeps = {
+    ...deps,
+    ...(parsed.json ? { isInteractiveTerminal: () => false } : {}),
+  };
+  if (loadedConfig && !parsed.json) {
     logger.info(`Using launcher config: ${loadedConfig.configPath}`);
   }
   return withConfiguredTunnel(config, async (tunnelRuntimeEnv) => {
-    const sandboxTarget = await resolveSandboxTarget(parsed.sandboxId, deps);
+    const sandboxTarget = await resolveSandboxTarget(parsed.sandboxId, commandDeps);
     const selectedRepos = await resolveSelectedRepos(
       config.project.repos,
       config.project.mode,
       config.project.active,
       config.project.active_name,
       config.project.active_index,
-      deps,
+      commandDeps,
     );
     const cwd = resolveCommandWorkingDirectory(config.project.dir, selectedRepos);
     const envSource = deps.resolveEnvSource ? await deps.resolveEnvSource() : {};
@@ -105,6 +109,7 @@ export async function runCommandCommand(
           2,
         ),
         exitCode: result.exitCode,
+        json: true,
       };
     }
 

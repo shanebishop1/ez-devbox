@@ -34,6 +34,7 @@ export async function runListCommand(_args: string[], deps: ListCommandDeps = de
     return {
       message: JSON.stringify({ sandboxes: formattedSandboxes }, null, 2),
       exitCode: 0,
+      json: true,
     };
   }
 

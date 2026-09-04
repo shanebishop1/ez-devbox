@@ -14,7 +14,7 @@ describe("runWipeAllCommand", () => {
 
       await runWipeAllCommand(["--yes"], {
         listSandboxes,
-        killSandbox: vi.fn().mockResolvedValue(undefined),
+        killSandbox: vi.fn().mockResolvedValue(true),
         isInteractiveTerminal: () => false,
         promptInput: vi.fn().mockResolvedValue("yes"),
         loadLastRunState: vi.fn().mockResolvedValue(null),
@@ -38,7 +38,7 @@ describe("runWipeAllCommand", () => {
     await expect(
       runWipeAllCommand(["--bad"], {
         listSandboxes: vi.fn().mockResolvedValue([]),
-        killSandbox: vi.fn().mockResolvedValue(undefined),
+        killSandbox: vi.fn().mockResolvedValue(true),
         isInteractiveTerminal: () => false,
         promptInput: vi.fn().mockResolvedValue("yes"),
         loadLastRunState: vi.fn().mockResolvedValue(null),
@@ -48,7 +48,7 @@ describe("runWipeAllCommand", () => {
   });
 
   it("deletes all sandboxes with --yes", async () => {
-    const killSandbox = vi.fn().mockResolvedValue(undefined);
+    const killSandbox = vi.fn().mockResolvedValue(true);
 
     const result = await runWipeAllCommand(["--yes"], {
       listSandboxes: vi.fn().mockResolvedValue([
@@ -68,8 +68,22 @@ describe("runWipeAllCommand", () => {
     expect(result.message).toBe("Wiped 2 sandboxes: Alpha (sbx-1), Beta (sbx-2).");
   });
 
+  it("reports a false E2B kill result as a failure", async () => {
+    const result = await runWipeAllCommand(["--yes"], {
+      listSandboxes: vi.fn().mockResolvedValue([{ sandboxId: "sbx-1", state: "running" }]),
+      killSandbox: vi.fn().mockResolvedValue(false),
+      isInteractiveTerminal: () => false,
+      promptInput: vi.fn(),
+      loadLastRunState: vi.fn().mockResolvedValue(null),
+      clearLastRunState: vi.fn().mockResolvedValue(undefined),
+    });
+
+    expect(result.exitCode).toBe(1);
+    expect(result.message).toContain("Failed to wipe 1 sandbox: sbx-1 (E2B reported the sandbox was not killed).");
+  });
+
   it("accepts interactive confirmation and wipes", async () => {
-    const killSandbox = vi.fn().mockResolvedValue(undefined);
+    const killSandbox = vi.fn().mockResolvedValue(true);
     const promptInput = vi.fn().mockResolvedValue("y");
 
     const result = await runWipeAllCommand([], {
@@ -89,7 +103,7 @@ describe("runWipeAllCommand", () => {
   });
 
   it("rejects interactive confirmation and does not wipe", async () => {
-    const killSandbox = vi.fn().mockResolvedValue(undefined);
+    const killSandbox = vi.fn().mockResolvedValue(true);
 
     const result = await runWipeAllCommand([], {
       listSandboxes: vi.fn().mockResolvedValue([{ sandboxId: "sbx-1", state: "running" }]),
@@ -108,7 +122,7 @@ describe("runWipeAllCommand", () => {
     await expect(
       runWipeAllCommand([], {
         listSandboxes: vi.fn().mockResolvedValue([{ sandboxId: "sbx-1", state: "running" }]),
-        killSandbox: vi.fn().mockResolvedValue(undefined),
+        killSandbox: vi.fn().mockResolvedValue(true),
         isInteractiveTerminal: () => false,
         promptInput: vi.fn().mockResolvedValue("yes"),
         loadLastRunState: vi.fn().mockResolvedValue(null),
@@ -120,7 +134,7 @@ describe("runWipeAllCommand", () => {
   it("returns success when there are no sandboxes", async () => {
     const result = await runWipeAllCommand([], {
       listSandboxes: vi.fn().mockResolvedValue([]),
-      killSandbox: vi.fn().mockResolvedValue(undefined),
+      killSandbox: vi.fn().mockResolvedValue(true),
       isInteractiveTerminal: () => false,
       promptInput: vi.fn().mockResolvedValue("yes"),
       loadLastRunState: vi.fn().mockResolvedValue(null),
@@ -135,7 +149,7 @@ describe("runWipeAllCommand", () => {
 
     await runWipeAllCommand(["--yes"], {
       listSandboxes: vi.fn().mockResolvedValue([{ sandboxId: "sbx-1", state: "running" }]),
-      killSandbox: vi.fn().mockResolvedValue(undefined),
+      killSandbox: vi.fn().mockResolvedValue(true),
       isInteractiveTerminal: () => false,
       promptInput: vi.fn().mockResolvedValue("yes"),
       loadLastRunState: vi
@@ -150,9 +164,9 @@ describe("runWipeAllCommand", () => {
   it("continues deleting remaining sandboxes when one deletion fails", async () => {
     const killSandbox = vi
       .fn()
-      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce(true)
       .mockRejectedValueOnce(new Error("api timeout"))
-      .mockResolvedValueOnce(undefined);
+      .mockResolvedValueOnce(true);
 
     const result = await runWipeAllCommand(["--yes"], {
       listSandboxes: vi.fn().mockResolvedValue([
@@ -181,7 +195,7 @@ describe("runWipeAllCommand", () => {
         { sandboxId: "sbx-1", state: "running" },
         { sandboxId: "sbx-2", state: "running" },
       ]),
-      killSandbox: vi.fn().mockResolvedValueOnce(undefined).mockRejectedValueOnce(new Error("permission denied")),
+      killSandbox: vi.fn().mockResolvedValueOnce(true).mockRejectedValueOnce(new Error("permission denied")),
       isInteractiveTerminal: () => false,
       promptInput: vi.fn().mockResolvedValue("yes"),
       loadLastRunState: vi

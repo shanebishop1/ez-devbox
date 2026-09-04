@@ -21,6 +21,7 @@ export interface ModeLaunchResult {
 export interface LaunchContextOptions {
   workingDirectory?: string;
   startupEnv?: Record<string, string>;
+  nonInteractive?: boolean;
   onBeforeInteractiveSession?: () => void;
   onLaunchStageUpdate?: (loadingMessage: string, completionMessage: string) => void;
   matchLocalOpenCodeVersion?: boolean;
@@ -30,6 +31,7 @@ export interface LaunchModeOptions {
   promptFallbackMode?: ConcreteStartupMode;
   workingDirectory?: string;
   startupEnv?: Record<string, string>;
+  nonInteractive?: boolean;
   onBeforeInteractiveSession?: () => void;
   onLaunchStageUpdate?: (loadingMessage: string, completionMessage: string) => void;
   matchLocalOpenCodeVersion?: boolean;
@@ -64,6 +66,7 @@ export async function launchMode(
     promptFallbackMode,
     workingDirectory,
     startupEnv,
+    nonInteractive,
     onBeforeInteractiveSession,
     onLaunchStageUpdate,
     matchLocalOpenCodeVersion,
@@ -72,6 +75,7 @@ export async function launchMode(
   return MODE_RUNNERS[resolvedMode](handle, {
     workingDirectory,
     startupEnv,
+    nonInteractive,
     onBeforeInteractiveSession,
     onLaunchStageUpdate,
     matchLocalOpenCodeVersion,

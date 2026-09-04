@@ -3,11 +3,13 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import type { SandboxHandle } from "../src/e2b/lifecycle.js";
+import { ensureSshBridgeDependencies } from "../src/modes/ssh-bridge.dependencies.js";
 import {
   allocateSshBridgePorts,
   buildInteractiveRemoteCommand,
   buildSshClientArgs,
   cleanupSshBridgeSession,
+  prepareSshBridgeSession,
   type SshBridgeSession,
   stageInteractiveStartupEnv,
 } from "../src/modes/ssh-bridge.js";
@@ -32,6 +34,29 @@ describe("ssh bridge security behavior", () => {
       "Unable to allocate SSH bridge ports after 2 attempts.",
     );
     expect(run).toHaveBeenCalledTimes(2);
+  });
+
+  it("allocateSshBridgePorts ignores marker output from nonzero results", async () => {
+    const run = vi
+      .fn()
+      .mockResolvedValueOnce({ stdout: "24123 24124", stderr: "occupied", exitCode: 1 })
+      .mockResolvedValueOnce({ stdout: "25123 25124", stderr: "", exitCode: 0 });
+
+    await expect(allocateSshBridgePorts({ run } as Pick<SandboxHandle, "run">, "session-abc", 2)).resolves.toEqual({
+      sshdPort: 25123,
+      websockifyPort: 25124,
+    });
+  });
+
+  it("rejects a nonzero SSH bridge dependency install result", async () => {
+    const run = vi
+      .fn()
+      .mockResolvedValueOnce({ stdout: "MISSING", stderr: "", exitCode: 0 })
+      .mockResolvedValueOnce({ stdout: "", stderr: "apt failed", exitCode: 17 });
+
+    await expect(ensureSshBridgeDependencies({ run })).rejects.toThrow(
+      "SSH bridge dependency installation failed with exit code 17: apt failed",
+    );
   });
 
   it("buildSshClientArgs enforces strict host key verification", () => {
@@ -121,6 +146,40 @@ describe("ssh bridge security behavior", () => {
     await expect(access(tempDir)).rejects.toBeDefined();
   });
 
+  it("prepareSshBridgeSession removes local keys and partial remote artifacts after failure", async () => {
+    let sessionDir = "";
+    const run = vi.fn().mockImplementation(async (command: string) => {
+      if (command.includes("command -v websockify")) {
+        return { stdout: "READY", stderr: "", exitCode: 0 };
+      }
+      if (command === "whoami") {
+        return { stdout: "user", stderr: "", exitCode: 0 };
+      }
+      if (command.includes('printf %s "$HOME"')) {
+        return { stdout: "/home/user", stderr: "", exitCode: 0 };
+      }
+      if (command.includes("sshd_port=")) {
+        return { stdout: "24000 24001", stderr: "", exitCode: 0 };
+      }
+      if (command.includes("mkdir -p") && command.includes(".ez-devbox-ssh")) {
+        sessionDir = command.match(/'\/home\/user\/\.ez-devbox-ssh\/(ez-devbox-ssh-[^']+)'/)?.[1] ?? "";
+        return { stdout: "", stderr: "", exitCode: 0 };
+      }
+      if (command.includes("base64 -d") && command.includes("authorized_keys")) {
+        throw new Error("remote write failed");
+      }
+      return { stdout: "", stderr: "", exitCode: 0 };
+    });
+
+    await expect(prepareSshBridgeSession(createHandle({ run }))).rejects.toThrow("remote write failed");
+
+    expect(sessionDir).not.toBe("");
+    await expect(access(join(tmpdir(), sessionDir))).rejects.toBeDefined();
+    expect(run.mock.calls.some((call) => call[0].includes(`rm -rf '/home/user/.ez-devbox-ssh/${sessionDir}'`))).toBe(
+      true,
+    );
+  });
+
   it("stageInteractiveStartupEnv writes restrictive env script with valid keys only", async () => {
     const run = vi.fn().mockResolvedValue({ stdout: "", stderr: "", exitCode: 0 });
     const handle = createHandle({ run });
@@ -157,6 +216,35 @@ describe("ssh bridge security behavior", () => {
       timeoutMs: 15_000,
     });
     expect(session.startupEnvScriptPath).toBe("/home/user/.ez-devbox-ssh/ssh-test/startup-env.sh");
+  });
+
+  it("rejects a nonzero startup environment staging result", async () => {
+    const handle = createHandle({
+      run: vi.fn().mockResolvedValue({ stdout: "", stderr: "permission denied", exitCode: 1 }),
+    });
+    const session: SshBridgeSession = {
+      tempDir: "/tmp/local-session",
+      privateKeyPath: "/tmp/local-session/id_ed25519",
+      knownHostsPath: "/tmp/local-session/known_hosts",
+      wsUrl: "wss://8081-sbx.e2b.app",
+      artifacts: {
+        sessionDir: "/home/user/.ez-devbox-ssh/ssh-test",
+        authorizedKeysPath: "/home/user/.ez-devbox-ssh/ssh-test/authorized_keys",
+        hostPrivateKeyPath: "/home/user/.ez-devbox-ssh/ssh-test/host-ed25519",
+        hostPublicKeyPath: "/home/user/.ez-devbox-ssh/ssh-test/host-ed25519.pub",
+        sshdPort: 2222,
+        websockifyPort: 8081,
+        sshdConfigPath: "/home/user/.ez-devbox-ssh/ssh-test/sshd_config",
+        sshdPidPath: "/home/user/.ez-devbox-ssh/ssh-test/sshd.pid",
+        websockifyPidPath: "/home/user/.ez-devbox-ssh/ssh-test/websockify.pid",
+        websockifyLogPath: "/home/user/.ez-devbox-ssh/ssh-test/websockify.log",
+      },
+    };
+
+    await expect(stageInteractiveStartupEnv(handle, session, { GOOD_KEY: "value" })).rejects.toThrow(
+      "SSH bridge startup environment staging failed with exit code 1",
+    );
+    expect(session.startupEnvScriptPath).toBeUndefined();
   });
 
   it("buildInteractiveRemoteCommand sources staged env script", () => {

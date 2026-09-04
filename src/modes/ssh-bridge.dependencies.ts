@@ -1,6 +1,7 @@
 import { setTimeout as sleep } from "node:timers/promises";
 import type { SandboxHandle } from "../e2b/lifecycle.js";
 import { logger } from "../logging/logger.js";
+import { assertRemoteCommandSucceeded } from "./remote-command.js";
 import {
   APT_LOCK_RETRY_ATTEMPTS,
   APT_LOCK_RETRY_DELAY_MS,
@@ -18,7 +19,8 @@ export async function ensureSshBridgeDependencies(handle: Pick<SandboxHandle, "r
 
   for (let attempt = 1; attempt <= APT_LOCK_RETRY_ATTEMPTS; attempt += 1) {
     try {
-      await handle.run(installCommand, { timeoutMs: SSH_SETUP_TIMEOUT_MS });
+      const installResult = await handle.run(installCommand, { timeoutMs: SSH_SETUP_TIMEOUT_MS });
+      assertRemoteCommandSucceeded(installResult, "SSH bridge dependency installation");
       if (await hasSshBridgeDependencies(handle)) {
         return;
       }
@@ -41,6 +43,7 @@ async function hasSshBridgeDependencies(handle: Pick<SandboxHandle, "run">): Pro
     "bash -lc 'if [ -x /usr/sbin/sshd ] && command -v websockify >/dev/null 2>&1 && command -v ssh-keygen >/dev/null 2>&1 && command -v tmux >/dev/null 2>&1; then printf READY; else printf MISSING; fi'",
     { timeoutMs: SSH_SHORT_TIMEOUT_MS },
   );
+  assertRemoteCommandSucceeded(result, "SSH bridge dependency check");
 
   return result.stdout.trim() === "READY";
 }

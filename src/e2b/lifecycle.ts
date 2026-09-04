@@ -127,10 +127,10 @@ export async function listSandboxes(opts?: ListSandboxesOptions): Promise<Sandbo
   return sandboxes.map(mapSandboxSummary);
 }
 
-export async function killSandbox(sandboxId: string, opts?: LifecycleOperationOptions): Promise<void> {
+export async function killSandbox(sandboxId: string, opts?: LifecycleOperationOptions): Promise<boolean> {
   const client = opts?.client ?? createE2BClient();
 
-  await withLifecycleError(`Failed to kill sandbox '${sandboxId}'`, () =>
+  return withLifecycleError(`Failed to kill sandbox '${sandboxId}'`, () =>
     client.kill(sandboxId, {
       requestTimeoutMs: opts?.requestTimeoutMs,
     }),

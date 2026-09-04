@@ -23,6 +23,10 @@ import {
   UNSUPPORTED_SYNC_FILE_EXTENSIONS,
 } from "./host-sandbox-sync.constants.js";
 import { discoverDirectoryFiles, pathExists, shouldSkipSyncFile } from "./host-sandbox-sync.fs.js";
+import {
+  restrictSandboxDirectoryPermissions,
+  restrictSandboxFilePermissions,
+} from "./host-sandbox-sync.permissions.js";
 
 export interface HostPathResolveOptions {
   homeDir?: string;
@@ -67,7 +71,7 @@ export interface ToolingSyncSummary {
 }
 
 type ToolingSyncConfig = Pick<ResolvedLauncherConfig, "opencode" | "codex" | "claude" | "gh">;
-type SandboxWritableHandle = Pick<SandboxHandle, "writeFile">;
+type SandboxWritableHandle = Pick<SandboxHandle, "writeFile"> & Partial<Pick<SandboxHandle, "run">>;
 
 export function resolveHostPath(inputPath: string, options: HostPathResolveOptions = {}): string {
   const homeDir = options.homeDir ?? process.env.HOME ?? homedir();
@@ -244,6 +248,9 @@ async function syncDirectory(
     }
   }
   pruneSandboxPrefix(syncState, ensureDirectoryPrefix(sandboxDirectoryPath), syncedPaths);
+  if (files.length > 0) {
+    await restrictSandboxDirectoryPermissions(sandbox, sandboxDirectoryPath);
+  }
 
   return {
     skippedMissing: false,
@@ -283,6 +290,7 @@ async function syncFile(
     syncState.set(sandboxFilePath, fileDigest);
     filesWritten = 1;
   }
+  await restrictSandboxFilePermissions(sandbox, sandboxFilePath);
 
   return {
     skippedMissing: false,

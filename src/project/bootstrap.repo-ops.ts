@@ -1,4 +1,4 @@
-import { join } from "node:path";
+import { posix } from "node:path";
 import type { ResolvedProjectRepoConfig } from "../config/schema.js";
 import type { SandboxHandle } from "../e2b/lifecycle.js";
 import { type GitAdapter, type ProvisionedRepoSummary, provisionRepos, type RepoExecutor } from "../repo/manager.js";
@@ -49,7 +49,7 @@ export async function provisionSelectedRepos(
       options.onProgress?.(`Repo validate git: ${path}`);
       return runBoolCheck(
         handle,
-        `if [ -d ${quoteShellArg(join(path, ".git"))} ]; then printf EZBOX_TRUE; else printf EZBOX_FALSE; fi`,
+        `if [ -d ${quoteShellArg(posix.join(path, ".git"))} ]; then printf EZBOX_TRUE; else printf EZBOX_FALSE; fi`,
         {
           timeoutMs: options.timeoutMs,
           commandLabel: `check git repo '${path}'`,
@@ -67,6 +67,14 @@ export async function provisionSelectedRepos(
         timeoutMs: options.timeoutMs,
         commandLabel: `clone repo '${targetPath}'`,
       });
+    },
+    async getOriginUrl(repoPath) {
+      options.onProgress?.(`Repo origin detect: ${repoPath}`);
+      const result = await runRequiredCommand(handle, `git -C ${quoteShellArg(repoPath)} remote get-url origin`, {
+        timeoutMs: options.timeoutMs,
+        commandLabel: `detect origin URL '${repoPath}'`,
+      });
+      return result.stdout.trim();
     },
     async getCurrentBranch(repoPath) {
       options.onProgress?.(`Repo branch detect: ${repoPath}`);

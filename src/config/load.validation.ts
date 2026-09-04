@@ -20,6 +20,23 @@ export function validateResolvedLauncherConfig(resolved: ResolvedLauncherConfig)
     throw new Error("Invalid project.setup_concurrency: expected an integer greater than or equal to 1.");
   }
 
+  if (resolved.project.dir.trim() === "") {
+    throw new Error("Invalid project.dir: expected a non-empty path string.");
+  }
+
+  const repoNames = new Set<string>();
+  for (const [index, repo] of resolved.project.repos.entries()) {
+    if (!isSafePosixPathComponent(repo.name)) {
+      throw new Error(
+        `Invalid project.repos[${index}].name: expected a safe single POSIX path component without slashes, dot segments, surrounding whitespace, or control characters.`,
+      );
+    }
+    if (repoNames.has(repo.name)) {
+      throw new Error(`Invalid project.repos[${index}].name: duplicate repo name '${repo.name}' is not allowed.`);
+    }
+    repoNames.add(repo.name);
+  }
+
   if (resolved.project.working_dir !== "auto" && resolved.project.working_dir.trim() === "") {
     throw new Error("Invalid project.working_dir: expected 'auto' or a non-empty path string.");
   }
@@ -28,6 +45,9 @@ export function validateResolvedLauncherConfig(resolved: ResolvedLauncherConfig)
     const activeName = resolved.project.active_name?.trim();
     if (!activeName) {
       throw new Error("Invalid project.active_name: required when project.active is 'name'.");
+    }
+    if (!repoNames.has(activeName)) {
+      throw new Error(`Invalid project.active_name: repo '${activeName}' does not exist in project.repos.`);
     }
   }
 
@@ -101,4 +121,25 @@ export function validateResolvedLauncherConfig(resolved: ResolvedLauncherConfig)
 
     seenTunnelPorts.add(port);
   }
+}
+
+function isSafePosixPathComponent(value: string): boolean {
+  return (
+    value !== "" &&
+    value === value.trim() &&
+    value !== "." &&
+    value !== ".." &&
+    !value.includes("/") &&
+    !containsControlCharacter(value)
+  );
+}
+
+function containsControlCharacter(value: string): boolean {
+  for (const character of value) {
+    const codePoint = character.codePointAt(0);
+    if (codePoint !== undefined && (codePoint <= 31 || codePoint === 127)) {
+      return true;
+    }
+  }
+  return false;
 }

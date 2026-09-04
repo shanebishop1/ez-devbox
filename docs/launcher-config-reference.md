@@ -9,6 +9,12 @@ ez-devbox resolves config in this order:
 
 If neither file exists and a TTY is available, ez-devbox prompts to create a starter config locally or globally.
 
+The package includes a complete example at `examples/minimal/ez-devbox.config.toml`. From an arbitrary directory, you can also download it from:
+
+```text
+https://raw.githubusercontent.com/shanebishop1/ez-devbox/main/examples/minimal/ez-devbox.config.toml
+```
+
 ## Last-run state location
 
 Last-run state is runtime metadata (not a launcher config field). By default it is stored at:
@@ -45,6 +51,8 @@ setup_command = "npm install"
 - `name` (string): base display name prefix used in launcher metadata.
 - `timeout_ms` (number): sandbox timeout in milliseconds; must be a positive integer.
 - `delete_on_exit` (boolean): currently reserved and not used to change runtime behavior.
+
+The timeout is sent when the sandbox is created. A later `connect` does not refresh it. Exiting or detaching from the local CLI does not delete the sandbox; use `wipe`/`wipe-all` for explicit cleanup.
 
 ## `[startup]`
 
@@ -132,4 +140,5 @@ When `project.working_dir = "auto"`, working directory behavior after repo selec
 - Docker fallback rewrites only localhost-style upstreams (`127.0.0.1`, `localhost`, `0.0.0.0`) to `host.docker.internal`; remote hosts/IPs are kept unchanged.
 - Runtime exports generic env vars: `EZ_DEVBOX_TUNNEL_<PORT>_URL`, `EZ_DEVBOX_TUNNELS_JSON`, and `EZ_DEVBOX_TUNNEL_PORTS`; `EZ_DEVBOX_TUNNEL_URL` is set only when exactly one tunnel is active.
 - On `create`, ez-devbox emits a warning reminding that anyone with a tunnel URL can access the forwarded service.
+- Quick tunnels run on the host only for the enclosing CLI operation and are stopped when it completes or receives a handled termination signal. Their public URLs are unauthenticated bearer links unless the upstream service enforces authentication.
 - Runtime prefers local `cloudflared`; if missing, it falls back to `docker run cloudflare/cloudflared:2024.11.0`.

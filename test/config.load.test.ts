@@ -187,6 +187,59 @@ describe("loadConfig", () => {
     await expect(loadConfig({ configPath, envPath })).rejects.toThrow("project.working_dir");
   });
 
+  it("rejects empty project.dir", async () => {
+    const configPath = join(tempDir, "ez-devbox.config.toml");
+    const envPath = join(tempDir, ".env");
+
+    await writeFile(configPath, ["[project]", 'dir = "   "'].join("\n"));
+    await writeFile(envPath, "E2B_API_KEY=test-e2b-key\n");
+
+    await expect(loadConfig({ configPath, envPath })).rejects.toThrow("project.dir");
+  });
+
+  it.each([
+    "../escape",
+    "nested/repo",
+    ".",
+    "..",
+    " leading",
+    "trailing ",
+    "line\\nbreak",
+  ])("rejects unsafe repo name %j", async (name) => {
+    const configPath = join(tempDir, "ez-devbox.config.toml");
+    const envPath = join(tempDir, ".env");
+    const tomlName = name.replace("\\n", "\\u000a");
+
+    await writeFile(
+      configPath,
+      ["[[project.repos]]", `name = "${tomlName}"`, 'url = "https://example.com/repo.git"'].join("\n"),
+    );
+    await writeFile(envPath, "E2B_API_KEY=test-e2b-key\n");
+
+    await expect(loadConfig({ configPath, envPath })).rejects.toThrow("safe single POSIX path component");
+  });
+
+  it("rejects duplicate repo names", async () => {
+    const configPath = join(tempDir, "ez-devbox.config.toml");
+    const envPath = join(tempDir, ".env");
+
+    await writeFile(
+      configPath,
+      [
+        "[[project.repos]]",
+        'name = "alpha"',
+        'url = "https://example.com/alpha.git"',
+        "",
+        "[[project.repos]]",
+        'name = "alpha"',
+        'url = "https://example.com/other.git"',
+      ].join("\n"),
+    );
+    await writeFile(envPath, "E2B_API_KEY=test-e2b-key\n");
+
+    await expect(loadConfig({ configPath, envPath })).rejects.toThrow("duplicate repo name 'alpha'");
+  });
+
   it("accepts project.setup_concurrency override", async () => {
     const configPath = join(tempDir, "ez-devbox.config.toml");
     const envPath = join(tempDir, ".env");
@@ -351,6 +404,27 @@ describe("loadConfig", () => {
     await writeFile(envPath, "E2B_API_KEY=test-e2b-key\n");
 
     await expect(loadConfig({ configPath, envPath })).rejects.toThrow("project.active_name");
+  });
+
+  it("rejects active_name that does not exist in project.repos", async () => {
+    const configPath = join(tempDir, "ez-devbox.config.toml");
+    const envPath = join(tempDir, ".env");
+
+    await writeFile(
+      configPath,
+      [
+        "[project]",
+        'active = "name"',
+        'active_name = "missing"',
+        "",
+        "[[project.repos]]",
+        'name = "alpha"',
+        'url = "https://example.com/alpha.git"',
+      ].join("\n"),
+    );
+    await writeFile(envPath, "E2B_API_KEY=test-e2b-key\n");
+
+    await expect(loadConfig({ configPath, envPath })).rejects.toThrow("repo 'missing' does not exist");
   });
 
   it("accepts project.active_index when active mode is index", async () => {

@@ -1,7 +1,7 @@
 {
   "name": "ez-devbox",
-  "version": "0.5.5",
-  "description": "CLI for creating, reconnecting, and launching E2B sandboxes",
+  "version": "0.6.0",
+  "description": "Launch and reconnect disposable E2B sandboxes for coding-agent workflows",
   "main": "dist/src/cli/index.js",
   "types": "dist/src/cli/index.d.ts",
   "bin": {
@@ -10,7 +10,14 @@
   },
   "files": [
     "dist",
-    "scripts/ws-ssh-proxy.mjs"
+    "docs",
+    "examples",
+    "scripts/ws-ssh-proxy.mjs",
+    ".env.example",
+    "ez-devbox.config.toml",
+    "CHANGELOG.md",
+    "CONTRIBUTING.md",
+    "SECURITY.md"
   ],
   "private": false,
   "type": "module",
@@ -33,7 +40,8 @@
     "lint": "biome lint src test scripts package.json",
     "format": "biome format --write src test scripts package.json",
     "check:style": "biome check src test scripts package.json",
-    "validate": "npm run check:complexity && npm run check:style && npm run test && npm run build && npm run e2e:live",
+    "validate:offline": "npm run check:complexity && npm run check:style && npm run test && npm run build && npm run pack:check",
+    "validate": "npm run validate:offline && npm run e2e:live",
     "test": "vitest run",
     "e2e:live": "tsx scripts/e2e.live.ts",
     "template:build": "tsx templates/build.ts",
@@ -44,8 +52,16 @@
     "e2b",
     "sandbox",
     "cli",
+    "developer-tools",
+    "coding-agents",
+    "remote-development",
+    "dev-environment",
     "reconnect",
-    "opencode"
+    "opencode",
+    "codex",
+    "claude-code",
+    "tmux",
+    "ssh"
   ],
   "author": "Shane Bishop",
   "license": "MIT",

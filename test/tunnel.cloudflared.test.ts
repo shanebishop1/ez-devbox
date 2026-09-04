@@ -11,6 +11,7 @@ vi.mock("node:child_process", () => {
 });
 
 import { CLOUDFLARED_DOCKER_FALLBACK_IMAGE, withConfiguredTunnel } from "../src/tunnel/cloudflared.js";
+import { stopTunnelSessions } from "../src/tunnel/cloudflared.process.js";
 
 describe("withConfiguredTunnel", () => {
   afterEach(() => {
@@ -341,6 +342,39 @@ describe("withConfiguredTunnel", () => {
       ]),
       { stdio: ["ignore", "pipe", "pipe"] },
     );
+  });
+});
+
+describe("stopTunnelSessions", () => {
+  it("attempts every session in reverse order when one stop fails", async () => {
+    const calls: string[] = [];
+    const sessions = [
+      {
+        port: 3001,
+        url: "https://first.example",
+        stop: vi.fn(async () => {
+          calls.push("first");
+        }),
+      },
+      {
+        port: 3002,
+        url: "https://second.example",
+        stop: vi.fn(async () => {
+          calls.push("second");
+          throw new Error("stop failed");
+        }),
+      },
+      {
+        port: 3003,
+        url: "https://third.example",
+        stop: vi.fn(async () => {
+          calls.push("third");
+        }),
+      },
+    ];
+
+    await expect(stopTunnelSessions(sessions)).rejects.toThrow("stop failed");
+    expect(calls).toEqual(["third", "second", "first"]);
   });
 });
 

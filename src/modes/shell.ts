@@ -1,6 +1,7 @@
 import type { SandboxHandle } from "../e2b/lifecycle.js";
 import { logger } from "../logging/logger.js";
 import type { LaunchContextOptions, ModeLaunchResult } from "./index.js";
+import { assertRemoteCommandSucceeded } from "./remote-command.js";
 import {
   buildInteractiveRemoteCommand,
   cleanupSshBridgeSession,
@@ -35,7 +36,7 @@ export async function startShellMode(
 ): Promise<ModeLaunchResult> {
   const commandContext = resolveCommandContext(launchContext);
 
-  if (!deps.isInteractiveTerminal()) {
+  if (launchContext.nonInteractive || !deps.isInteractiveTerminal()) {
     return runSmokeCheck(handle, commandContext);
   }
 
@@ -82,6 +83,7 @@ async function runSmokeCheck(
     ...(Object.keys(commandContext.envs).length > 0 ? { envs: commandContext.envs } : {}),
     timeoutMs: COMMAND_TIMEOUT_MS,
   });
+  assertRemoteCommandSucceeded(result, "Shell smoke check");
 
   const output = result.stdout.trim() || "no output";
 

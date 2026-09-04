@@ -2,26 +2,27 @@
 
 Run this checklist before publishing a new `ez-devbox` version.
 
-1. Validate guardrails, tests, and build:
-   - `npm run check:complexity`
-   - `npm run check:style`
-   - `npm run test`
-   - `npm run build`
+1. Validate all non-credentialed release gates:
+   - `npm ci`
+   - `npm run validate:offline`
+2. Run the credentialed live check from a trusted maintainer environment, then verify E2B resource cleanup:
    - `npm run e2e:live`
-   - (or run all together) `npm run validate`
-2. Verify package contents and runtime entrypoints:
+   - (or run offline and live checks together) `npm run validate`
+3. Verify package contents and runtime entrypoints (already included in `validate:offline`):
    - `npm run pack:check`
    - (optional inspect raw output) `npm pack --dry-run --json`
-3. Confirm required artifacts are present in the pack output:
+4. Confirm required artifacts are present in the pack output:
    - `dist/src/cli/index.js`
    - `dist/src/cli/index.d.ts`
    - `scripts/ws-ssh-proxy.mjs`
-   - `README.md`, `LICENSE`, `package.json`
-4. Create a GitHub Release from the Releases tab (tag format `vX.Y.Z`).
+   - `docs/`, `examples/minimal/`, `README.md`, `SECURITY.md`, `CHANGELOG.md`, `LICENSE`, `package.json`
+   - both `ez-devbox` and `ezdb` executable mappings
+5. Move the `CHANGELOG.md` Unreleased entries under the new version/date without changing historical notes.
+6. Create a GitHub Release from the Releases tab (tag format `vX.Y.Z`).
    - choose `main` as the target
    - create tag if it does not exist yet
    - publish the release
-5. Confirm GitHub Actions `Release` workflow succeeds.
+7. Confirm GitHub Actions `Release` workflow succeeds.
    - workflow validates `package.json` version matches release tag
-   - workflow runs `npm run test`, `npm run build`, and `npm run pack:check`
+   - workflow runs `npm run validate:offline`
    - workflow publishes to npm via trusted publishing (`npm publish --provenance`)

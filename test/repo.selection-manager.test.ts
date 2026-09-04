@@ -76,6 +76,7 @@ describe("repo manager", () => {
     };
     const executor: RepoExecutor = {
       clone: vi.fn().mockResolvedValue(undefined),
+      getOriginUrl: vi.fn().mockResolvedValue("https://example.com/missing.git"),
       getCurrentBranch: vi.fn().mockResolvedValue("main"),
       checkoutBranch: vi.fn().mockResolvedValue(undefined),
     };
@@ -117,6 +118,7 @@ describe("repo manager", () => {
     };
     const executor: RepoExecutor = {
       clone: vi.fn().mockResolvedValue(undefined),
+      getOriginUrl: vi.fn().mockResolvedValue("https://example.com/app.git"),
       getCurrentBranch: vi.fn().mockResolvedValue("develop"),
       checkoutBranch: vi.fn().mockResolvedValue(undefined),
     };
@@ -130,5 +132,55 @@ describe("repo manager", () => {
 
     expect(executor.checkoutBranch).toHaveBeenCalledWith(join("/workspace", "app"), "main");
     expect(result[0].branchSwitched).toBe(true);
+  });
+
+  it("rejects reuse when the existing origin does not match config", async () => {
+    const executor: RepoExecutor = {
+      clone: vi.fn().mockResolvedValue(undefined),
+      getOriginUrl: vi.fn().mockResolvedValue("https://example.com/other.git"),
+      getCurrentBranch: vi.fn().mockResolvedValue("main"),
+      checkoutBranch: vi.fn().mockResolvedValue(undefined),
+    };
+
+    await expect(
+      provisionRepos({
+        projectDir: "/workspace",
+        repos: [{ name: "app", url: "https://example.com/app.git", branch: "main" }],
+        git: {
+          exists: vi.fn().mockResolvedValue(true),
+          isGitRepo: vi.fn().mockResolvedValue(true),
+        },
+        executor,
+      }),
+    ).rejects.toThrow("origin URL 'https://example.com/other.git' does not match configured URL");
+
+    expect(executor.getCurrentBranch).not.toHaveBeenCalled();
+  });
+
+  it("accepts a matching HTTPS origin that contains runtime credentials", async () => {
+    await expect(
+      provisionRepos({
+        projectDir: "/workspace",
+        repos: [{ name: "app", url: "https://github.com/acme/app.git", branch: "main" }],
+        git: {
+          exists: vi.fn().mockResolvedValue(true),
+          isGitRepo: vi.fn().mockResolvedValue(true),
+        },
+        executor: {
+          clone: vi.fn().mockResolvedValue(undefined),
+          getOriginUrl: vi.fn().mockResolvedValue("https://x-access-token:secret@github.com/acme/app.git"),
+          getCurrentBranch: vi.fn().mockResolvedValue("main"),
+          checkoutBranch: vi.fn().mockResolvedValue(undefined),
+        },
+      }),
+    ).resolves.toEqual([
+      {
+        repo: "app",
+        path: "/workspace/app",
+        cloned: false,
+        reused: true,
+        branchSwitched: false,
+      },
+    ]);
   });
 });

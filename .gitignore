@@ -7,13 +7,22 @@ node_modules/
 # build
 dist/
 
+# editor and local agent state
 .vscode/
-logs
+.idea/
+.codex/
+.claude/
+.opencode/
+.beads/
+
+# runtime state and output
+logs/
 *.log
+.coverage/
+coverage/
+.ez-devbox-last-run.json
+.agent-box-last-run.json
 .DS_Store
-.codex
-.agents
-.beads
 
 # Local planning and publishing notes
 docs/plans/

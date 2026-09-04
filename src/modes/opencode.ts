@@ -2,6 +2,7 @@ import { spawnSync } from "node:child_process";
 import type { SandboxHandle } from "../e2b/lifecycle.js";
 import { logger } from "../logging/logger.js";
 import type { LaunchContextOptions, ModeLaunchResult } from "./index.js";
+import { assertRemoteCommandSucceeded } from "./remote-command.js";
 import {
   buildInteractiveRemoteCommand,
   cleanupSshBridgeSession,
@@ -55,7 +56,7 @@ export async function startOpenCodeMode(
 ): Promise<ModeLaunchResult> {
   const commandContext = resolveCommandContext(launchContext);
 
-  if (!deps.isInteractiveTerminal()) {
+  if (launchContext.nonInteractive || !deps.isInteractiveTerminal()) {
     return runSmokeCheck(handle, commandContext);
   }
 
@@ -152,10 +153,11 @@ async function inspectAndMaybeMatchOpenCodeVersion(
   };
 
   try {
-    await handle.run(`${OPEN_CODE_UPGRADE_COMMAND_PREFIX} ${localVersion} -m npm`, {
+    const upgradeResult = await handle.run(`${OPEN_CODE_UPGRADE_COMMAND_PREFIX} ${localVersion} -m npm`, {
       ...commandOptions,
       timeoutMs: VERSION_UPGRADE_TIMEOUT_MS,
     });
+    assertRemoteCommandSucceeded(upgradeResult, "OpenCode version match");
   } catch (error) {
     logger.warn(`OpenCode version match failed before launch: ${toErrorMessage(error)}`);
     return;
@@ -193,6 +195,7 @@ async function resolveSandboxOpenCodeVersion(
       ...commandOptions,
       timeoutMs: VERSION_CHECK_TIMEOUT_MS,
     });
+    assertRemoteCommandSucceeded(currentResult, "OpenCode version check");
     return parseSemver(currentResult.stdout);
   } catch (error) {
     logger.verbose(`Unable to read current OpenCode version in sandbox: ${toErrorMessage(error)}.`);
@@ -224,16 +227,18 @@ async function ensurePersistentServerReady(
   commandContext: { cwd?: string; envs: Record<string, string> },
 ): Promise<void> {
   logger.verbose("Ensuring OpenCode server is running for SSH attach mode.");
-  await handle.run(OPEN_CODE_SERVER_BOOT_COMMAND, {
+  const startResult = await handle.run(OPEN_CODE_SERVER_BOOT_COMMAND, {
     ...(commandContext.cwd ? { cwd: commandContext.cwd } : {}),
     ...(Object.keys(commandContext.envs).length > 0 ? { envs: commandContext.envs } : {}),
     timeoutMs: SERVER_START_TIMEOUT_MS,
   });
-  await handle.run(OPEN_CODE_SERVER_READINESS_COMMAND, {
+  assertRemoteCommandSucceeded(startResult, "OpenCode server start");
+  const readinessResult = await handle.run(OPEN_CODE_SERVER_READINESS_COMMAND, {
     ...(commandContext.cwd ? { cwd: commandContext.cwd } : {}),
     ...(Object.keys(commandContext.envs).length > 0 ? { envs: commandContext.envs } : {}),
     timeoutMs: SERVER_READY_TIMEOUT_MS,
   });
+  assertRemoteCommandSucceeded(readinessResult, "OpenCode server readiness check");
 }
 
 async function runSmokeCheck(
@@ -250,6 +255,7 @@ async function runSmokeCheck(
         ...(Object.keys(commandContext.envs).length > 0 ? { envs: commandContext.envs } : {}),
         timeoutMs,
       });
+      assertRemoteCommandSucceeded(result, "OpenCode CLI smoke check");
 
       const output = firstNonEmptyLine(result.stdout, result.stderr);
 

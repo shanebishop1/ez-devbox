@@ -84,4 +84,10 @@ describe("sandbox display naming", () => {
     expect(formatSandboxDisplayLabel("sbx-123", { "launcher.name": "   " })).toBe("sbx-123");
     expect(formatSandboxDisplayLabel("sbx-123")).toBe("sbx-123");
   });
+
+  it("removes control characters from untrusted display metadata", () => {
+    expect(formatSandboxDisplayLabel("sbx-123\nspoof", { "launcher.name": "Alpha\u001b[2J\rBeta" })).toBe(
+      "Alpha[2JBeta (sbx-123spoof)",
+    );
+  });
 });

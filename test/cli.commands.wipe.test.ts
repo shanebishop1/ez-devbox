@@ -14,7 +14,7 @@ describe("runWipeCommand", () => {
 
       await runWipeCommand(["--sandbox-id", "sbx-1"], {
         listSandboxes,
-        killSandbox: vi.fn().mockResolvedValue(undefined),
+        killSandbox: vi.fn().mockResolvedValue(true),
         isInteractiveTerminal: () => false,
         promptInput: vi.fn().mockResolvedValue("1"),
         loadLastRunState: vi.fn().mockResolvedValue(null),
@@ -38,7 +38,7 @@ describe("runWipeCommand", () => {
     await expect(
       runWipeCommand(["--bad"], {
         listSandboxes: vi.fn().mockResolvedValue([]),
-        killSandbox: vi.fn().mockResolvedValue(undefined),
+        killSandbox: vi.fn().mockResolvedValue(true),
         isInteractiveTerminal: () => false,
         promptInput: vi.fn().mockResolvedValue("1"),
         loadLastRunState: vi.fn().mockResolvedValue(null),
@@ -48,7 +48,7 @@ describe("runWipeCommand", () => {
   });
 
   it("supports interactive numeric selection", async () => {
-    const killSandbox = vi.fn().mockResolvedValue(undefined);
+    const killSandbox = vi.fn().mockResolvedValue(true);
     const promptInput = vi.fn().mockResolvedValue("2");
 
     const result = await runWipeCommand([], {
@@ -80,7 +80,7 @@ describe("runWipeCommand", () => {
   it("supports direct --sandbox-id path and clears matching last-run state", async () => {
     const promptInput = vi.fn().mockResolvedValue("1");
     const clearLastRunState = vi.fn().mockResolvedValue(undefined);
-    const killSandbox = vi.fn().mockResolvedValue(undefined);
+    const killSandbox = vi.fn().mockResolvedValue(true);
 
     const result = await runWipeCommand(["--sandbox-id", "sbx-1"], {
       listSandboxes: vi
@@ -105,7 +105,7 @@ describe("runWipeCommand", () => {
     await expect(
       runWipeCommand([], {
         listSandboxes: vi.fn().mockResolvedValue([{ sandboxId: "sbx-1", state: "running" }]),
-        killSandbox: vi.fn().mockResolvedValue(undefined),
+        killSandbox: vi.fn().mockResolvedValue(true),
         isInteractiveTerminal: () => false,
         promptInput: vi.fn().mockResolvedValue("1"),
         loadLastRunState: vi.fn().mockResolvedValue(null),
@@ -118,12 +118,32 @@ describe("runWipeCommand", () => {
     await expect(
       runWipeCommand([], {
         listSandboxes: vi.fn().mockResolvedValue([{ sandboxId: "sbx-1", state: "running" }]),
-        killSandbox: vi.fn().mockResolvedValue(undefined),
+        killSandbox: vi.fn().mockResolvedValue(true),
         isInteractiveTerminal: () => true,
         promptInput: vi.fn().mockResolvedValue("9"),
         loadLastRunState: vi.fn().mockResolvedValue(null),
         clearLastRunState: vi.fn().mockResolvedValue(undefined),
       }),
     ).rejects.toThrow("Invalid selection '9'. Enter a number between 1 and 1.");
+  });
+
+  it("does not report success or clear state when E2B reports the sandbox was not killed", async () => {
+    const clearLastRunState = vi.fn().mockResolvedValue(undefined);
+
+    await expect(
+      runWipeCommand(["--sandbox-id", "sbx-1"], {
+        listSandboxes: vi.fn().mockResolvedValue([{ sandboxId: "sbx-1", state: "running" }]),
+        killSandbox: vi.fn().mockResolvedValue(false),
+        isInteractiveTerminal: () => false,
+        promptInput: vi.fn(),
+        loadLastRunState: vi.fn().mockResolvedValue({
+          sandboxId: "sbx-1",
+          mode: "web",
+          updatedAt: "2026-02-01T00:00:00.000Z",
+        }),
+        clearLastRunState,
+      }),
+    ).rejects.toThrow("was not wiped because E2B reported it was not killed");
+    expect(clearLastRunState).not.toHaveBeenCalled();
   });
 });

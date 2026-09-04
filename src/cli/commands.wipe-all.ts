@@ -14,7 +14,7 @@ import { formatSandboxDisplayLabel } from "./sandbox-display-name.js";
 
 export interface WipeAllCommandDeps {
   listSandboxes: (options?: ListSandboxesOptions) => Promise<SandboxListItem[]>;
-  killSandbox: (sandboxId: string, options?: LifecycleOperationOptions) => Promise<void>;
+  killSandbox: (sandboxId: string, options?: LifecycleOperationOptions) => Promise<boolean>;
   isInteractiveTerminal: () => boolean;
   promptInput: (question: string) => Promise<string>;
   loadLastRunState: () => Promise<LastRunState | null>;
@@ -73,7 +73,10 @@ export async function runWipeAllCommand(
   for (const sandbox of sandboxes) {
     const label = formatSandboxDisplayLabel(sandbox.sandboxId, sandbox.metadata);
     try {
-      await deps.killSandbox(sandbox.sandboxId);
+      const killed = await deps.killSandbox(sandbox.sandboxId);
+      if (!killed) {
+        throw new Error("E2B reported the sandbox was not killed");
+      }
       deletedIds.add(sandbox.sandboxId);
       deletedLabels.push(label);
     } catch (error) {

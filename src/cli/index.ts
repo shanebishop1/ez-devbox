@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
-import { logger, setVerboseLoggingEnabled } from "../logging/logger.js";
+import { pathToFileURL } from "node:url";
+import { logger, setJsonOutputEnabled, setVerboseLoggingEnabled } from "../logging/logger.js";
 import type { CommandResult } from "../types/index.js";
 import { runCommandCommand } from "./commands.command.js";
 import { runConnectCommand } from "./commands.connect.js";
@@ -14,6 +15,8 @@ import { parseGlobalCliOptions, renderHelp, resolveCliCommand } from "./router.j
 import { readCliVersion } from "./version.js";
 
 export async function runCli(argv: string[]): Promise<number> {
+  const jsonOutputRequested = isJsonOutputRequested(argv);
+  setJsonOutputEnabled(jsonOutputRequested);
   try {
     const globalOptions = parseGlobalCliOptions(argv);
     setVerboseLoggingEnabled(globalOptions.verbose);
@@ -49,7 +52,9 @@ export async function runCli(argv: string[]): Promise<number> {
 
     if (resolved.command === "list") {
       const result = await runListCommand(resolved.args);
-      if (result.message === "No sandboxes found.") {
+      if (result.json) {
+        printCommandResult(result);
+      } else if (result.message === "No sandboxes found.") {
         logger.info(result.message);
       } else {
         process.stdout.write(`${result.message}\n`);
@@ -77,17 +82,53 @@ export async function runCli(argv: string[]): Promise<number> {
 
     throw new Error(`Unknown command: ${resolved.command}.`);
   } catch (error) {
-    logger.error(toUserVisibleCliErrorMessage(error));
+    const message = toUserVisibleCliErrorMessage(error);
+    if (jsonOutputRequested) {
+      process.stdout.write(`${JSON.stringify({ error: message }, null, 2)}\n`);
+    } else {
+      logger.error(message);
+    }
     return 1;
+  } finally {
+    setJsonOutputEnabled(false);
   }
 }
 
 function printCommandResult(result: CommandResult): void {
+  if (result.json) {
+    process.stdout.write(`${result.message}\n`);
+    return;
+  }
+
   logger.info(result.message);
   for (const line of result.postMessages ?? []) {
     logger.info(line);
   }
 }
 
-const exitCode = await runCli(process.argv.slice(2));
-process.exit(exitCode);
+function isJsonOutputRequested(argv: string[]): boolean {
+  const commandIndex = argv.findIndex((token) => ["create", "connect", "list", "ls", "command"].includes(token));
+  if (commandIndex < 0) {
+    return false;
+  }
+
+  const command = argv[commandIndex];
+  for (const token of argv.slice(commandIndex + 1)) {
+    if (command === "command" && token === "--") {
+      return false;
+    }
+    if (token === "--json") {
+      return true;
+    }
+  }
+  return false;
+}
+
+function isMainModule(): boolean {
+  const entrypoint = process.argv[1];
+  return entrypoint !== undefined && pathToFileURL(entrypoint).href === import.meta.url;
+}
+
+if (isMainModule()) {
+  process.exitCode = await runCli(process.argv.slice(2));
+}

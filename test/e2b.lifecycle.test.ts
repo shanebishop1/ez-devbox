@@ -4,6 +4,7 @@ import type { E2BClient, E2BSandbox } from "../src/e2b/client.js";
 import {
   connectSandbox,
   createSandbox,
+  killSandbox,
   listSandboxes,
   refreshTimeout,
   type SandboxHandle,
@@ -141,6 +142,14 @@ describe("e2b lifecycle adapter", () => {
         metadata: undefined,
       },
     ]);
+  });
+
+  it("preserves the SDK kill result", async () => {
+    const client = createMockClient({
+      kill: vi.fn().mockResolvedValue(false),
+    });
+
+    await expect(killSandbox("sbx-missing", { client })).resolves.toBe(false);
   });
 
   it("adds a helpful API key hint when list returns missing authorization header", async () => {

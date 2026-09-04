@@ -4,8 +4,20 @@ const CLOUDFLARED_STOP_TIMEOUT_MS = 5_000;
 
 export async function stopTunnelSessions(sessions: CloudflaredTunnelSession[]): Promise<void> {
   const sessionsInReverseOrder = [...sessions].reverse();
+  const failures: unknown[] = [];
   for (const session of sessionsInReverseOrder) {
-    await session.stop();
+    try {
+      await session.stop();
+    } catch (error) {
+      failures.push(error);
+    }
+  }
+
+  if (failures.length === 1) {
+    throw failures[0];
+  }
+  if (failures.length > 1) {
+    throw new AggregateError(failures, `Failed to stop ${failures.length} tunnel sessions.`);
   }
 }
 

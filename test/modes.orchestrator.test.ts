@@ -71,6 +71,27 @@ describe("startup modes orchestrator", () => {
     await expect(launchMode(handle, "web")).rejects.toThrow("Set OPENCODE_SERVER_PASSWORD");
   });
 
+  it.each([
+    ["server start", 0],
+    ["readiness check", 1],
+    ["authentication probe", 2],
+  ])("web mode rejects nonzero %s exit codes", async (_stage, failedCallIndex) => {
+    const results = [
+      { stdout: "", stderr: "start failed", exitCode: 12 },
+      { stdout: "", stderr: "not ready", exitCode: 13 },
+      { stdout: "401", stderr: "probe failed", exitCode: 14 },
+    ];
+    const run = vi.fn().mockImplementation(async () => {
+      const callIndex = run.mock.calls.length - 1;
+      if (callIndex === failedCallIndex) {
+        return results[callIndex];
+      }
+      return callIndex === 2 ? { stdout: "401", stderr: "", exitCode: 0 } : { stdout: "", stderr: "", exitCode: 0 };
+    });
+
+    await expect(launchMode(createHandle({ run }), "web")).rejects.toThrow(/failed with exit code 1[234]/);
+  });
+
   it("prompt mode resolves deterministically to ssh-opencode smoke check", async () => {
     const run = vi.fn().mockResolvedValue({ stdout: "OpenCode 1.2.3\n", stderr: "", exitCode: 0 });
     const handle = createHandle({ run });
@@ -112,6 +133,32 @@ describe("startup modes orchestrator", () => {
     await expect(launchMode(handle, "ssh-opencode")).rejects.toThrow("permission denied");
     expect(run).toHaveBeenCalledTimes(1);
     expect(run).toHaveBeenCalledWith("opencode --version", { timeoutMs: 15_000 });
+  });
+
+  it.each([
+    ["ssh-opencode", [{ stdout: "OpenCode failed", stderr: "", exitCode: 2 }]],
+    [
+      "ssh-codex",
+      [
+        { stdout: "PRESENT", stderr: "", exitCode: 0 },
+        { stdout: "", stderr: "codex failed", exitCode: 3 },
+      ],
+    ],
+    [
+      "ssh-claude",
+      [
+        { stdout: "PRESENT", stderr: "", exitCode: 0 },
+        { stdout: "", stderr: "claude failed", exitCode: 4 },
+      ],
+    ],
+    ["ssh-shell", [{ stdout: "", stderr: "shell failed", exitCode: 5 }]],
+  ] as const)("%s smoke check rejects a nonzero command result", async (mode, results) => {
+    const run = vi.fn();
+    for (const result of results) {
+      run.mockResolvedValueOnce(result);
+    }
+
+    await expect(launchMode(createHandle({ run }), mode)).rejects.toThrow(/failed with exit code [2345]/);
   });
 
   it("ssh-opencode mode uses interactive attach in tty environments", async () => {

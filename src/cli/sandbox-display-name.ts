@@ -14,17 +14,27 @@ export function buildSandboxDisplayName(configuredRepos: ResolvedProjectRepoConf
 }
 
 export function resolveSandboxDisplayName(metadata: Record<string, string> | undefined, sandboxId: string): string {
-  const metadataName = metadata?.[SANDBOX_NAME_METADATA_KEY]?.trim();
-  return metadataName && metadataName !== "" ? metadataName : sandboxId;
+  const metadataName = sanitizeTerminalText(metadata?.[SANDBOX_NAME_METADATA_KEY] ?? "").trim();
+  return metadataName !== "" ? metadataName : sanitizeTerminalText(sandboxId);
 }
 
 export function formatSandboxDisplayLabel(sandboxId: string, metadata?: Record<string, string>): string {
-  const name = metadata?.[SANDBOX_NAME_METADATA_KEY]?.trim();
+  const safeSandboxId = sanitizeTerminalText(sandboxId);
+  const name = sanitizeTerminalText(metadata?.[SANDBOX_NAME_METADATA_KEY] ?? "").trim();
   if (!name) {
-    return sandboxId;
+    return safeSandboxId;
   }
 
-  return `${name} (${sandboxId})`;
+  return `${name} (${safeSandboxId})`;
+}
+
+function sanitizeTerminalText(value: string): string {
+  return [...value]
+    .filter((character) => {
+      const codePoint = character.codePointAt(0) ?? 0;
+      return codePoint >= 0x20 && codePoint !== 0x7f && (codePoint < 0x80 || codePoint > 0x9f);
+    })
+    .join("");
 }
 
 function formatTimestamp(timestamp: string): string {

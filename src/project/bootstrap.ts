@@ -1,4 +1,4 @@
-import { isAbsolute, resolve as resolvePath } from "node:path";
+import { posix } from "node:path";
 import type { ResolvedLauncherConfig, ResolvedProjectRepoConfig } from "../config/schema.js";
 import type { SandboxHandle } from "../e2b/lifecycle.js";
 import type { ProvisionedRepoSummary } from "../repo/manager.js";
@@ -122,7 +122,7 @@ function resolveWorkingDirectory(
     return projectDir;
   }
 
-  return isAbsolute(workingDirConfig) ? workingDirConfig : resolvePath(projectDir, workingDirConfig);
+  return posix.isAbsolute(workingDirConfig) ? workingDirConfig : posix.resolve(projectDir, workingDirConfig);
 }
 
 function resolveStartupEnv(selectedRepos: ResolvedProjectRepoConfig[]): Record<string, string> {
