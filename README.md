@@ -29,7 +29,7 @@ Prerequisites:
 
 - Node.js 20 or newer on macOS or Linux. Windows config paths are supported, but Windows host SSH/tunnel workflows are not currently tested in CI.
 - An [E2B API key](https://e2b.dev/docs/getting-started/api-key).
-- `ssh` for SSH modes and `tmux` in the E2B template. Docker or `cloudflared` is needed only for tunnel features.
+- `ssh` for SSH modes. If `tmux` is missing in the E2B template, ez-devbox installs it with `apt-get` or `apk`; other templates must provide it. Docker or `cloudflared` is needed only for tunnel features.
 - An `ez-devbox.config.toml`, created during onboarding below or by the interactive first-run prompt.
 
 Choose one:
@@ -149,6 +149,8 @@ Use `npx ez-devbox ...` if the CLI is not globally installed.
 | Resume last sandbox/mode | `ez-devbox resume` |
 | Run command in sandbox | `ez-devbox command --sandbox-id <sandbox-id> -- pwd` |
 | JSON output for automation | `ez-devbox list --json` |
+| Start agent detached | `ez-devbox create --mode ssh-codex --detach --json` |
+| Send follow-up from file | `ez-devbox connect --sandbox-id <id> --mode ssh-codex --detach --prompt-file follow-up.md --json` |
 | Wipe one sandbox | `ez-devbox wipe` |
 | Wipe all sandboxes | `ez-devbox wipe-all --yes` |
 
@@ -161,6 +163,8 @@ Use `--json` for machine-readable output:
 - `create` / `connect`: launch result envelope (mode, command/url when present, workingDirectory, setup summary)
 
 Optional fields are omitted when undefined (for example `url` is absent for SSH modes).
+
+For detached startup, prompt transport, non-PTY inspection, explicit shell execution, and concurrency guidance, see [Agent and automation usage](docs/agent-automation.md).
 
 ## Verbose mode
 

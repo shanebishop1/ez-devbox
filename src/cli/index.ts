@@ -12,6 +12,7 @@ import { runWipeCommand } from "./commands.wipe.js";
 import { runWipeAllCommand } from "./commands.wipe-all.js";
 import { toUserVisibleCliErrorMessage } from "./error-message.js";
 import { parseGlobalCliOptions, renderHelp, resolveCliCommand } from "./router.js";
+import { serializeCliError } from "./structured-error.js";
 import { readCliVersion } from "./version.js";
 
 export async function runCli(argv: string[]): Promise<number> {
@@ -84,7 +85,7 @@ export async function runCli(argv: string[]): Promise<number> {
   } catch (error) {
     const message = toUserVisibleCliErrorMessage(error);
     if (jsonOutputRequested) {
-      process.stdout.write(`${JSON.stringify({ error: message }, null, 2)}\n`);
+      process.stdout.write(`${JSON.stringify(serializeCliError(error), null, 2)}\n`);
     } else {
       logger.error(message);
     }

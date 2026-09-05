@@ -2,7 +2,8 @@ import type { SandboxHandle } from "../e2b/lifecycle.js";
 import type { LaunchContextOptions, ModeLaunchResult } from "./index.js";
 import { assertRemoteCommandSucceeded } from "./remote-command.js";
 
-const WEB_COMMAND = "nohup opencode serve --hostname 0.0.0.0 --port 3000 >/tmp/opencode-serve.log 2>&1 &";
+const WEB_COMMAND =
+  'bash -lc \'status=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:3000/ || true); if [ "$status" = 200 ] || [ "$status" = 401 ]; then exit 0; fi; if ! pgrep -f "[o]pencode serve.*--port 3000" >/dev/null; then nohup opencode serve --hostname 0.0.0.0 --port 3000 >/tmp/opencode-serve.log 2>&1 & fi\'';
 const WEB_READINESS_COMMAND =
   'bash -lc \'for attempt in $(seq 1 30); do status=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:3000/ || true); if [ "$status" = "200" ] || [ "$status" = "401" ]; then exit 0; fi; sleep 1; done; exit 1\'';
 const WEB_AUTH_PROBE_COMMAND = "bash -lc 'curl -s -o /dev/null -w \"%{http_code}\" http://127.0.0.1:3000/ || true'";
@@ -14,6 +15,9 @@ export async function startWebMode(
   handle: SandboxHandle,
   launchContext: LaunchContextOptions = {},
 ): Promise<ModeLaunchResult> {
+  if (launchContext.prompt) {
+    throw new Error("Prompt input is not supported in web mode; open the returned URL and use the OpenCode interface.");
+  }
   const commandContext = {
     cwd: normalizeOptionalValue(launchContext.workingDirectory),
     envs: launchContext.startupEnv ?? {},
@@ -53,6 +57,9 @@ export async function startWebMode(
     mode: "web",
     command: WEB_COMMAND,
     url,
+    readiness: "ready",
+    attachment: "not-applicable",
+    connection: { type: "http", endpoint: url },
     details: {
       smoke: "opencode-web",
       status: "ready",

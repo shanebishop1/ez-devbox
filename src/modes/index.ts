@@ -4,6 +4,7 @@ import { startClaudeMode } from "./claude.js";
 import { startCodexMode } from "./codex.js";
 import { startOpenCodeMode } from "./opencode.js";
 import { startShellMode } from "./shell.js";
+import type { TmuxConnectionInfo } from "./tmux.js";
 import { startWebMode } from "./web.js";
 
 export const supportedModes: StartupMode[] = ["prompt", "ssh-opencode", "ssh-codex", "ssh-claude", "web", "ssh-shell"];
@@ -15,13 +16,23 @@ export interface ModeLaunchResult {
   message: string;
   command?: string;
   url?: string;
-  details?: Record<string, string | number | boolean>;
+  details?: Record<string, unknown>;
+  readiness?: "ready";
+  attachment?: "detached" | "completed" | "not-applicable";
+  connection?: TmuxConnectionInfo | { type: "http"; endpoint: string };
+}
+
+export interface LaunchPrompt {
+  kind: "initial" | "follow-up";
+  text: string;
 }
 
 export interface LaunchContextOptions {
   workingDirectory?: string;
   startupEnv?: Record<string, string>;
   nonInteractive?: boolean;
+  detach?: boolean;
+  prompt?: LaunchPrompt;
   onBeforeInteractiveSession?: () => void;
   onLaunchStageUpdate?: (loadingMessage: string, completionMessage: string) => void;
   matchLocalOpenCodeVersion?: boolean;
@@ -32,6 +43,8 @@ export interface LaunchModeOptions {
   workingDirectory?: string;
   startupEnv?: Record<string, string>;
   nonInteractive?: boolean;
+  detach?: boolean;
+  prompt?: LaunchPrompt;
   onBeforeInteractiveSession?: () => void;
   onLaunchStageUpdate?: (loadingMessage: string, completionMessage: string) => void;
   matchLocalOpenCodeVersion?: boolean;
@@ -67,6 +80,8 @@ export async function launchMode(
     workingDirectory,
     startupEnv,
     nonInteractive,
+    detach,
+    prompt,
     onBeforeInteractiveSession,
     onLaunchStageUpdate,
     matchLocalOpenCodeVersion,
@@ -76,6 +91,8 @@ export async function launchMode(
     workingDirectory,
     startupEnv,
     nonInteractive,
+    detach,
+    prompt,
     onBeforeInteractiveSession,
     onLaunchStageUpdate,
     matchLocalOpenCodeVersion,

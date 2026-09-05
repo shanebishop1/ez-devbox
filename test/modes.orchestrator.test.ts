@@ -1,822 +1,163 @@
 import { describe, expect, it, vi } from "vitest";
 import type { SandboxHandle } from "../src/e2b/lifecycle.js";
-import { logger } from "../src/logging/logger.js";
 import { startClaudeMode } from "../src/modes/claude.js";
 import { startCodexMode } from "../src/modes/codex.js";
-import { launchMode, type ModeLaunchResult } from "../src/modes/index.js";
+import { launchMode } from "../src/modes/index.js";
 import { startOpenCodeMode } from "../src/modes/opencode.js";
 import { startShellMode } from "../src/modes/shell.js";
 
-describe("startup modes orchestrator", () => {
-  it("web mode starts serve in background, checks auth status, and returns external https URL", async () => {
+describe("persistent startup modes", () => {
+  it("detached Codex startup creates a real tmux session and returns connection details", async () => {
+    const run = vi.fn().mockResolvedValueOnce(ok("PRESENT")).mockResolvedValueOnce(ok("CREATED"));
+    const result = await startCodexMode(createHandle({ run }), { detach: true });
+
+    expect(String(run.mock.calls[1]?.[0])).toContain("new-session -d");
+    expect(String(run.mock.calls[1]?.[0])).toContain("ez-devbox-codex");
+    expect(result).toMatchObject({
+      mode: "ssh-codex",
+      readiness: "ready",
+      attachment: "detached",
+      connection: {
+        type: "tmux",
+        socketName: "ez-devbox-codex",
+        sessionName: "ez-devbox-codex",
+      },
+    });
+  });
+
+  it("repeated startup reuses an existing tmux session", async () => {
+    const run = vi.fn().mockResolvedValueOnce(ok("PRESENT")).mockResolvedValueOnce(ok("EXISTING"));
+    const result = await startCodexMode(createHandle({ run }), { detach: true });
+    expect(result.details).toEqual({ session: "existing", status: "ready" });
+  });
+
+  it("starts and checks the OpenCode server before creating its attach session", async () => {
+    const run = vi.fn().mockResolvedValueOnce(ok()).mockResolvedValueOnce(ok()).mockResolvedValueOnce(ok("CREATED"));
+    const result = await startOpenCodeMode(createHandle({ run }), { detach: true });
+
+    expect(String(run.mock.calls[0]?.[0])).toContain("pgrep -f");
+    expect(String(run.mock.calls[1]?.[0])).toContain("global/health api/health");
+    expect(String(run.mock.calls[2]?.[0])).toContain("opencode attach http://127.0.0.1:4096");
+    expect(run.mock.calls.some(([command]) => String(command).includes("opencode --version"))).toBe(false);
+    expect(result.connection).toMatchObject({ type: "tmux", socketName: "ez-devbox-opencode" });
+  });
+
+  it("passes an initial Codex prompt through a staged file without embedding it in commands", async () => {
+    const prompt = "first line\n$HOME `do-not-run` 'quoted'";
+    const writeFile = vi.fn().mockResolvedValue(undefined);
+    const run = vi.fn().mockResolvedValueOnce(ok("PRESENT")).mockResolvedValueOnce(ok("CREATED"));
+
+    await startCodexMode(createHandle({ run, writeFile }), {
+      detach: true,
+      prompt: { kind: "initial", text: prompt },
+    });
+
+    expect(writeFile).toHaveBeenCalledWith(expect.stringContaining("ez-devbox-initial-prompt-"), prompt);
+    expect(run.mock.calls.map(([command]) => String(command)).join("\n")).not.toContain(prompt);
+    expect(String(run.mock.calls[1]?.[0])).toContain("exec codex");
+  });
+
+  it("sends follow-ups with tmux load-buffer/paste-buffer", async () => {
+    const prompt = "line one\nline two; $(safe-as-data)";
+    const writeFile = vi.fn().mockResolvedValue(undefined);
     const run = vi
       .fn()
-      .mockResolvedValueOnce({ stdout: "", stderr: "", exitCode: 0 })
-      .mockResolvedValueOnce({ stdout: "", stderr: "", exitCode: 0 })
-      .mockResolvedValueOnce({ stdout: "401", stderr: "", exitCode: 0 });
-    const getHost = vi.fn().mockResolvedValue("sandbox-123.e2b.dev");
-    const handle = createHandle({ run, getHost });
+      .mockResolvedValueOnce(ok("PRESENT"))
+      .mockResolvedValueOnce(ok("EXISTING"))
+      .mockResolvedValueOnce(ok())
+      .mockResolvedValueOnce(ok());
 
-    const result = await launchMode(handle, "web");
+    await startCodexMode(createHandle({ run, writeFile }), {
+      detach: true,
+      prompt: { kind: "follow-up", text: prompt },
+    });
 
-    expect(run).toHaveBeenNthCalledWith(
-      1,
-      "nohup opencode serve --hostname 0.0.0.0 --port 3000 >/tmp/opencode-serve.log 2>&1 &",
-      { timeoutMs: 10_000 },
-    );
-    expect(run).toHaveBeenNthCalledWith(
-      2,
-      'bash -lc \'for attempt in $(seq 1 30); do status=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:3000/ || true); if [ "$status" = "200" ] || [ "$status" = "401" ]; then exit 0; fi; sleep 1; done; exit 1\'',
-      { timeoutMs: 35_000 },
-    );
-    expect(run).toHaveBeenNthCalledWith(
-      3,
-      "bash -lc 'curl -s -o /dev/null -w \"%{http_code}\" http://127.0.0.1:3000/ || true'",
-      { timeoutMs: 10_000 },
-    );
-    expect(getHost).toHaveBeenCalledWith(3000);
-    expect(result).toMatchObject<Partial<ModeLaunchResult>>({
-      mode: "web",
-      url: "https://sandbox-123.e2b.dev",
-    });
-    expect(result.details).toEqual({
-      smoke: "opencode-web",
-      status: "ready",
-      port: 3000,
-      authRequired: true,
-      authStatus: 401,
-    });
-    expect(result.message).not.toContain("WARNING");
+    expect(writeFile).toHaveBeenCalledWith(expect.stringContaining("ez-devbox-prompt-"), prompt);
+    expect(String(run.mock.calls[2]?.[0])).toContain("load-buffer");
+    expect(String(run.mock.calls[2]?.[0])).toContain("paste-buffer");
+    expect(String(run.mock.calls[2]?.[0])).not.toContain(prompt);
   });
 
-  it("web mode fails when auth is not required", async () => {
+  it("explicitly rejects prompt input for shell mode", async () => {
+    await expect(
+      startShellMode(createHandle({ run: vi.fn() }), {
+        detach: true,
+        prompt: { kind: "initial", text: "hello" },
+      }),
+    ).rejects.toThrow("not supported in ssh-shell mode");
+  });
+
+  it("interactive startup attaches to the already-created session", async () => {
     const run = vi
       .fn()
-      .mockResolvedValueOnce({ stdout: "", stderr: "", exitCode: 0 })
-      .mockResolvedValueOnce({ stdout: "", stderr: "", exitCode: 0 })
-      .mockResolvedValueOnce({ stdout: "200", stderr: "", exitCode: 0 });
-    const handle = createHandle({ run, getHost: vi.fn().mockResolvedValue("sandbox-456.e2b.dev") });
-
-    await expect(launchMode(handle, "web")).rejects.toThrow("Set OPENCODE_SERVER_PASSWORD");
-  });
-
-  it("web mode fails closed when auth probe is not 401", async () => {
-    const run = vi
-      .fn()
-      .mockResolvedValueOnce({ stdout: "", stderr: "", exitCode: 0 })
-      .mockResolvedValueOnce({ stdout: "", stderr: "", exitCode: 0 })
-      .mockResolvedValueOnce({ stdout: "not-a-status", stderr: "", exitCode: 0 });
-    const handle = createHandle({ run, getHost: vi.fn().mockResolvedValue("sandbox-789.e2b.dev") });
-
-    await expect(launchMode(handle, "web")).rejects.toThrow("Set OPENCODE_SERVER_PASSWORD");
-  });
-
-  it.each([
-    ["server start", 0],
-    ["readiness check", 1],
-    ["authentication probe", 2],
-  ])("web mode rejects nonzero %s exit codes", async (_stage, failedCallIndex) => {
-    const results = [
-      { stdout: "", stderr: "start failed", exitCode: 12 },
-      { stdout: "", stderr: "not ready", exitCode: 13 },
-      { stdout: "401", stderr: "probe failed", exitCode: 14 },
-    ];
-    const run = vi.fn().mockImplementation(async () => {
-      const callIndex = run.mock.calls.length - 1;
-      if (callIndex === failedCallIndex) {
-        return results[callIndex];
-      }
-      return callIndex === 2 ? { stdout: "401", stderr: "", exitCode: 0 } : { stdout: "", stderr: "", exitCode: 0 };
-    });
-
-    await expect(launchMode(createHandle({ run }), "web")).rejects.toThrow(/failed with exit code 1[234]/);
-  });
-
-  it("prompt mode resolves deterministically to ssh-opencode smoke check", async () => {
-    const run = vi.fn().mockResolvedValue({ stdout: "OpenCode 1.2.3\n", stderr: "", exitCode: 0 });
-    const handle = createHandle({ run });
-
-    const result = await launchMode(handle, "prompt");
-
-    expect(run).toHaveBeenCalledWith("opencode --version", { timeoutMs: 15_000 });
-    expect(result.mode).toBe("ssh-opencode");
-    expect(result.command).toBe("opencode --version");
-    expect(result.details).toEqual({
-      smoke: "opencode-cli",
-      status: "ready",
-      output: "OpenCode 1.2.3",
-    });
-  });
-
-  it("ssh-opencode smoke check retries once when the first run times out", async () => {
-    const run = vi
-      .fn()
-      .mockRejectedValueOnce(new Error("deadline_exceeded"))
-      .mockResolvedValueOnce({ stdout: "OpenCode 1.2.3\n", stderr: "", exitCode: 0 });
-    const handle = createHandle({ run });
-
-    const result = await launchMode(handle, "ssh-opencode");
-
-    expect(run).toHaveBeenNthCalledWith(1, "opencode --version", { timeoutMs: 15_000 });
-    expect(run).toHaveBeenNthCalledWith(2, "opencode --version", { timeoutMs: 60_000 });
-    expect(result.details).toEqual({
-      smoke: "opencode-cli",
-      status: "ready",
-      output: "OpenCode 1.2.3",
-    });
-  });
-
-  it("ssh-opencode smoke check does not retry for non-timeout errors", async () => {
-    const run = vi.fn().mockRejectedValue(new Error("permission denied"));
-    const handle = createHandle({ run });
-
-    await expect(launchMode(handle, "ssh-opencode")).rejects.toThrow("permission denied");
-    expect(run).toHaveBeenCalledTimes(1);
-    expect(run).toHaveBeenCalledWith("opencode --version", { timeoutMs: 15_000 });
-  });
-
-  it.each([
-    ["ssh-opencode", [{ stdout: "OpenCode failed", stderr: "", exitCode: 2 }]],
-    [
-      "ssh-codex",
-      [
-        { stdout: "PRESENT", stderr: "", exitCode: 0 },
-        { stdout: "", stderr: "codex failed", exitCode: 3 },
-      ],
-    ],
-    [
-      "ssh-claude",
-      [
-        { stdout: "PRESENT", stderr: "", exitCode: 0 },
-        { stdout: "", stderr: "claude failed", exitCode: 4 },
-      ],
-    ],
-    ["ssh-shell", [{ stdout: "", stderr: "shell failed", exitCode: 5 }]],
-  ] as const)("%s smoke check rejects a nonzero command result", async (mode, results) => {
-    const run = vi.fn();
-    for (const result of results) {
-      run.mockResolvedValueOnce(result);
-    }
-
-    await expect(launchMode(createHandle({ run }), mode)).rejects.toThrow(/failed with exit code [2345]/);
-  });
-
-  it("ssh-opencode mode uses interactive attach in tty environments", async () => {
-    const handle = createHandle({ run: vi.fn().mockResolvedValue({ stdout: "", stderr: "", exitCode: 0 }) });
-    const prepareSession = vi.fn().mockResolvedValue({
-      tempDir: "/tmp/session",
-      privateKeyPath: "/tmp/session/id_ed25519",
-      wsUrl: "wss://8081-sbx.e2b.app",
-    });
+      .mockResolvedValueOnce(ok("PRESENT"))
+      .mockResolvedValueOnce(ok("CREATED"))
+      .mockResolvedValueOnce(ok());
     const runInteractiveSession = vi.fn().mockResolvedValue(undefined);
-    const cleanupSession = vi.fn().mockResolvedValue(undefined);
-
-    const result = await startOpenCodeMode(
-      handle,
-      {},
-      {
-        isInteractiveTerminal: () => true,
-        resolveLocalOpenCodeVersion: () => undefined,
-        prepareSession,
-        runInteractiveSession,
-        cleanupSession,
-      },
-    );
-
-    expect(prepareSession).toHaveBeenCalledWith(handle);
-    expect(runInteractiveSession).toHaveBeenCalledWith(
-      {
-        tempDir: "/tmp/session",
-        privateKeyPath: "/tmp/session/id_ed25519",
-        wsUrl: "wss://8081-sbx.e2b.app",
-      },
-      `bash -lc 'exec tmux -u -L ez-devbox-opencode new-session -A -s ez-devbox-opencode "opencode attach http://127.0.0.1:4096" \\; set-option -s escape-time 0 \\; set-option -g default-terminal "screen-256color" \\; set-option -ga terminal-overrides ",xterm-256color:Tc,screen-256color:Tc,tmux-256color:Tc" \\; set-option -g status off \\; bind-key -n C-c detach-client'`,
-    );
-    expect(handle.run).toHaveBeenNthCalledWith(1, "opencode --version", { timeoutMs: 20_000 });
-    expect(handle.run).toHaveBeenNthCalledWith(
-      2,
-      "nohup opencode serve --hostname 127.0.0.1 --port 4096 >/tmp/opencode-serve-ssh.log 2>&1 &",
-      { timeoutMs: 10_000 },
-    );
-    expect(handle.run).toHaveBeenNthCalledWith(
-      3,
-      'bash -lc \'for attempt in $(seq 1 30); do status=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:4096/global/health || true); if [ "$status" = "200" ] || [ "$status" = "401" ]; then exit 0; fi; sleep 1; done; exit 1\'',
-      { timeoutMs: 35_000 },
-    );
-    expect(handle.run).toHaveBeenCalledTimes(3);
-    expect(cleanupSession).toHaveBeenCalledTimes(1);
-    expect(result.mode).toBe("ssh-opencode");
-    expect(result.details).toEqual({
-      session: "interactive",
-      status: "completed",
-    });
-  });
-
-  it("ssh-codex mode runs codex smoke check", async () => {
-    const run = vi
-      .fn()
-      .mockResolvedValueOnce({ stdout: "PRESENT", stderr: "", exitCode: 0 })
-      .mockResolvedValueOnce({ stdout: "codex 0.9.0\n", stderr: "", exitCode: 0 });
-    const handle = createHandle({ run });
-
-    const result = await launchMode(handle, "ssh-codex");
-
-    expect(run).toHaveBeenNthCalledWith(
-      1,
-      "bash -lc 'if command -v codex >/dev/null 2>&1; then printf PRESENT; else printf MISSING; fi'",
-      { timeoutMs: 15_000 },
-    );
-    expect(run).toHaveBeenNthCalledWith(2, "codex --version", { timeoutMs: 15_000 });
-    expect(result.mode).toBe("ssh-codex");
-    expect(result.details).toEqual({
-      smoke: "codex-cli",
-      status: "ready",
-      output: "codex 0.9.0",
-    });
-  });
-
-  it("ssh-claude mode runs claude smoke check", async () => {
-    const run = vi
-      .fn()
-      .mockResolvedValueOnce({ stdout: "PRESENT", stderr: "", exitCode: 0 })
-      .mockResolvedValueOnce({ stdout: "claude 1.0.0\n", stderr: "", exitCode: 0 });
-    const handle = createHandle({ run });
-
-    const result = await launchMode(handle, "ssh-claude");
-
-    expect(run).toHaveBeenNthCalledWith(
-      1,
-      "bash -lc 'if command -v claude >/dev/null 2>&1; then printf PRESENT; else printf MISSING; fi'",
-      { timeoutMs: 15_000 },
-    );
-    expect(run).toHaveBeenNthCalledWith(2, "claude --version", { timeoutMs: 15_000 });
-    expect(result.mode).toBe("ssh-claude");
-    expect(result.details).toEqual({
-      smoke: "claude-cli",
-      status: "ready",
-      output: "claude 1.0.0",
-    });
-  });
-
-  it("ssh-opencode smoke check forwards cwd/env launch context", async () => {
-    const run = vi.fn().mockResolvedValue({ stdout: "OpenCode 1.2.3\n", stderr: "", exitCode: 0 });
-    const handle = createHandle({ run });
-
-    await launchMode(handle, "ssh-opencode", {
-      workingDirectory: "/workspace/alpha",
-      startupEnv: { PROJECT_NAME: "alpha" },
-    });
-
-    expect(run).toHaveBeenCalledWith("opencode --version", {
-      cwd: "/workspace/alpha",
-      envs: { PROJECT_NAME: "alpha" },
-      timeoutMs: 15_000,
-    });
-  });
-
-  it("ssh-claude smoke check forwards cwd/env launch context", async () => {
-    const run = vi
-      .fn()
-      .mockResolvedValueOnce({ stdout: "PRESENT", stderr: "", exitCode: 0 })
-      .mockResolvedValueOnce({ stdout: "claude 1.0.0\n", stderr: "", exitCode: 0 });
-    const handle = createHandle({ run });
-
-    await launchMode(handle, "ssh-claude", {
-      workingDirectory: "/workspace/alpha",
-      startupEnv: { PROJECT_NAME: "alpha" },
-    });
-
-    expect(run).toHaveBeenNthCalledWith(
-      1,
-      "bash -lc 'if command -v claude >/dev/null 2>&1; then printf PRESENT; else printf MISSING; fi'",
-      {
-        cwd: "/workspace/alpha",
-        envs: { PROJECT_NAME: "alpha" },
-        timeoutMs: 15_000,
-      },
-    );
-    expect(run).toHaveBeenNthCalledWith(2, "claude --version", {
-      cwd: "/workspace/alpha",
-      envs: { PROJECT_NAME: "alpha" },
-      timeoutMs: 15_000,
-    });
-  });
-
-  it("ssh-opencode interactive startup forwards cwd/env context to server bootstrap", async () => {
-    const run = vi.fn().mockResolvedValue({ stdout: "", stderr: "", exitCode: 0 });
-    const handle = createHandle({ run });
-    const session = {
-      tempDir: "/tmp/session",
-      privateKeyPath: "/tmp/session/id_ed25519",
-      wsUrl: "wss://8081-sbx.e2b.app",
-    };
-
-    await startOpenCodeMode(
-      handle,
-      { workingDirectory: "/workspace/repo-a", startupEnv: { PROJECT_NAME: "repo-a" } },
-      {
-        isInteractiveTerminal: () => true,
-        resolveLocalOpenCodeVersion: () => undefined,
-        prepareSession: vi.fn().mockResolvedValue(session),
-        runInteractiveSession: vi.fn().mockResolvedValue(undefined),
-        cleanupSession: vi.fn().mockResolvedValue(undefined),
-      },
-    );
-
-    expect(run).toHaveBeenNthCalledWith(1, "opencode --version", {
-      cwd: "/workspace/repo-a",
-      envs: { PROJECT_NAME: "repo-a" },
-      timeoutMs: 20_000,
-    });
-    expect(run).toHaveBeenNthCalledWith(
-      2,
-      "nohup opencode serve --hostname 127.0.0.1 --port 4096 >/tmp/opencode-serve-ssh.log 2>&1 &",
-      {
-        cwd: "/workspace/repo-a",
-        envs: { PROJECT_NAME: "repo-a" },
-        timeoutMs: 10_000,
-      },
-    );
-    expect(run).toHaveBeenNthCalledWith(
-      3,
-      'bash -lc \'for attempt in $(seq 1 30); do status=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:4096/global/health || true); if [ "$status" = "200" ] || [ "$status" = "401" ]; then exit 0; fi; sleep 1; done; exit 1\'',
-      {
-        cwd: "/workspace/repo-a",
-        envs: { PROJECT_NAME: "repo-a" },
-        timeoutMs: 35_000,
-      },
-    );
-    expect(run.mock.calls[3]?.[0]).toContain("ez-devbox-startup-env-");
-    expect(run.mock.calls[3]?.[1]).toEqual({
-      envs: { PROJECT_NAME: "repo-a" },
-      timeoutMs: 15_000,
-    });
-  });
-
-  it("ssh-codex mode auto-installs codex when missing", async () => {
-    const run = vi
-      .fn()
-      .mockResolvedValueOnce({ stdout: "MISSING", stderr: "", exitCode: 0 })
-      .mockResolvedValueOnce({ stdout: "installed", stderr: "", exitCode: 0 })
-      .mockResolvedValueOnce({ stdout: "PRESENT", stderr: "", exitCode: 0 })
-      .mockResolvedValueOnce({ stdout: "codex 0.9.0\n", stderr: "", exitCode: 0 });
-    const handle = createHandle({ run });
-
-    const result = await launchMode(handle, "ssh-codex");
-
-    expect(run).toHaveBeenNthCalledWith(
-      1,
-      "bash -lc 'if command -v codex >/dev/null 2>&1; then printf PRESENT; else printf MISSING; fi'",
-      { timeoutMs: 15_000 },
-    );
-    expect(run).toHaveBeenNthCalledWith(2, "npm i -g @openai/codex", { timeoutMs: 120_000 });
-    expect(run).toHaveBeenNthCalledWith(
-      3,
-      "bash -lc 'if command -v codex >/dev/null 2>&1; then printf PRESENT; else printf MISSING; fi'",
-      { timeoutMs: 15_000 },
-    );
-    expect(run).toHaveBeenNthCalledWith(4, "codex --version", { timeoutMs: 15_000 });
-    expect(result.mode).toBe("ssh-codex");
-    expect(result.details).toEqual({
-      smoke: "codex-cli",
-      status: "ready",
-      output: "codex 0.9.0",
-    });
-  });
-
-  it("ssh-claude mode auto-installs claude when missing", async () => {
-    const run = vi
-      .fn()
-      .mockResolvedValueOnce({ stdout: "MISSING", stderr: "", exitCode: 0 })
-      .mockResolvedValueOnce({ stdout: "installed", stderr: "", exitCode: 0 })
-      .mockResolvedValueOnce({ stdout: "PRESENT", stderr: "", exitCode: 0 })
-      .mockResolvedValueOnce({ stdout: "claude 1.0.0\n", stderr: "", exitCode: 0 });
-    const handle = createHandle({ run });
-
-    const result = await launchMode(handle, "ssh-claude");
-
-    expect(run).toHaveBeenNthCalledWith(
-      1,
-      "bash -lc 'if command -v claude >/dev/null 2>&1; then printf PRESENT; else printf MISSING; fi'",
-      { timeoutMs: 15_000 },
-    );
-    expect(run).toHaveBeenNthCalledWith(2, "bash -lc 'curl -fsSL https://claude.ai/install.sh | bash'", {
-      timeoutMs: 120_000,
-    });
-    expect(run).toHaveBeenNthCalledWith(
-      3,
-      "bash -lc 'if command -v claude >/dev/null 2>&1; then printf PRESENT; else printf MISSING; fi'",
-      { timeoutMs: 15_000 },
-    );
-    expect(run).toHaveBeenNthCalledWith(4, "claude --version", { timeoutMs: 15_000 });
-    expect(result.mode).toBe("ssh-claude");
-    expect(result.details).toEqual({
-      smoke: "claude-cli",
-      status: "ready",
-      output: "claude 1.0.0",
-    });
-  });
-
-  it("ssh-codex mode fails with actionable error when codex install fails", async () => {
-    const run = vi
-      .fn()
-      .mockResolvedValueOnce({ stdout: "MISSING", stderr: "", exitCode: 0 })
-      .mockResolvedValueOnce({ stdout: "", stderr: "npm failed", exitCode: 1 });
-    const handle = createHandle({ run });
-
-    await expect(launchMode(handle, "ssh-codex")).rejects.toThrow(
-      "Codex CLI is not available in the sandbox and automatic install failed",
-    );
-
-    expect(run).toHaveBeenNthCalledWith(
-      1,
-      "bash -lc 'if command -v codex >/dev/null 2>&1; then printf PRESENT; else printf MISSING; fi'",
-      { timeoutMs: 15_000 },
-    );
-    expect(run).toHaveBeenNthCalledWith(2, "npm i -g @openai/codex", { timeoutMs: 120_000 });
-  });
-
-  it("ssh-claude mode fails with actionable error when install and fallback fail", async () => {
-    const run = vi
-      .fn()
-      .mockResolvedValueOnce({ stdout: "MISSING", stderr: "", exitCode: 0 })
-      .mockResolvedValueOnce({ stdout: "", stderr: "curl failed", exitCode: 1 })
-      .mockResolvedValueOnce({ stdout: "", stderr: "npm failed", exitCode: 1 });
-    const handle = createHandle({ run });
-
-    await expect(launchMode(handle, "ssh-claude")).rejects.toThrow(
-      "Claude CLI is not available in the sandbox and automatic install failed",
-    );
-
-    expect(run).toHaveBeenNthCalledWith(
-      1,
-      "bash -lc 'if command -v claude >/dev/null 2>&1; then printf PRESENT; else printf MISSING; fi'",
-      { timeoutMs: 15_000 },
-    );
-    expect(run).toHaveBeenNthCalledWith(2, "bash -lc 'curl -fsSL https://claude.ai/install.sh | bash'", {
-      timeoutMs: 120_000,
-    });
-    expect(run).toHaveBeenNthCalledWith(3, "npm i -g @anthropic-ai/claude-code", { timeoutMs: 120_000 });
-  });
-
-  it("ssh-codex mode uses interactive attach in tty environments", async () => {
-    const handle = createHandle({ run: vi.fn().mockResolvedValue({ stdout: "PRESENT", stderr: "", exitCode: 0 }) });
-    const loggerVerbose = vi.spyOn(logger, "verbose").mockImplementation(() => undefined);
-    const prepareSession = vi.fn().mockResolvedValue({
-      tempDir: "/tmp/session",
-      privateKeyPath: "/tmp/session/id_ed25519",
-      knownHostsPath: "/tmp/session/known_hosts",
-      wsUrl: "wss://8081-sbx.e2b.app",
-    });
-    const runInteractiveSession = vi.fn().mockResolvedValue(undefined);
-    const cleanupSession = vi.fn().mockResolvedValue(undefined);
-
-    const result = await startCodexMode(
-      handle,
-      {},
-      {
-        isInteractiveTerminal: () => true,
-        prepareSession,
-        runInteractiveSession,
-        cleanupSession,
-      },
-    );
-
-    expect(prepareSession).toHaveBeenCalledWith(handle);
-    expect(runInteractiveSession).toHaveBeenCalledWith(
-      {
-        tempDir: "/tmp/session",
-        privateKeyPath: "/tmp/session/id_ed25519",
-        knownHostsPath: "/tmp/session/known_hosts",
-        wsUrl: "wss://8081-sbx.e2b.app",
-      },
-      'bash -lc \'exec tmux -u -L ez-devbox-codex new-session -A -s ez-devbox-codex "codex" \\; set-option -s escape-time 0 \\; set-option -g default-terminal "screen-256color" \\; set-option -ga terminal-overrides ",xterm-256color:Tc,screen-256color:Tc,tmux-256color:Tc" \\; set-option -g status off\'',
-    );
-    expect(loggerVerbose).toHaveBeenCalledWith(
-      "Codex SSH mode uses a persistent tmux session; use Ctrl+b d to detach while it continues running in the sandbox.",
-    );
-    expect(cleanupSession).toHaveBeenCalledTimes(1);
-    expect(result.mode).toBe("ssh-codex");
-    expect(result.details).toEqual({
-      session: "interactive",
-      status: "completed",
-    });
-    loggerVerbose.mockRestore();
-  });
-
-  it("ssh-claude mode uses interactive attach in tty environments", async () => {
-    const handle = createHandle({ run: vi.fn().mockResolvedValue({ stdout: "PRESENT", stderr: "", exitCode: 0 }) });
-    const loggerVerbose = vi.spyOn(logger, "verbose").mockImplementation(() => undefined);
-    const prepareSession = vi.fn().mockResolvedValue({
-      tempDir: "/tmp/session",
-      privateKeyPath: "/tmp/session/id_ed25519",
-      knownHostsPath: "/tmp/session/known_hosts",
-      wsUrl: "wss://8081-sbx.e2b.app",
-    });
-    const runInteractiveSession = vi.fn().mockResolvedValue(undefined);
-    const cleanupSession = vi.fn().mockResolvedValue(undefined);
-
-    const result = await startClaudeMode(
-      handle,
-      {},
-      {
-        isInteractiveTerminal: () => true,
-        prepareSession,
-        runInteractiveSession,
-        cleanupSession,
-      },
-    );
-
-    expect(prepareSession).toHaveBeenCalledWith(handle);
-    expect(runInteractiveSession).toHaveBeenCalledWith(
-      {
-        tempDir: "/tmp/session",
-        privateKeyPath: "/tmp/session/id_ed25519",
-        knownHostsPath: "/tmp/session/known_hosts",
-        wsUrl: "wss://8081-sbx.e2b.app",
-      },
-      'bash -lc \'exec tmux -u -L ez-devbox-claude new-session -A -s ez-devbox-claude "claude" \\; set-option -s escape-time 0 \\; set-option -g default-terminal "screen-256color" \\; set-option -ga terminal-overrides ",xterm-256color:Tc,screen-256color:Tc,tmux-256color:Tc" \\; set-option -g status off\'',
-    );
-    expect(loggerVerbose).toHaveBeenCalledWith(
-      "Claude SSH mode uses a persistent tmux session; use Ctrl+b d to detach while it continues running in the sandbox.",
-    );
-    expect(cleanupSession).toHaveBeenCalledTimes(1);
-    expect(result.mode).toBe("ssh-claude");
-    expect(result.details).toEqual({
-      session: "interactive",
-      status: "completed",
-    });
-    loggerVerbose.mockRestore();
-  });
-
-  it("ssh-shell mode runs deterministic shell smoke command", async () => {
-    const run = vi.fn().mockResolvedValue({ stdout: "shell-ready\n", stderr: "", exitCode: 0 });
-    const handle = createHandle({ run });
-
-    const result = await launchMode(handle, "ssh-shell");
-
-    expect(run).toHaveBeenCalledWith("bash -lc 'echo shell-ready'", { timeoutMs: 15_000 });
-    expect(result.mode).toBe("ssh-shell");
-    expect(result.details).toEqual({
-      smoke: "shell",
-      status: "ready",
-      output: "shell-ready",
-    });
-  });
-
-  it("web mode forwards cwd/env launch context", async () => {
-    const run = vi
-      .fn()
-      .mockResolvedValueOnce({ stdout: "", stderr: "", exitCode: 0 })
-      .mockResolvedValueOnce({ stdout: "", stderr: "", exitCode: 0 })
-      .mockResolvedValueOnce({ stdout: "401", stderr: "", exitCode: 0 });
-    const handle = createHandle({ run, getHost: vi.fn().mockResolvedValue("sandbox-ctx.e2b.dev") });
-
-    await launchMode(handle, "web", {
-      workingDirectory: "/workspace/alpha",
-      startupEnv: { PROJECT_NAME: "alpha" },
-    });
-
-    expect(run).toHaveBeenNthCalledWith(
-      1,
-      "nohup opencode serve --hostname 0.0.0.0 --port 3000 >/tmp/opencode-serve.log 2>&1 &",
-      {
-        cwd: "/workspace/alpha",
-        envs: { PROJECT_NAME: "alpha" },
-        timeoutMs: 10_000,
-      },
-    );
-  });
-
-  it("ssh-shell mode uses interactive attach in tty environments", async () => {
-    const handle = createHandle({ run: vi.fn().mockResolvedValue({ stdout: "", stderr: "", exitCode: 0 }) });
-    const loggerVerbose = vi.spyOn(logger, "verbose").mockImplementation(() => undefined);
-    const prepareSession = vi.fn().mockResolvedValue({
-      tempDir: "/tmp/session",
-      privateKeyPath: "/tmp/session/id_ed25519",
-      knownHostsPath: "/tmp/session/known_hosts",
-      wsUrl: "wss://8081-sbx.e2b.app",
-    });
-    const runInteractiveSession = vi.fn().mockResolvedValue(undefined);
-    const cleanupSession = vi.fn().mockResolvedValue(undefined);
-
-    const result = await startShellMode(
-      handle,
-      {},
-      {
-        isInteractiveTerminal: () => true,
-        prepareSession,
-        runInteractiveSession,
-        cleanupSession,
-      },
-    );
-
-    expect(prepareSession).toHaveBeenCalledWith(handle);
-    expect(runInteractiveSession).toHaveBeenCalledWith(
-      {
-        tempDir: "/tmp/session",
-        privateKeyPath: "/tmp/session/id_ed25519",
-        knownHostsPath: "/tmp/session/known_hosts",
-        wsUrl: "wss://8081-sbx.e2b.app",
-      },
-      'bash -lc \'exec tmux -u -L ez-devbox-shell new-session -A -s ez-devbox-shell "bash -i" \\; set-option -s escape-time 0 \\; set-option -g default-terminal "screen-256color" \\; set-option -ga terminal-overrides ",xterm-256color:Tc,screen-256color:Tc,tmux-256color:Tc" \\; set-option -g status off\'',
-    );
-    expect(loggerVerbose).toHaveBeenCalledWith(
-      "Shell SSH mode uses a persistent tmux session; use Ctrl+b d to detach while it continues running in the sandbox.",
-    );
-    expect(cleanupSession).toHaveBeenCalledTimes(1);
-    expect(result.mode).toBe("ssh-shell");
-    expect(result.details).toEqual({
-      session: "interactive",
-      status: "completed",
-    });
-    loggerVerbose.mockRestore();
-  });
-
-  it("interactive modes cd into launch working directory", async () => {
-    const session = {
-      tempDir: "/tmp/session",
-      privateKeyPath: "/tmp/session/id_ed25519",
-      knownHostsPath: "/tmp/session/known_hosts",
-      wsUrl: "wss://8081-sbx.e2b.app",
-    };
-
-    const opencodeRunInteractiveSession = vi.fn().mockResolvedValue(undefined);
-    await startOpenCodeMode(
-      createHandle({ run: vi.fn().mockResolvedValue({ stdout: "", stderr: "", exitCode: 0 }) }),
-      { workingDirectory: "/workspace/repo-a", startupEnv: { PROJECT_NAME: "repo-a" } },
-      {
-        isInteractiveTerminal: () => true,
-        resolveLocalOpenCodeVersion: () => undefined,
-        prepareSession: vi.fn().mockResolvedValue(session),
-        runInteractiveSession: opencodeRunInteractiveSession,
-        cleanupSession: vi.fn().mockResolvedValue(undefined),
-      },
-    );
-
-    const codexRunInteractiveSession = vi.fn().mockResolvedValue(undefined);
     await startCodexMode(
-      createHandle({
-        run: vi
+      createHandle({ run }),
+      {},
+      {
+        isInteractiveTerminal: () => true,
+        prepareSession: vi
           .fn()
-          .mockResolvedValueOnce({ stdout: "PRESENT", stderr: "", exitCode: 0 })
-          .mockResolvedValueOnce({ stdout: "", stderr: "", exitCode: 0 }),
-      }),
-      { workingDirectory: "/workspace/repo-b", startupEnv: { PROJECT_NAME: "repo-b" } },
-      {
-        isInteractiveTerminal: () => true,
-        prepareSession: vi.fn().mockResolvedValue(session),
-        runInteractiveSession: codexRunInteractiveSession,
-        cleanupSession: vi.fn().mockResolvedValue(undefined),
-      },
-    );
-
-    const claudeRunInteractiveSession = vi.fn().mockResolvedValue(undefined);
-    await startClaudeMode(
-      createHandle({
-        run: vi
-          .fn()
-          .mockResolvedValueOnce({ stdout: "PRESENT", stderr: "", exitCode: 0 })
-          .mockResolvedValueOnce({ stdout: "", stderr: "", exitCode: 0 }),
-      }),
-      { workingDirectory: "/workspace/repo-d", startupEnv: { PROJECT_NAME: "repo-d" } },
-      {
-        isInteractiveTerminal: () => true,
-        prepareSession: vi.fn().mockResolvedValue(session),
-        runInteractiveSession: claudeRunInteractiveSession,
-        cleanupSession: vi.fn().mockResolvedValue(undefined),
-      },
-    );
-
-    const shellRunInteractiveSession = vi.fn().mockResolvedValue(undefined);
-    await startShellMode(
-      createHandle({ run: vi.fn().mockResolvedValue({ stdout: "", stderr: "", exitCode: 0 }) }),
-      { workingDirectory: "/workspace/repo-c", startupEnv: { PROJECT_NAME: "repo-c" } },
-      {
-        isInteractiveTerminal: () => true,
-        prepareSession: vi.fn().mockResolvedValue(session),
-        runInteractiveSession: shellRunInteractiveSession,
-        cleanupSession: vi.fn().mockResolvedValue(undefined),
-      },
-    );
-
-    expect(opencodeRunInteractiveSession).toHaveBeenCalledWith(session, expect.stringContaining("cd"));
-    expect(opencodeRunInteractiveSession.mock.calls[0]?.[1]).toContain("/workspace/repo-a");
-    expect(opencodeRunInteractiveSession.mock.calls[0]?.[1]).toContain("source");
-    expect(opencodeRunInteractiveSession.mock.calls[0]?.[1]).toContain("/tmp/ez-devbox-startup-env-");
-    expect(opencodeRunInteractiveSession.mock.calls[0]?.[1]).not.toContain("PROJECT_NAME");
-    expect(opencodeRunInteractiveSession.mock.calls[0]?.[1]).toContain(
-      `exec tmux -u -L ez-devbox-opencode new-session -A -s ez-devbox-opencode "opencode attach http://127.0.0.1:4096" \\; set-option -s escape-time 0 \\; set-option -g default-terminal "screen-256color" \\; set-option -ga terminal-overrides ",xterm-256color:Tc,screen-256color:Tc,tmux-256color:Tc" \\; set-option -g status off \\; bind-key -n C-c detach-client`,
-    );
-
-    expect(codexRunInteractiveSession).toHaveBeenCalledWith(session, expect.stringContaining("cd"));
-    expect(codexRunInteractiveSession.mock.calls[0]?.[1]).toContain("/workspace/repo-b");
-    expect(codexRunInteractiveSession.mock.calls[0]?.[1]).toContain("source");
-    expect(codexRunInteractiveSession.mock.calls[0]?.[1]).toContain("/tmp/ez-devbox-startup-env-");
-    expect(codexRunInteractiveSession.mock.calls[0]?.[1]).not.toContain("PROJECT_NAME");
-    expect(codexRunInteractiveSession.mock.calls[0]?.[1]).toContain(
-      'exec tmux -u -L ez-devbox-codex new-session -A -s ez-devbox-codex "codex" \\; set-option -s escape-time 0 \\; set-option -g default-terminal "screen-256color" \\; set-option -ga terminal-overrides ",xterm-256color:Tc,screen-256color:Tc,tmux-256color:Tc" \\; set-option -g status off',
-    );
-
-    expect(claudeRunInteractiveSession).toHaveBeenCalledWith(session, expect.stringContaining("cd"));
-    expect(claudeRunInteractiveSession.mock.calls[0]?.[1]).toContain("/workspace/repo-d");
-    expect(claudeRunInteractiveSession.mock.calls[0]?.[1]).toContain("source");
-    expect(claudeRunInteractiveSession.mock.calls[0]?.[1]).toContain("/tmp/ez-devbox-startup-env-");
-    expect(claudeRunInteractiveSession.mock.calls[0]?.[1]).not.toContain("PROJECT_NAME");
-    expect(claudeRunInteractiveSession.mock.calls[0]?.[1]).toContain(
-      'exec tmux -u -L ez-devbox-claude new-session -A -s ez-devbox-claude "claude" \\; set-option -s escape-time 0 \\; set-option -g default-terminal "screen-256color" \\; set-option -ga terminal-overrides ",xterm-256color:Tc,screen-256color:Tc,tmux-256color:Tc" \\; set-option -g status off',
-    );
-
-    expect(shellRunInteractiveSession).toHaveBeenCalledWith(session, expect.stringContaining("cd"));
-    expect(shellRunInteractiveSession.mock.calls[0]?.[1]).toContain("/workspace/repo-c");
-    expect(shellRunInteractiveSession.mock.calls[0]?.[1]).toContain("source");
-    expect(shellRunInteractiveSession.mock.calls[0]?.[1]).toContain("/tmp/ez-devbox-startup-env-");
-    expect(shellRunInteractiveSession.mock.calls[0]?.[1]).not.toContain("PROJECT_NAME");
-    expect(shellRunInteractiveSession.mock.calls[0]?.[1]).toContain(
-      'exec tmux -u -L ez-devbox-shell new-session -A -s ez-devbox-shell "bash -i" \\; set-option -s escape-time 0 \\; set-option -g default-terminal "screen-256color" \\; set-option -ga terminal-overrides ",xterm-256color:Tc,screen-256color:Tc,tmux-256color:Tc" \\; set-option -g status off',
-    );
-  });
-
-  it("interactive modes stage env values without exposing them in remote ssh command", async () => {
-    const session = {
-      tempDir: "/tmp/session",
-      privateKeyPath: "/tmp/session/id_ed25519",
-      knownHostsPath: "/tmp/session/known_hosts",
-      wsUrl: "wss://8081-sbx.e2b.app",
-    };
-
-    const runInteractiveSession = vi.fn().mockResolvedValue(undefined);
-    const handle = createHandle({ run: vi.fn().mockResolvedValue({ stdout: "", stderr: "", exitCode: 0 }) });
-
-    await startShellMode(
-      handle,
-      {
-        workingDirectory: "/workspace/team's-repo",
-        startupEnv: { PROJECT_NAME: "o'neil" },
-      },
-      {
-        isInteractiveTerminal: () => true,
-        prepareSession: vi.fn().mockResolvedValue(session),
+          .mockResolvedValue({ tempDir: "/tmp/bridge", privateKeyPath: "/tmp/key", wsUrl: "wss://host" }),
         runInteractiveSession,
         cleanupSession: vi.fn().mockResolvedValue(undefined),
       },
     );
-
-    const remoteCommand = runInteractiveSession.mock.calls[0]?.[1] as string;
-    const runMock = handle.run as ReturnType<typeof vi.fn>;
-    const stageCall = runMock.mock.calls.find((call) => typeof call[0] === "string" && call[0].includes("startup-env"));
-
-    expect(remoteCommand).toContain("cd");
-    expect(remoteCommand).toContain("source");
-    expect(remoteCommand).toContain("/tmp/ez-devbox-startup-env-");
-    expect(remoteCommand).not.toContain("PROJECT_NAME");
-    expect(remoteCommand).not.toContain("o'neil");
-    expect(remoteCommand).toContain(
-      'exec tmux -u -L ez-devbox-shell new-session -A -s ez-devbox-shell "bash -i" \\; set-option -s escape-time 0 \\; set-option -g default-terminal "screen-256color" \\; set-option -ga terminal-overrides ",xterm-256color:Tc,screen-256color:Tc,tmux-256color:Tc" \\; set-option -g status off',
-    );
-    expect(stageCall).toBeDefined();
-    expect(stageCall?.[1]).toMatchObject({ envs: { PROJECT_NAME: "o'neil" }, timeoutMs: 15_000 });
+    expect(String(runInteractiveSession.mock.calls[0]?.[1])).toContain("attach-session");
+    expect(String(runInteractiveSession.mock.calls[0]?.[1])).not.toContain("new-session");
   });
 
-  it("interactive env staging skips invalid keys", async () => {
-    const handle = createHandle({ run: vi.fn().mockResolvedValue({ stdout: "", stderr: "", exitCode: 0 }) });
-    const session = {
-      tempDir: "/tmp/session",
-      privateKeyPath: "/tmp/session/id_ed25519",
-      knownHostsPath: "/tmp/session/known_hosts",
-      wsUrl: "wss://8081-sbx.e2b.app",
-    };
-    const runInteractiveSession = vi.fn().mockResolvedValue(undefined);
+  it("installs Codex when missing before starting the session", async () => {
+    const run = vi
+      .fn()
+      .mockResolvedValueOnce(ok("MISSING"))
+      .mockResolvedValueOnce(ok("installed"))
+      .mockResolvedValueOnce(ok("PRESENT"))
+      .mockResolvedValueOnce(ok("CREATED"));
+    await startCodexMode(createHandle({ run }), { detach: true });
+    expect(run).toHaveBeenNthCalledWith(2, "npm i -g @openai/codex", { timeoutMs: 120_000 });
+  });
 
-    await startShellMode(
-      handle,
-      {
-        startupEnv: { GOOD_KEY: "ok", "NOT-VALID": "bad" },
-      },
-      {
-        isInteractiveTerminal: () => true,
-        prepareSession: vi.fn().mockResolvedValue(session),
-        runInteractiveSession,
-        cleanupSession: vi.fn().mockResolvedValue(undefined),
-      },
-    );
+  it("installs Claude when missing before starting the session", async () => {
+    const run = vi
+      .fn()
+      .mockResolvedValueOnce(ok("MISSING"))
+      .mockResolvedValueOnce(ok("installed"))
+      .mockResolvedValueOnce(ok("PRESENT"))
+      .mockResolvedValueOnce(ok("CREATED"));
+    await startClaudeMode(createHandle({ run }), { detach: true });
+    expect(String(run.mock.calls[1]?.[0])).toContain("claude.ai/install.sh");
+  });
 
-    const runMock = handle.run as ReturnType<typeof vi.fn>;
-    const stageCall = runMock.mock.calls.find((call) => typeof call[0] === "string" && call[0].includes("startup-env"));
-
-    expect(stageCall).toBeDefined();
-    expect(stageCall?.[1]).toMatchObject({ envs: { GOOD_KEY: "ok" } });
-    expect(runInteractiveSession.mock.calls[0]?.[1]).not.toContain("GOOD_KEY");
+  it("web mode remains a ready HTTP endpoint and rejects prompt input", async () => {
+    const run = vi.fn().mockResolvedValueOnce(ok()).mockResolvedValueOnce(ok()).mockResolvedValueOnce(ok("401"));
+    const result = await launchMode(createHandle({ run, getHost: vi.fn().mockResolvedValue("box.e2b.app") }), "web");
+    expect(result).toMatchObject({
+      readiness: "ready",
+      attachment: "not-applicable",
+      connection: { type: "http", endpoint: "https://box.e2b.app" },
+    });
+    await expect(
+      launchMode(createHandle({ run: vi.fn() }), "web", { prompt: { kind: "initial", text: "no" } }),
+    ).rejects.toThrow("not supported in web mode");
   });
 });
 
-function createHandle(overrides: Partial<SandboxHandle>): SandboxHandle {
+function ok(stdout = ""): { stdout: string; stderr: string; exitCode: number } {
+  return { stdout, stderr: "", exitCode: 0 };
+}
+
+function createHandle(overrides: Partial<SandboxHandle> = {}): SandboxHandle {
   return {
     sandboxId: "sbx-1",
-    run: overrides.run ?? vi.fn().mockResolvedValue({ stdout: "", stderr: "", exitCode: 0 }),
-    writeFile: overrides.writeFile ?? vi.fn().mockResolvedValue(undefined),
-    getHost: overrides.getHost ?? vi.fn().mockResolvedValue("https://sbx-1.e2b.dev"),
-    setTimeout: overrides.setTimeout ?? vi.fn().mockResolvedValue(undefined),
-    kill: overrides.kill ?? vi.fn().mockResolvedValue(undefined),
+    run: vi.fn().mockResolvedValue(ok()),
+    writeFile: vi.fn().mockResolvedValue(undefined),
+    getHost: vi.fn().mockResolvedValue("sbx.e2b.app"),
+    setTimeout: vi.fn().mockResolvedValue(undefined),
+    kill: vi.fn().mockResolvedValue(undefined),
+    ...overrides,
   };
 }

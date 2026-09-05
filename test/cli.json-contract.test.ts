@@ -146,7 +146,12 @@ describe("CLI JSON output contracts", () => {
       resolveEnvSource: vi.fn().mockResolvedValue({}),
       resolveSandboxCreateEnv: vi.fn().mockReturnValue({ envs: {} }),
       resolvePromptStartupMode: vi.fn().mockResolvedValue("web"),
-      launchMode: vi.fn().mockResolvedValue({ mode: "web", url: "https://sbx-created.e2b.app", message: "launched" }),
+      launchMode: vi.fn().mockResolvedValue({
+        mode: "web",
+        url: "https://sbx-created.e2b.app",
+        connection: { type: "http", endpoint: "https://sbx-created.e2b.app" },
+        message: "launched",
+      }),
       bootstrapProjectWorkspace: vi.fn().mockResolvedValue({
         selectedRepoNames: ["alpha"],
         workingDirectory: "/workspace/alpha",
@@ -165,6 +170,8 @@ describe("CLI JSON output contracts", () => {
     expect(Object.keys(parsed).sort()).toEqual(
       [
         "activeRepo",
+        "connection",
+        "lifecycle",
         "mode",
         "sandboxId",
         "sandboxLabel",
@@ -181,6 +188,7 @@ describe("CLI JSON output contracts", () => {
     expect(parsed.workingDirectory).toBe("/workspace/alpha");
     expect(parsed.activeRepo).toBe("alpha");
     expect(parsed.template).toBe("opencode");
+    expect(parsed.connection).toEqual({ type: "http", endpoint: "https://sbx-created.e2b.app" });
     expect(parsed).not.toHaveProperty("command");
   });
 
@@ -191,7 +199,19 @@ describe("CLI JSON output contracts", () => {
       loadLastRunState: vi.fn().mockResolvedValue(null),
       listSandboxes: vi.fn().mockResolvedValue([]),
       resolvePromptStartupMode: vi.fn().mockResolvedValue("ssh-opencode"),
-      launchMode: vi.fn().mockResolvedValue({ mode: "ssh-opencode", command: "opencode", message: "launched" }),
+      launchMode: vi.fn().mockResolvedValue({
+        mode: "ssh-opencode",
+        command: "opencode",
+        connection: {
+          type: "tmux",
+          socketName: "ez-devbox-opencode",
+          sessionName: "ez-devbox-opencode",
+          attachCommand: "tmux attach-session",
+          captureCommand: "tmux capture-pane",
+          input: "tmux-buffer",
+        },
+        message: "launched",
+      }),
       resolveEnvSource: vi.fn().mockResolvedValue({}),
       resolveSandboxCreateEnv: vi.fn().mockReturnValue({ envs: {} }),
       bootstrapProjectWorkspace: vi.fn().mockResolvedValue({
@@ -209,12 +229,13 @@ describe("CLI JSON output contracts", () => {
 
     expect(result.exitCode).toBe(0);
     expect(Object.keys(parsed).sort()).toEqual(
-      ["command", "mode", "sandboxId", "sandboxLabel", "setup", "workingDirectory"].sort(),
+      ["command", "connection", "lifecycle", "mode", "sandboxId", "sandboxLabel", "setup", "workingDirectory"].sort(),
     );
     expect(parsed.sandboxId).toBe("sbx-1");
     expect(parsed.mode).toBe("ssh-opencode");
     expect(parsed.command).toBe("opencode");
     expect(parsed.workingDirectory).toBe("/workspace");
+    expect(parsed.connection).toMatchObject({ socketName: "ez-devbox-opencode", sessionName: "ez-devbox-opencode" });
     expect(parsed).not.toHaveProperty("activeRepo");
     expect(parsed).not.toHaveProperty("url");
   });

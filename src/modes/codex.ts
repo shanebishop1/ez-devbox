@@ -2,22 +2,10 @@ import type { SandboxHandle } from "../e2b/lifecycle.js";
 import { logger } from "../logging/logger.js";
 import type { LaunchContextOptions, ModeLaunchResult } from "./index.js";
 import { assertRemoteCommandSucceeded } from "./remote-command.js";
-import {
-  buildInteractiveRemoteCommand,
-  cleanupSshBridgeSession,
-  prepareSshBridgeSession,
-  runInteractiveSshSession,
-  type SshModeDeps,
-  stageInteractiveStartupEnv,
-} from "./ssh-bridge.js";
-import { buildPersistentTmuxCommand } from "./tmux.js";
+import type { SshModeDeps } from "./ssh-bridge.js";
+import { startTerminalAgent } from "./terminal-agent.js";
 
-const CODEX_SMOKE_COMMAND = "codex --version";
-const CODEX_ATTACH_TMUX_COMMAND = buildPersistentTmuxCommand({
-  socketName: "ez-devbox-codex",
-  sessionName: "ez-devbox-codex",
-  command: "codex",
-});
+const CODEX_TMUX_NAME = "ez-devbox-codex";
 const CODEX_AVAILABILITY_CHECK_COMMAND =
   "bash -lc 'if command -v codex >/dev/null 2>&1; then printf PRESENT; else printf MISSING; fi'";
 const CODEX_INSTALL_COMMAND = "npm i -g @openai/codex";
@@ -26,57 +14,23 @@ const INSTALL_TIMEOUT_MS = 120_000;
 
 type CodexModeDeps = SshModeDeps;
 
-const defaultDeps: CodexModeDeps = {
-  isInteractiveTerminal: () => Boolean(process.stdin.isTTY && process.stdout.isTTY),
-  prepareSession: prepareSshBridgeSession,
-  runInteractiveSession: runInteractiveSshSession,
-  cleanupSession: cleanupSshBridgeSession,
-};
-
 export async function startCodexMode(
   handle: SandboxHandle,
   launchContext: LaunchContextOptions = {},
-  deps: CodexModeDeps = defaultDeps,
+  deps?: CodexModeDeps,
 ): Promise<ModeLaunchResult> {
   const commandContext = resolveCommandContext(launchContext);
   await ensureCodexCliAvailable(handle, commandContext);
 
-  if (launchContext.nonInteractive || !deps.isInteractiveTerminal()) {
-    return runSmokeCheck(handle, commandContext);
-  }
-
-  logger.verbose("Preparing secure SSH bridge (first run may install packages).");
-  const session = await deps.prepareSession(handle);
-
-  try {
-    const envScriptPath = await stageInteractiveStartupEnv(handle, session, commandContext.envs);
-    logger.verbose(
-      "Codex SSH mode uses a persistent tmux session; use Ctrl+b d to detach while it continues running in the sandbox.",
-    );
-    logger.verbose("Opening interactive SSH session.");
-    launchContext.onBeforeInteractiveSession?.();
-    await deps.runInteractiveSession(
-      session,
-      buildInteractiveRemoteCommand({
-        cwd: commandContext.cwd,
-        envScriptPath,
-        command: CODEX_ATTACH_TMUX_COMMAND,
-      }),
-    );
-  } finally {
-    logger.verbose("Cleaning up interactive SSH session.");
-    await deps.cleanupSession(handle, session);
-  }
-
-  return {
+  return startTerminalAgent({
+    handle,
+    launchContext,
+    ...(deps ? { deps } : {}),
     mode: "ssh-codex",
-    command: "codex",
-    details: {
-      session: "interactive",
-      status: "completed",
-    },
-    message: `Codex interactive session ended for sandbox ${handle.sandboxId}`,
-  };
+    executable: "codex",
+    socketName: CODEX_TMUX_NAME,
+    sessionName: CODEX_TMUX_NAME,
+  });
 }
 
 async function ensureCodexCliAvailable(
@@ -126,31 +80,6 @@ async function ensureCodexCliAvailable(
   logger.verbose("Codex CLI is available in sandbox.");
 }
 
-async function runSmokeCheck(
-  handle: SandboxHandle,
-  commandContext: { cwd?: string; envs: Record<string, string> },
-): Promise<ModeLaunchResult> {
-  const result = await handle.run(CODEX_SMOKE_COMMAND, {
-    ...(commandContext.cwd ? { cwd: commandContext.cwd } : {}),
-    ...(Object.keys(commandContext.envs).length > 0 ? { envs: commandContext.envs } : {}),
-    timeoutMs: COMMAND_TIMEOUT_MS,
-  });
-  assertRemoteCommandSucceeded(result, "Codex CLI smoke check");
-
-  const output = firstNonEmptyLine(result.stdout, result.stderr);
-
-  return {
-    mode: "ssh-codex",
-    command: CODEX_SMOKE_COMMAND,
-    details: {
-      smoke: "codex-cli",
-      status: "ready",
-      output,
-    },
-    message: `Codex CLI smoke passed in sandbox ${handle.sandboxId}: ${output}`,
-  };
-}
-
 function resolveCommandContext(launchContext: LaunchContextOptions): { cwd?: string; envs: Record<string, string> } {
   return {
     cwd: normalizeOptionalValue(launchContext.workingDirectory),
@@ -161,14 +90,4 @@ function resolveCommandContext(launchContext: LaunchContextOptions): { cwd?: str
 function normalizeOptionalValue(value: string | undefined): string | undefined {
   const normalized = value?.trim();
   return normalized ? normalized : undefined;
-}
-
-function firstNonEmptyLine(stdout: string, stderr: string): string {
-  const preferred = stdout.trim() || stderr.trim();
-  if (preferred === "") {
-    return "no output";
-  }
-
-  const [firstLine] = preferred.split("\n");
-  return firstLine.trim();
 }

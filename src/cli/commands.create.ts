@@ -24,7 +24,9 @@ import { formatEnvVarNames, resolveGhRuntimeEnv } from "./commands.create.env.js
 import { formatToolingSyncSummary, syncToolingForMode } from "./commands.create.sync.js";
 import { resolveTemplateForMode } from "./commands.create.template.js";
 import { loadCliEnvSource } from "./env-source.js";
+import { formatCreateLaunchResult, resolveDetachedLaunch } from "./launch-output.js";
 import { isPromptCancelledError, PromptCancelledError } from "./prompt-cancelled.js";
+import { readPromptInput, validatePromptText } from "./prompt-input.js";
 import { formatPromptLogTag, renderPromptWizardHeader, SSH_SUSPEND_RESUME_HINT } from "./prompt-style.js";
 import { buildSandboxDisplayName, formatSandboxDisplayLabel } from "./sandbox-display-name.js";
 import {
@@ -32,6 +34,7 @@ import {
   type StartupModePromptDeps,
   type StartupModePromptOptions,
 } from "./startup-mode-prompt.js";
+import { asStructuredCliError, createFailureCode } from "./structured-error.js";
 
 const TUNNEL_URL_WARNING_MESSAGE =
   "Anyone with access to your Tunnel URL can access the forwarded service/data. Treat tunnel URLs as secrets.";
@@ -68,6 +71,8 @@ export interface CreateCommandDeps {
       workingDirectory?: string;
       startupEnv?: Record<string, string>;
       nonInteractive?: boolean;
+      detach?: boolean;
+      prompt?: { kind: "initial" | "follow-up"; text: string };
       onBeforeInteractiveSession?: () => void;
       onLaunchStageUpdate?: (loadingMessage: string, completionMessage: string) => void;
       matchLocalOpenCodeVersion?: boolean;
@@ -113,7 +118,16 @@ export async function runCreateCommand(args: string[], deps: CreateCommandDeps =
   const requestedMode = parsed.mode ?? config.startup.mode;
   const configuredInteractiveTerminal =
     deps.isInteractiveTerminal ?? (() => Boolean(process.stdin.isTTY && process.stdout.isTTY));
+  const shouldDetach = resolveDetachedLaunch(
+    parsed.detach,
+    deps.isInteractiveTerminal,
+    deps === defaultDeps,
+    configuredInteractiveTerminal,
+  );
   const isInteractiveTerminal = parsed.json ? () => false : configuredInteractiveTerminal;
+  const promptText = validatePromptText(
+    await readPromptInput({ promptFile: parsed.promptFile, promptStdin: parsed.promptStdin }),
+  );
   const showsRepoPromptInCurrentSession =
     isInteractiveTerminal() &&
     config.project.mode === "single" &&
@@ -224,14 +238,20 @@ export async function runCreateCommand(args: string[], deps: CreateCommandDeps =
 
     logger.verbose(`Creating sandbox '${displayName}' with template '${createConfig.sandbox.template}'.`);
     loading.setStage("Creating sandbox...", "Created sandbox");
-    const handle = await deps.createSandbox(createConfig, {
-      envs: createEnvs,
-      metadata: {
-        "launcher.name": displayName,
-      },
-    });
+    let handle: SandboxHandle;
+    try {
+      handle = await deps.createSandbox(createConfig, {
+        envs: createEnvs,
+        metadata: {
+          "launcher.name": displayName,
+        },
+      });
+    } catch (error) {
+      throw asStructuredCliError(error, { code: "SANDBOX_CREATE_FAILED", stage: "sandbox-create" });
+    }
     const sandboxLabel = formatSandboxDisplayLabel(handle.sandboxId, { "launcher.name": displayName });
     logger.verbose(`Sandbox ready: ${sandboxLabel}.`);
+    let failedStage = "state-save";
 
     try {
       await deps.saveLastRunState({
@@ -242,11 +262,13 @@ export async function runCreateCommand(args: string[], deps: CreateCommandDeps =
       });
 
       logger.verbose("Syncing local tooling config/auth.");
+      failedStage = "tooling-sync";
       loading.setStage("Transferring auth/config...", "Transferred auth/config");
       const syncSummary = await deps.syncToolingToSandbox(config, handle, resolvedMode);
       logger.verbose(`Tooling sync: ${formatToolingSyncSummary(syncSummary)}.`);
 
       loading.setStage("Bootstrapping workspace...", "Bootstrapped workspace");
+      failedStage = "workspace-bootstrap";
       const bootstrapResult = await (deps.bootstrapProjectWorkspace ?? bootstrapProjectWorkspace)(handle, config, {
         isConnect: false,
         runtimeEnv,
@@ -257,10 +279,12 @@ export async function runCreateCommand(args: string[], deps: CreateCommandDeps =
       logger.verbose(`Setup outcome summary: ${formatSetupOutcomeSummary(bootstrapResult.setup)}.`);
 
       logger.verbose(`Launching startup mode '${mode}'.`);
+      failedStage = promptText ? "initial-prompt" : "agent-startup";
       loading.setStage(`Launching ${resolvedMode}...`, `Launched ${resolvedMode}`);
       const launchOptions = {
         workingDirectory: bootstrapResult.workingDirectory,
-        ...(parsed.json ? { nonInteractive: true } : {}),
+        ...(shouldDetach ? { detach: true } : {}),
+        ...(promptText ? { prompt: { kind: "initial" as const, text: promptText } } : {}),
         startupEnv: addWebServerPasswordForWebMode(
           {
             ...bootstrapResult.startupEnv,
@@ -297,6 +321,7 @@ export async function runCreateCommand(args: string[], deps: CreateCommandDeps =
       const activeRepo =
         bootstrapResult.selectedRepoNames.length === 1 ? bootstrapResult.selectedRepoNames[0] : undefined;
 
+      failedStage = "state-save";
       await deps.saveLastRunState({
         sandboxId: handle.sandboxId,
         mode: launched.mode,
@@ -304,41 +329,27 @@ export async function runCreateCommand(args: string[], deps: CreateCommandDeps =
         updatedAt: deps.now(),
       });
 
-      const templateSuffix = templateResolution.autoSelected
-        ? `\nTemplate auto-selected for ${resolvedMode}: ${templateResolution.template}`
-        : "";
-
-      if (parsed.json) {
-        return {
-          message: JSON.stringify(
-            {
-              sandboxId: handle.sandboxId,
-              sandboxLabel,
-              mode: launched.mode,
-              command: launched.command,
-              url: launched.url,
-              workingDirectory: bootstrapResult.workingDirectory,
-              activeRepo,
-              template: createConfig.sandbox.template,
-              setup: bootstrapResult.setup,
-              toolingSync: syncSummary,
-            },
-            null,
-            2,
-          ),
-          exitCode: 0,
-          json: true,
-        };
-      }
-
-      return {
-        message: `Created sandbox ${sandboxLabel}.${templateSuffix}`,
-        postMessages: [launched.message],
-        exitCode: 0,
-      };
+      return formatCreateLaunchResult({
+        json: parsed.json,
+        sandboxId: handle.sandboxId,
+        sandboxLabel,
+        launched,
+        shouldDetach,
+        promptText,
+        bootstrap: bootstrapResult,
+        activeRepo,
+        template: createConfig.sandbox.template,
+        templateAutoSelected: templateResolution.autoSelected,
+        resolvedMode,
+        toolingSync: syncSummary,
+      });
     } catch (error) {
       if (!isPromptCancelledError(error)) {
-        throw error;
+        throw asStructuredCliError(error, {
+          code: createFailureCode(failedStage),
+          stage: failedStage,
+          sandboxId: handle.sandboxId,
+        });
       }
 
       logger.verbose("Setup selection cancelled; wiping newly created sandbox.");

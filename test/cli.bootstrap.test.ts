@@ -114,7 +114,7 @@ describe("CLI bootstrap routing", () => {
   });
 
   it("includes command in help text", () => {
-    expect(renderHelp()).toContain("command  Run a command in a selected sandbox");
+    expect(renderHelp()).toContain("command  Run argv or an explicit shell script in a selected sandbox");
   });
 
   it("includes resume in help text", () => {
@@ -126,7 +126,7 @@ describe("CLI bootstrap routing", () => {
   });
 
   it("includes json option in help text", () => {
-    expect(renderHelp()).toContain("--json                Structured JSON output (list, command, create, connect)");
+    expect(renderHelp()).toContain("--json                Structured JSON output; does not imply --detach");
   });
 
   it("includes version option in help text", () => {

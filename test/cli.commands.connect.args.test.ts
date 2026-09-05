@@ -7,6 +7,9 @@ describe("parseConnectArgs", () => {
       sandboxId: "sbx-1",
       mode: "ssh-codex",
       json: true,
+      detach: false,
+      promptFile: undefined,
+      promptStdin: false,
     });
   });
 

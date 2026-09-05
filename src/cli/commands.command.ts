@@ -1,3 +1,4 @@
+import { readFile } from "node:fs/promises";
 import { type LoadConfigOptions, loadConfig, loadConfigWithMetadata } from "../config/load.js";
 import { resolveSandboxCreateEnv, type SandboxCreateEnvResolution } from "../e2b/env.js";
 import {
@@ -12,11 +13,13 @@ import { logger } from "../logging/logger.js";
 import { type LastRunState, loadLastRunState } from "../state/lastRun.js";
 import { withConfiguredTunnel } from "../tunnel/cloudflared.js";
 import type { CommandResult } from "../types/index.js";
+import { buildArgvCommand } from "../utils/shell.js";
 import { parseCommandArgs } from "./commands.command.args.js";
 import { withoutOpenCodeServerPassword } from "./commands.command.env.js";
 import { resolveCommandWorkingDirectory, resolveSelectedRepos } from "./commands.command.repos.js";
 import { resolveSandboxTarget } from "./commands.command.target.js";
 import { loadCliEnvSource } from "./env-source.js";
+import { asStructuredCliError } from "./structured-error.js";
 
 export interface CommandCommandDeps {
   loadConfig: (options?: LoadConfigOptions) => ReturnType<typeof loadConfig>;
@@ -84,11 +87,40 @@ export async function runCommandCommand(
       ...tunnelRuntimeEnv,
     });
 
-    const handle = await deps.connectSandbox(sandboxTarget.sandboxId, config);
-    const result = await handle.run(parsed.command, {
-      cwd,
-      ...(Object.keys(runtimeEnv).length > 0 ? { envs: runtimeEnv } : {}),
-    });
+    let handle: SandboxHandle;
+    try {
+      handle = await deps.connectSandbox(sandboxTarget.sandboxId, config);
+    } catch (error) {
+      throw asStructuredCliError(error, {
+        code: "SANDBOX_CONNECT_FAILED",
+        stage: "sandbox-connect",
+        sandboxId: sandboxTarget.sandboxId,
+      });
+    }
+    const shellScript =
+      parsed.invocation.kind === "shell" && parsed.invocation.scriptFile
+        ? await readFile(parsed.invocation.scriptFile, "utf8")
+        : parsed.invocation.kind === "shell"
+          ? parsed.invocation.script
+          : undefined;
+    const remoteCommand =
+      parsed.invocation.kind === "argv"
+        ? buildArgvCommand(parsed.invocation.argv)
+        : `bash -lc ${buildArgvCommand([shellScript ?? ""])}`;
+    let result: { stdout: string; stderr: string; exitCode: number };
+    try {
+      result = await handle.run(remoteCommand, {
+        cwd,
+        ...(Object.keys(runtimeEnv).length > 0 ? { envs: runtimeEnv } : {}),
+        ...(parsed.timeoutMs ? { timeoutMs: parsed.timeoutMs } : {}),
+      });
+    } catch (error) {
+      throw asStructuredCliError(error, {
+        code: "REMOTE_COMMAND_FAILED",
+        stage: "remote-command",
+        sandboxId: sandboxTarget.sandboxId,
+      });
+    }
     const stdout = result.stdout.trim() === "" ? "(empty)" : result.stdout;
     const stderr = result.stderr.trim() === "" ? "(empty)" : result.stderr;
     const sandboxLabel = sandboxTarget.label ?? sandboxTarget.sandboxId;
@@ -99,8 +131,9 @@ export async function runCommandCommand(
           {
             sandboxId: sandboxTarget.sandboxId,
             sandboxLabel,
-            command: parsed.command,
+            command: parsed.invocation.kind === "argv" ? remoteCommand : "bash -lc <script>",
             cwd,
+            timeoutMs: parsed.timeoutMs,
             stdout: result.stdout,
             stderr: result.stderr,
             exitCode: result.exitCode,

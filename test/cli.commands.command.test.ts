@@ -69,7 +69,7 @@ describe("runCommandCommand", () => {
         connectSandbox: vi.fn(),
         loadLastRunState: vi.fn().mockResolvedValue(null),
       }),
-    ).rejects.toThrow("Missing remote command. Provide a command after options (use -- when needed).");
+    ).rejects.toThrow("Missing remote command. Provide argv after --, or use --shell/--shell-file.");
   });
 
   it("prompts for sandbox selection when multiple exist in interactive terminals", async () => {

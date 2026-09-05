@@ -1,19 +1,12 @@
-import { type LoadConfigOptions, loadConfig, loadConfigWithMetadata } from "../config/load.js";
-import { resolveSandboxCreateEnv, type SandboxCreateEnvResolution } from "../e2b/env.js";
-import {
-  connectSandbox,
-  type LifecycleOperationOptions,
-  type ListSandboxesOptions,
-  listSandboxes,
-  type SandboxHandle,
-  type SandboxListItem,
-} from "../e2b/lifecycle.js";
+import { loadConfig, loadConfigWithMetadata } from "../config/load.js";
+import { resolveSandboxCreateEnv } from "../e2b/env.js";
+import { connectSandbox, listSandboxes, type SandboxHandle } from "../e2b/lifecycle.js";
 import { logger } from "../logging/logger.js";
 import { launchMode, type ModeLaunchResult, resolveStartupMode } from "../modes/index.js";
 import { type BootstrapProjectWorkspaceResult, bootstrapProjectWorkspace } from "../project/bootstrap.js";
-import { type LastRunState, loadLastRunState, saveLastRunState } from "../state/lastRun.js";
+import { loadLastRunState, saveLastRunState } from "../state/lastRun.js";
 import { withConfiguredTunnel } from "../tunnel/cloudflared.js";
-import type { CommandResult, StartupMode } from "../types/index.js";
+import type { CommandResult } from "../types/index.js";
 import { createLoadingStageController } from "./command-loading.js";
 import {
   addWebServerPasswordForWebMode,
@@ -22,56 +15,18 @@ import {
   removeOpenCodeServerPassword,
   resolveWebServerPassword,
 } from "./command-shared.js";
-import { parseConnectArgs } from "./commands.connect.args.js";
+import { type ConnectCommandOptions, parseConnectArgs } from "./commands.connect.args.js";
 import { resolveGhRuntimeEnv } from "./commands.connect.env.js";
 import { resolvePreferredActiveRepo, resolveSandboxTarget } from "./commands.connect.target.js";
+import type { ConnectCommandDeps } from "./commands.connect.types.js";
 import { loadCliEnvSource } from "./env-source.js";
+import { formatConnectLaunchResult, resolveDetachedLaunch } from "./launch-output.js";
+import { readPromptInput, validatePromptText } from "./prompt-input.js";
 import { renderPromptWizardHeader, SSH_SUSPEND_RESUME_HINT } from "./prompt-style.js";
-import { resolvePromptStartupMode, type StartupModePromptDeps } from "./startup-mode-prompt.js";
+import { resolvePromptStartupMode } from "./startup-mode-prompt.js";
+import { asStructuredCliError } from "./structured-error.js";
 
-export interface ConnectCommandDeps {
-  loadConfig: (options?: LoadConfigOptions) => ReturnType<typeof loadConfig>;
-  loadConfigWithMetadata?: (options?: LoadConfigOptions) => ReturnType<typeof loadConfigWithMetadata>;
-  connectSandbox: (
-    sandboxId: string,
-    config: Awaited<ReturnType<typeof loadConfig>>,
-    options?: LifecycleOperationOptions,
-  ) => Promise<SandboxHandle>;
-  loadLastRunState: () => Promise<LastRunState | null>;
-  listSandboxes: (options?: ListSandboxesOptions) => Promise<SandboxListItem[]>;
-  resolvePromptStartupMode: (requestedMode: StartupMode, deps?: StartupModePromptDeps) => Promise<StartupMode>;
-  launchMode: (
-    handle: SandboxHandle,
-    mode: StartupMode,
-    options?: {
-      workingDirectory?: string;
-      startupEnv?: Record<string, string>;
-      nonInteractive?: boolean;
-      matchLocalOpenCodeVersion?: boolean;
-      onBeforeInteractiveSession?: () => void;
-    },
-  ) => Promise<ModeLaunchResult>;
-  resolveEnvSource?: () => Promise<Record<string, string | undefined>>;
-  resolveSandboxCreateEnv?: (
-    config: Awaited<ReturnType<typeof loadConfig>>,
-    envSource?: Record<string, string | undefined>,
-  ) => SandboxCreateEnvResolution;
-  resolveHostGhToken?: (env: NodeJS.ProcessEnv) => Promise<string | undefined>;
-  bootstrapProjectWorkspace?: (
-    handle: SandboxHandle,
-    config: Awaited<ReturnType<typeof loadConfig>>,
-    options?: {
-      isConnect?: boolean;
-      isInteractiveTerminal?: () => boolean;
-      runtimeEnv?: Record<string, string>;
-      onProgress?: (message: string) => void;
-    },
-  ) => Promise<BootstrapProjectWorkspaceResult>;
-  saveLastRunState: (state: LastRunState) => Promise<void>;
-  isInteractiveTerminal?: () => boolean;
-  promptInput?: (question: string) => Promise<string>;
-  now: () => string;
-}
+export type { ConnectCommandDeps } from "./commands.connect.types.js";
 
 const defaultDeps: ConnectCommandDeps = {
   loadConfig,
@@ -88,11 +43,7 @@ const defaultDeps: ConnectCommandDeps = {
   now: () => new Date().toISOString(),
 };
 
-export interface ConnectCommandOptions {
-  skipLastRun?: boolean;
-  skipDetachHint?: boolean;
-  skipInteractiveHeader?: boolean;
-}
+export type { ConnectCommandOptions } from "./commands.connect.args.js";
 
 export async function runConnectCommand(
   args: string[],
@@ -102,8 +53,18 @@ export async function runConnectCommand(
   const parsed = parseConnectArgs(args);
   const loadedConfig = deps.loadConfigWithMetadata ? await deps.loadConfigWithMetadata() : undefined;
   const config = loadedConfig ? loadedConfig.config : await deps.loadConfig();
-  const isInteractive =
-    !parsed.json && (deps.isInteractiveTerminal ?? (() => Boolean(process.stdin.isTTY && process.stdout.isTTY)))();
+  const configuredInteractiveTerminal =
+    deps.isInteractiveTerminal ?? (() => Boolean(process.stdin.isTTY && process.stdout.isTTY));
+  const isInteractive = !parsed.json && configuredInteractiveTerminal();
+  const shouldDetach = resolveDetachedLaunch(
+    parsed.detach,
+    deps.isInteractiveTerminal,
+    deps === defaultDeps,
+    configuredInteractiveTerminal,
+  );
+  const promptText = validatePromptText(
+    await readPromptInput({ promptFile: parsed.promptFile, promptStdin: parsed.promptStdin }),
+  );
   const requestedMode = parsed.mode ?? config.startup.mode;
   const showsPromptInCurrentSession = requestedMode === "prompt" && isInteractive;
 
@@ -147,7 +108,16 @@ export async function runConnectCommand(
   return withConfiguredTunnel(config, async (tunnelRuntimeEnv) => {
     logger.verbose(`Connecting to sandbox ${targetLabel}.`);
     loading.setStage("Connecting to sandbox...", "Connected to sandbox");
-    const handle = await deps.connectSandbox(target.sandboxId, config);
+    let handle: SandboxHandle;
+    try {
+      handle = await deps.connectSandbox(target.sandboxId, config);
+    } catch (error) {
+      throw asStructuredCliError(error, {
+        code: "SANDBOX_CONNECT_FAILED",
+        stage: "sandbox-connect",
+        sandboxId: target.sandboxId,
+      });
+    }
     logger.verbose(`Connected to sandbox ${targetLabel}.`);
 
     await deps.saveLastRunState({
@@ -172,13 +142,22 @@ export async function runConnectCommand(
     const webServerPassword = resolveWebServerPassword(envSource);
 
     loading.setStage("Bootstrapping workspace...", "Bootstrapped workspace");
-    const bootstrapResult = await (deps.bootstrapProjectWorkspace ?? bootstrapProjectWorkspace)(handle, config, {
-      isConnect: true,
-      ...(parsed.json ? { isInteractiveTerminal: () => false } : {}),
-      preferredActiveRepo,
-      runtimeEnv,
-      onProgress: (message) => logger.verbose(`Bootstrap: ${message}`),
-    });
+    let bootstrapResult: BootstrapProjectWorkspaceResult;
+    try {
+      bootstrapResult = await (deps.bootstrapProjectWorkspace ?? bootstrapProjectWorkspace)(handle, config, {
+        isConnect: true,
+        ...(parsed.json ? { isInteractiveTerminal: () => false } : {}),
+        preferredActiveRepo,
+        runtimeEnv,
+        onProgress: (message) => logger.verbose(`Bootstrap: ${message}`),
+      });
+    } catch (error) {
+      throw asStructuredCliError(error, {
+        code: "WORKSPACE_BOOTSTRAP_FAILED",
+        stage: "workspace-bootstrap",
+        sandboxId: handle.sandboxId,
+      });
+    }
     logger.verbose(`Selected repos summary: ${formatSelectedReposSummary(bootstrapResult.selectedRepoNames)}.`);
     logger.verbose(`Setup outcome summary: ${formatSetupOutcomeSummary(bootstrapResult.setup)}.`);
 
@@ -189,31 +168,41 @@ export async function runConnectCommand(
 
     logger.verbose(`Launching startup mode '${mode}'.`);
     loading.setStage(`Launching ${resolvedMode}...`, `Launched ${resolvedMode}`);
-    const launched = await deps.launchMode(handle, mode, {
-      workingDirectory: bootstrapResult.workingDirectory,
-      ...(parsed.json ? { nonInteractive: true } : {}),
-      startupEnv: addWebServerPasswordForWebMode(
-        {
-          ...bootstrapResult.startupEnv,
-          ...runtimeEnv,
-        },
-        resolvedMode,
-        webServerPassword,
-      ),
-      ...(resolvedMode === "ssh-opencode"
-        ? {
-            matchLocalOpenCodeVersion: config.opencode.match_local_version ?? true,
-          }
-        : {}),
-      ...(resolvedMode !== "web" && showLoading
-        ? {
-            onBeforeInteractiveSession: () => {
-              loading.finish();
-              process.stdout.write("\n");
-            },
-          }
-        : {}),
-    });
+    let launched: ModeLaunchResult;
+    try {
+      launched = await deps.launchMode(handle, mode, {
+        workingDirectory: bootstrapResult.workingDirectory,
+        ...(shouldDetach ? { detach: true } : {}),
+        ...(promptText ? { prompt: { kind: "follow-up" as const, text: promptText } } : {}),
+        startupEnv: addWebServerPasswordForWebMode(
+          {
+            ...bootstrapResult.startupEnv,
+            ...runtimeEnv,
+          },
+          resolvedMode,
+          webServerPassword,
+        ),
+        ...(resolvedMode === "ssh-opencode"
+          ? {
+              matchLocalOpenCodeVersion: config.opencode.match_local_version ?? true,
+            }
+          : {}),
+        ...(resolvedMode !== "web" && showLoading
+          ? {
+              onBeforeInteractiveSession: () => {
+                loading.finish();
+                process.stdout.write("\n");
+              },
+            }
+          : {}),
+      });
+    } catch (error) {
+      throw asStructuredCliError(error, {
+        code: "AGENT_START_FAILED",
+        stage: promptText ? "prompt-delivery" : "agent-startup",
+        sandboxId: handle.sandboxId,
+      });
+    }
     loading.finish();
 
     const activeRepo =
@@ -230,36 +219,18 @@ export async function runConnectCommand(
       process.stdout.write("\n");
     }
 
-    if (parsed.json) {
-      return {
-        message: JSON.stringify(
-          {
-            sandboxId: handle.sandboxId,
-            sandboxLabel: targetLabel,
-            mode: launched.mode,
-            command: launched.command,
-            url: launched.url,
-            workingDirectory: bootstrapResult.workingDirectory,
-            activeRepo,
-            setup: bootstrapResult.setup,
-          },
-          null,
-          2,
-        ),
-        exitCode: 0,
-        json: true,
-      };
-    }
-
-    return !parsed.json && showLoading && resolvedMode !== "web"
-      ? {
-          message: launched.message,
-          exitCode: 0,
-        }
-      : {
-          message: `Connected to sandbox ${targetLabel}. ${launched.message}`,
-          exitCode: 0,
-        };
+    return formatConnectLaunchResult({
+      json: parsed.json,
+      showLoading,
+      resolvedMode,
+      sandboxId: handle.sandboxId,
+      sandboxLabel: targetLabel,
+      launched,
+      shouldDetach,
+      promptText,
+      bootstrap: bootstrapResult,
+      activeRepo,
+    });
   }).finally(() => {
     loading.clear();
   });

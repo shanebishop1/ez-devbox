@@ -15,6 +15,7 @@ vi.mock("../src/cli/commands.command.js", () => ({ runCommandCommand: commandMoc
 
 import { runCli } from "../src/cli/index.js";
 import { renderHelp } from "../src/cli/router.js";
+import { StructuredCliError } from "../src/cli/structured-error.js";
 import { readCliVersion } from "../src/cli/version.js";
 import { logger } from "../src/logging/logger.js";
 
@@ -60,9 +61,24 @@ describe("CLI process JSON output", () => {
     expect(exitCode).toBe(1);
     expect(stdout).toHaveBeenCalledTimes(1);
     expect(JSON.parse(String(stdout.mock.calls[0]?.[0]))).toEqual({
-      error: "list failed E2B_API_KEY=[REDACTED]",
+      error: {
+        code: "CLI_ERROR",
+        stage: "cli",
+        message: "list failed E2B_API_KEY=[REDACTED]",
+      },
     });
     expect(consoleError).not.toHaveBeenCalled();
+  });
+
+  it("preserves stable error stage and sandbox id", async () => {
+    commandMocks.connect.mockRejectedValueOnce(
+      new StructuredCliError("AGENT_START_FAILED", "agent-startup", "tmux failed", { sandboxId: "sbx-1" }),
+    );
+    const stdout = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+    expect(await runCli(["connect", "--json", "--sandbox-id", "sbx-1"])).toBe(1);
+    expect(JSON.parse(String(stdout.mock.calls[0]?.[0]))).toEqual({
+      error: { code: "AGENT_START_FAILED", stage: "agent-startup", message: "tmux failed", sandboxId: "sbx-1" },
+    });
   });
 });
 

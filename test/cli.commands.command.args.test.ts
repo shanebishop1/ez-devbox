@@ -5,8 +5,9 @@ describe("parseCommandArgs", () => {
   it("parses options and remote command", () => {
     expect(parseCommandArgs(["--sandbox-id", "sbx-1", "--json", "--", "npm", "test"])).toEqual({
       sandboxId: "sbx-1",
-      command: "npm test",
+      invocation: { kind: "argv", argv: ["npm", "test"] },
       json: true,
+      timeoutMs: undefined,
     });
   });
 
@@ -22,7 +23,14 @@ describe("parseCommandArgs", () => {
 
   it("rejects missing remote command", () => {
     expect(() => parseCommandArgs(["--sandbox-id", "sbx-1"])).toThrow(
-      "Missing remote command. Provide a command after options (use -- when needed).",
+      "Missing remote command. Provide argv after --, or use --shell/--shell-file.",
     );
+  });
+
+  it("keeps argv boundaries and parses timeouts", () => {
+    expect(parseCommandArgs(["--timeout-ms", "1234", "--", "printf", "%s", "a b"])).toMatchObject({
+      invocation: { kind: "argv", argv: ["printf", "%s", "a b"] },
+      timeoutMs: 1234,
+    });
   });
 });

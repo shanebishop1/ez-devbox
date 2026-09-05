@@ -4,11 +4,17 @@ import { parseStartupModeValue } from "./command-shared.js";
 export interface CreateCommandArgs {
   mode?: StartupMode;
   json: boolean;
+  detach: boolean;
+  promptFile?: string;
+  promptStdin: boolean;
 }
 
 export function parseCreateArgs(args: string[]): CreateCommandArgs {
   let mode: StartupMode | undefined;
   let json = false;
+  let detach = false;
+  let promptFile: string | undefined;
+  let promptStdin = false;
 
   for (let index = 0; index < args.length; index += 1) {
     const token = args[index];
@@ -29,11 +35,34 @@ export function parseCreateArgs(args: string[]): CreateCommandArgs {
       continue;
     }
 
+    if (token === "--detach") {
+      detach = true;
+      continue;
+    }
+
+    if (token === "--prompt-file") {
+      const next = args[index + 1];
+      if (!next || next.startsWith("--")) {
+        throw new Error("Missing value for --prompt-file.");
+      }
+      promptFile = next;
+      index += 1;
+      continue;
+    }
+
+    if (token === "--prompt-stdin") {
+      promptStdin = true;
+      continue;
+    }
+
     if (token.startsWith("--")) {
       throw new Error(`Unknown option for create: '${token}'. Use --help for usage.`);
     }
     throw new Error(`Unexpected positional argument for create: '${token}'. Use --help for usage.`);
   }
 
-  return { mode, json };
+  if (promptFile && promptStdin) {
+    throw new Error("Use only one of --prompt-file or --prompt-stdin.");
+  }
+  return { mode, json, detach, promptFile, promptStdin };
 }
