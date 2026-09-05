@@ -3,7 +3,7 @@ name: ez-devbox
 description: Install, configure, and use ez-devbox, a CLI that runs coding agents in disposable E2B cloud sandboxes with persistent sessions.
 ---
 
-# ez-devbox E2B sessions
+# ez-devbox
 
 `ez-devbox` creates E2B cloud sandboxes, clones and bootstraps repositories, and launches OpenCode, Codex, Claude Code, or a shell in sessions you can reconnect to later.
 
