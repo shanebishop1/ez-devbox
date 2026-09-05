@@ -1,6 +1,6 @@
 # Agent and automation usage
 
-`ez-devbox` keeps one E2B sandbox and one persistent agent/tmux identity. It does not add task IDs, queues, or a scheduler.
+`ez-devbox` keeps a persistent agent/tmux session in an E2B sandbox.
 
 ## Detached startup
 
@@ -71,4 +71,4 @@ Completed commands preserve stdout, stderr, and exit status. Transport/startup e
 ez-devbox wipe --sandbox-id "$SANDBOX_ID"
 ```
 
-`resume` intentionally uses shared last-run state for the human workflow. Concurrent automation should retain the `sandboxId` returned by `create` and pass it explicitly to every `connect`, `command`, and `wipe` call.
+`resume` uses shared last-run state. For concurrent automation, pass the `sandboxId` returned by `create` to every `connect`, `command`, and `wipe` call.

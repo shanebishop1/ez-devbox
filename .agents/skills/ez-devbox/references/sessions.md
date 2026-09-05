@@ -20,4 +20,4 @@ ez-devbox command --sandbox-id "$SANDBOX_ID" -- tmux -L ez-devbox-codex capture-
 ez-devbox wipe --sandbox-id "$SANDBOX_ID"
 ```
 
-Prompt input is unsupported for `web` and `ssh-shell`; report that error instead of dropping it.
+Prompt input is unsupported for `web` and `ssh-shell`.
