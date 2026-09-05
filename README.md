@@ -6,6 +6,8 @@
 
 `ez-devbox` runs coding agents in disposable [E2B](https://e2b.dev) sandboxes. It clones your repos, syncs selected tool config and credentials, and lets you reconnect to persistent sessions.
 
+![ez-devbox: create a sandbox, use OpenCode, and resume the session](docs/assets/ez-devbox-demo.gif)
+
 ## Features
 
 - Launch and reconnect to OpenCode, Codex, Claude Code, or a shell in the same sandbox.
