@@ -1,4 +1,0 @@
-interface:
-  display_name: "ez-devbox E2B"
-  short_description: "Manage persistent E2B agent sessions with ez-devbox"
-  default_prompt: "Use ez-devbox to manage this E2B agent session safely."
