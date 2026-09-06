@@ -1,103 +1,32 @@
-import { type LoadConfigOptions, loadConfig, loadConfigWithMetadata } from "../config/load.js";
-import type { ResolvedProjectRepoConfig } from "../config/schema.js";
-import { resolveSandboxCreateEnv, type SandboxCreateEnvResolution } from "../e2b/env.js";
-import { type CreateSandboxOptions, createSandbox, type SandboxHandle } from "../e2b/lifecycle.js";
+import { loadConfig, loadConfigWithMetadata } from "../config/load.js";
+import { resolveSandboxCreateEnv } from "../e2b/env.js";
+import { createSandbox, type SandboxHandle } from "../e2b/lifecycle.js";
 import { isVerboseLoggingEnabled, logger } from "../logging/logger.js";
-import { type ConcreteStartupMode, launchMode, type ModeLaunchResult, resolveStartupMode } from "../modes/index.js";
-import { type BootstrapProjectWorkspaceResult, bootstrapProjectWorkspace } from "../project/bootstrap.js";
-import { type SelectReposOptions, selectRepos } from "../project/bootstrap.repo-selection.js";
-import { type LastRunState, saveLastRunState } from "../state/lastRun.js";
-import type { ToolingSyncSummary } from "../tooling/host-sandbox-sync.js";
-import { type WithConfiguredTunnel, withConfiguredTunnel } from "../tunnel/cloudflared.js";
+import { launchMode, resolveStartupMode } from "../modes/index.js";
+import { selectRepos } from "../project/bootstrap.repo-selection.js";
+import { saveLastRunState } from "../state/lastRun.js";
+import { withConfiguredTunnel } from "../tunnel/cloudflared.js";
 import { resolveTunnelPorts } from "../tunnel/cloudflared.spawn.js";
-import type { CommandResult, StartupMode } from "../types/index.js";
+import type { CommandResult } from "../types/index.js";
+import { formatEnvVarNames, resolveGhRuntimeEnv } from "./command-env.js";
 import { createLoadingStageController } from "./command-loading.js";
-import {
-  addWebServerPasswordForWebMode,
-  formatSelectedReposSummary,
-  formatSetupOutcomeSummary,
-  removeOpenCodeServerPassword,
-  resolveWebServerPassword,
-} from "./command-shared.js";
+import { removeOpenCodeServerPassword, resolveWebServerPassword } from "./command-shared.js";
 import { parseCreateArgs } from "./commands.create.args.js";
-import { formatEnvVarNames, resolveGhRuntimeEnv } from "./commands.create.env.js";
-import { formatToolingSyncSummary, syncToolingForMode } from "./commands.create.sync.js";
+import { type CreateCommandDeps, executeCreateWorkflow } from "./commands.create.execute.js";
+import { syncToolingForMode } from "./commands.create.sync.js";
 import { resolveTemplateForMode } from "./commands.create.template.js";
 import { loadCliEnvSource } from "./env-source.js";
-import { formatCreateLaunchResult, resolveDetachedLaunch } from "./launch-output.js";
-import { isPromptCancelledError, PromptCancelledError } from "./prompt-cancelled.js";
+import { resolveDetachedLaunch } from "./launch-output.js";
 import { readPromptInput, validatePromptText } from "./prompt-input.js";
 import { formatPromptLogTag, renderPromptWizardHeader, SSH_SUSPEND_RESUME_HINT } from "./prompt-style.js";
 import { buildSandboxDisplayName, formatSandboxDisplayLabel } from "./sandbox-display-name.js";
-import {
-  resolvePromptStartupMode,
-  type StartupModePromptDeps,
-  type StartupModePromptOptions,
-} from "./startup-mode-prompt.js";
-import { asStructuredCliError, createFailureCode } from "./structured-error.js";
+import { resolvePromptStartupMode } from "./startup-mode-prompt.js";
+import { asStructuredCliError } from "./structured-error.js";
+
+export type { CreateCommandDeps } from "./commands.create.execute.js";
 
 const TUNNEL_URL_WARNING_MESSAGE =
   "Anyone with access to your Tunnel URL can access the forwarded service/data. Treat tunnel URLs as secrets.";
-export interface CreateCommandDeps {
-  loadConfig: (options?: LoadConfigOptions) => ReturnType<typeof loadConfig>;
-  loadConfigWithMetadata?: (options?: LoadConfigOptions) => ReturnType<typeof loadConfigWithMetadata>;
-  createSandbox: (
-    config: Awaited<ReturnType<typeof loadConfig>>,
-    options?: CreateSandboxOptions,
-  ) => Promise<SandboxHandle>;
-  resolveEnvSource: () => Promise<Record<string, string | undefined>>;
-  resolveSandboxCreateEnv: (
-    config: Awaited<ReturnType<typeof loadConfig>>,
-    envSource?: Record<string, string | undefined>,
-  ) => SandboxCreateEnvResolution;
-  resolveHostGhToken?: (env: NodeJS.ProcessEnv) => Promise<string | undefined>;
-  resolvePromptStartupMode: (
-    requestedMode: StartupMode,
-    deps?: StartupModePromptDeps,
-    options?: StartupModePromptOptions,
-  ) => Promise<StartupMode>;
-  selectReposForCreate?: (
-    repos: ResolvedProjectRepoConfig[],
-    mode: "single" | "all",
-    active: "prompt" | "name" | "index",
-    options: SelectReposOptions,
-  ) => Promise<ResolvedProjectRepoConfig[]>;
-  isInteractiveTerminal?: () => boolean;
-  promptInput?: (question: string) => Promise<string>;
-  launchMode: (
-    handle: SandboxHandle,
-    mode: StartupMode,
-    options?: {
-      workingDirectory?: string;
-      startupEnv?: Record<string, string>;
-      nonInteractive?: boolean;
-      detach?: boolean;
-      prompt?: { kind: "initial" | "follow-up"; text: string };
-      onBeforeInteractiveSession?: () => void;
-      onLaunchStageUpdate?: (loadingMessage: string, completionMessage: string) => void;
-      matchLocalOpenCodeVersion?: boolean;
-    },
-  ) => Promise<ModeLaunchResult>;
-  bootstrapProjectWorkspace?: (
-    handle: SandboxHandle,
-    config: Awaited<ReturnType<typeof loadConfig>>,
-    options?: {
-      isConnect?: boolean;
-      runtimeEnv?: Record<string, string>;
-      onProgress?: (message: string) => void;
-      selectedReposOverride?: ResolvedProjectRepoConfig[];
-    },
-  ) => Promise<BootstrapProjectWorkspaceResult>;
-  syncToolingToSandbox: (
-    config: Awaited<ReturnType<typeof loadConfig>>,
-    sandbox: Pick<SandboxHandle, "run" | "writeFile">,
-    mode: ConcreteStartupMode,
-  ) => Promise<ToolingSyncSummary>;
-  saveLastRunState: (state: LastRunState) => Promise<void>;
-  now: () => string;
-  withConfiguredTunnel?: WithConfiguredTunnel;
-}
-
 const defaultDeps: CreateCommandDeps = {
   loadConfig,
   loadConfigWithMetadata,
@@ -251,131 +180,25 @@ export async function runCreateCommand(args: string[], deps: CreateCommandDeps =
     }
     const sandboxLabel = formatSandboxDisplayLabel(handle.sandboxId, { "launcher.name": displayName });
     logger.verbose(`Sandbox ready: ${sandboxLabel}.`);
-    let failedStage = "state-save";
-
-    try {
-      await deps.saveLastRunState({
-        sandboxId: handle.sandboxId,
-        mode,
-        activeRepo: undefined,
-        updatedAt: deps.now(),
-      });
-
-      logger.verbose("Syncing local tooling config/auth.");
-      failedStage = "tooling-sync";
-      loading.setStage("Transferring auth/config...", "Transferred auth/config");
-      const syncSummary = await deps.syncToolingToSandbox(config, handle, resolvedMode);
-      logger.verbose(`Tooling sync: ${formatToolingSyncSummary(syncSummary)}.`);
-
-      loading.setStage("Bootstrapping workspace...", "Bootstrapped workspace");
-      failedStage = "workspace-bootstrap";
-      const bootstrapResult = await (deps.bootstrapProjectWorkspace ?? bootstrapProjectWorkspace)(handle, config, {
-        isConnect: false,
-        runtimeEnv,
-        selectedReposOverride: selectedRepos,
-        onProgress: (message) => logger.verbose(`Bootstrap: ${message}`),
-      });
-      logger.verbose(`Selected repos summary: ${formatSelectedReposSummary(bootstrapResult.selectedRepoNames)}.`);
-      logger.verbose(`Setup outcome summary: ${formatSetupOutcomeSummary(bootstrapResult.setup)}.`);
-
-      logger.verbose(`Launching startup mode '${mode}'.`);
-      failedStage = promptText ? "initial-prompt" : "agent-startup";
-      loading.setStage(`Launching ${resolvedMode}...`, `Launched ${resolvedMode}`);
-      const launchOptions = {
-        workingDirectory: bootstrapResult.workingDirectory,
-        ...(shouldDetach ? { detach: true } : {}),
-        ...(promptText ? { prompt: { kind: "initial" as const, text: promptText } } : {}),
-        startupEnv: addWebServerPasswordForWebMode(
-          {
-            ...bootstrapResult.startupEnv,
-            ...runtimeEnv,
-          },
-          resolvedMode,
-          webServerPassword,
-        ),
-        ...(resolvedMode === "ssh-opencode"
-          ? {
-              matchLocalOpenCodeVersion: config.opencode.match_local_version ?? true,
-            }
-          : {}),
-        ...(isInteractiveTerminal() && resolvedMode === "ssh-opencode"
-          ? {
-              onLaunchStageUpdate: (loadingMessage: string, completionMessage: string) =>
-                loading.setStage(loadingMessage, completionMessage),
-            }
-          : {}),
-      };
-      const shouldDelaySpinnerStopForInteractive = resolvedMode !== "web" && isInteractiveTerminal();
-      const launched = await deps.launchMode(
-        handle,
-        mode,
-        shouldDelaySpinnerStopForInteractive
-          ? {
-              ...launchOptions,
-              onBeforeInteractiveSession: loading.finish,
-            }
-          : launchOptions,
-      );
-      loading.finish();
-
-      const activeRepo =
-        bootstrapResult.selectedRepoNames.length === 1 ? bootstrapResult.selectedRepoNames[0] : undefined;
-
-      failedStage = "state-save";
-      await deps.saveLastRunState({
-        sandboxId: handle.sandboxId,
-        mode: launched.mode,
-        activeRepo,
-        updatedAt: deps.now(),
-      });
-
-      return formatCreateLaunchResult({
-        json: parsed.json,
-        sandboxId: handle.sandboxId,
-        sandboxLabel,
-        launched,
-        shouldDetach,
-        promptText,
-        bootstrap: bootstrapResult,
-        activeRepo,
-        template: createConfig.sandbox.template,
-        templateAutoSelected: templateResolution.autoSelected,
-        resolvedMode,
-        toolingSync: syncSummary,
-      });
-    } catch (error) {
-      if (!isPromptCancelledError(error)) {
-        throw asStructuredCliError(error, {
-          code: createFailureCode(failedStage),
-          stage: failedStage,
-          sandboxId: handle.sandboxId,
-        });
-      }
-
-      logger.verbose("Setup selection cancelled; wiping newly created sandbox.");
-      try {
-        await handle.kill();
-      } catch (wipeError) {
-        throw new PromptCancelledError(
-          `Setup selection cancelled and sandbox '${sandboxLabel}' could not be wiped: ${toErrorMessage(wipeError)}`,
-          { cause: error },
-        );
-      }
-
-      throw new PromptCancelledError(`Setup selection cancelled; sandbox '${sandboxLabel}' was wiped.`, {
-        cause: error,
-      });
-    } finally {
-      loading.clear();
-    }
+    return executeCreateWorkflow({
+      deps,
+      config,
+      template: createConfig.sandbox.template,
+      handle,
+      mode,
+      resolvedMode,
+      sandboxLabel,
+      selectedRepos,
+      runtimeEnv,
+      webServerPassword,
+      shouldDetach,
+      promptText,
+      json: parsed.json,
+      templateAutoSelected: templateResolution.autoSelected,
+      isInteractiveTerminal,
+      loading,
+    });
   });
-}
-
-function toErrorMessage(error: unknown): string {
-  if (error instanceof Error && error.message.trim() !== "") {
-    return error.message;
-  }
-  return "unknown error";
 }
 
 export { syncToolingForMode };

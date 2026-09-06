@@ -7,6 +7,7 @@ import { type BootstrapProjectWorkspaceResult, bootstrapProjectWorkspace } from 
 import { loadLastRunState, saveLastRunState } from "../state/lastRun.js";
 import { withConfiguredTunnel } from "../tunnel/cloudflared.js";
 import type { CommandResult } from "../types/index.js";
+import { resolveGhRuntimeEnv } from "./command-env.js";
 import { createLoadingStageController } from "./command-loading.js";
 import {
   addWebServerPasswordForWebMode,
@@ -16,7 +17,6 @@ import {
   resolveWebServerPassword,
 } from "./command-shared.js";
 import { type ConnectCommandOptions, parseConnectArgs } from "./commands.connect.args.js";
-import { resolveGhRuntimeEnv } from "./commands.connect.env.js";
 import { resolvePreferredActiveRepo, resolveSandboxTarget } from "./commands.connect.target.js";
 import type { ConnectCommandDeps } from "./commands.connect.types.js";
 import { loadCliEnvSource } from "./env-source.js";
