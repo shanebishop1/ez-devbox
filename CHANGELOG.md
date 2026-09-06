@@ -4,9 +4,23 @@ Notable changes are recorded here. This project follows semantic versioning when
 
 ## Unreleased
 
+### Added
+
+- Added detached startup and reconnect flows for SSH agent and shell modes, with lifecycle-aware JSON results and tmux connection details.
+- Added initial and follow-up prompt transport through `--prompt-file` and `--prompt-stdin`, plus documented non-PTY inspection, explicit shell execution, and concurrent automation guidance.
+
 ### Changed
 
-- Updated E2B to v2 and refreshed runtime and development dependencies.
+- Updated the E2B adapter and lifecycle handling for SDK v2, including list pagination and boolean deletion results, and hardened live-test cleanup and failure reporting.
+- Refreshed runtime, development, and CI dependencies, including `dotenv`, TypeScript, Vitest, `tsx`, Node types, and the GitHub Actions checkout/setup-node versions; CI continues to cover Linux and macOS on Node 20 and 24.
+- Clarified CLI help/version output and isolated OpenCode version checks from host-specific tooling.
+- Introduced focused source boundaries for shared command argument/environment resolution, create execution, and host-sandbox sync operations while preserving command compatibility entry points.
+- Added compatibility coverage for legacy last-run state, the legacy `--yes-sync` flag, and command-specific environment helpers; offline validation now includes source coverage thresholds.
+
+### Documentation
+
+- Corrected README release guidance and current-source examples for detached and prompt transport, removed the unusable blank 70ms demo GIF, and documented that a replacement recording is still pending.
+- Expanded the ez-devbox skill and automation docs, and updated package metadata and release instructions.
 
 ## 0.6.0 - 2026-09-04
 
