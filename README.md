@@ -6,7 +6,7 @@
 
 `ez-devbox` runs coding agents in disposable [E2B](https://e2b.dev) sandboxes. It clones your repos, syncs selected tool config and credentials, and lets you reconnect to persistent sessions.
 
-![ez-devbox: create a sandbox, use OpenCode, and resume the session](docs/assets/ez-devbox-demo.gif)
+> **Release status:** npm's latest release is `0.6.0`. This README tracks the current `main` branch, which includes unreleased CLI improvements. The `--detach`, prompt-file, and prompt-stdin examples require a current source checkout until the next npm release.
 
 ## Features
 
@@ -14,6 +14,18 @@
 - Clone repos, check out branches, and run setup commands from a TOML config.
 - Forward selected environment variables and sync local tool auth/config.
 - Reach local MCP servers, Docker containers, or other services through optional tunnels.
+
+## Demo flow
+
+No recording is linked until this flow can be captured with sandbox IDs and private repository names redacted. From a current source checkout:
+
+```bash
+npm run dev -- create --mode ssh-opencode --detach --json
+# Set SANDBOX_ID to the sandboxId from the create result.
+npm run dev -- resume
+npm run dev -- list --json
+npm run dev -- wipe --sandbox-id "$SANDBOX_ID"
+```
 
 ## Agent Modes
 
@@ -52,7 +64,7 @@ npm install -g ez-devbox
 ez-devbox --help
 ```
 
-Use `ez-devbox` in portable instructions. The short `ezdb` binary is declared by the current package and will first be available on npm in the release after `0.5.5`; npm `0.5.5` exposes only `ez-devbox`. Once you install a version that includes it, `ezdb --help` is equivalent.
+The package installs both `ez-devbox` and its shorter alias, `ezdb`.
 
 ## Environment variables
 
