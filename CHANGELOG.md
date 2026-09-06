@@ -4,6 +4,8 @@ Notable changes are recorded here. This project follows semantic versioning when
 
 ## Unreleased
 
+## 0.6.1 - 2026-09-06
+
 ### Added
 
 - Added detached startup and reconnect flows for SSH agent and shell modes, with lifecycle-aware JSON results and tmux connection details.
@@ -19,7 +21,7 @@ Notable changes are recorded here. This project follows semantic versioning when
 
 ### Documentation
 
-- Corrected README release guidance and current-source examples for detached and prompt transport, removed the unusable blank 70ms demo GIF, and documented that a replacement recording is still pending.
+- Restored the original terminal demo embed and demo flow in the README; release guidance and current-source examples for detached and prompt transport now match the current CLI.
 - Expanded the ez-devbox skill and automation docs, and updated package metadata and release instructions.
 
 ## 0.6.0 - 2026-09-04

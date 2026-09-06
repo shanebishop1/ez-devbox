@@ -8,8 +8,6 @@
 
 ![ez-devbox: create a sandbox, use OpenCode, and resume the session](docs/assets/ez-devbox-demo.gif)
 
-> **Release status:** npm's latest release is `0.6.0`. This README tracks the current `main` branch, which includes unreleased CLI improvements. The `--detach`, prompt-file, and prompt-stdin examples require a current source checkout until the next npm release.
-
 ## Features
 
 - Launch and reconnect to OpenCode, Codex, Claude Code, or a shell in the same sandbox.
