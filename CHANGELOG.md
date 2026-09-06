@@ -4,6 +4,8 @@ Notable changes are recorded here. This project follows semantic versioning when
 
 ## Unreleased
 
+## 0.6.2 - 2026-09-06
+
 ### Fixed
 
 - Fixed the packaged `ez-devbox` and `ezdb` executables producing no output when invoked through npm-created bin symlinks.
