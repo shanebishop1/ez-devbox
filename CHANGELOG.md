@@ -2,6 +2,12 @@
 
 Notable changes are recorded here. This project follows semantic versioning when practical.
 
+## Unreleased
+
+### Changed
+
+- Updated E2B to v2 and refreshed runtime and development dependencies.
+
 ## 0.6.0 - 2026-09-04
 
 ### Added
@@ -11,7 +17,6 @@ Notable changes are recorded here. This project follows semantic versioning when
 - An offline release-quality command covering complexity, style, tests, build, and package contents.
 
 ### Changed
-
 - Added a runnable example config at the repository root.
 - Clarified credential forwarding, tunnel exposure, supported hosts, and E2B resource cleanup.
 - Hardened CI and npm publishing by pinning actions and running the complete offline validation gate.

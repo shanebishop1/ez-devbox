@@ -3,12 +3,12 @@ import type { LaunchContextOptions, ModeLaunchResult } from "./index.js";
 import { assertRemoteCommandSucceeded } from "./remote-command.js";
 
 const WEB_COMMAND =
-  'bash -lc \'status=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:3000/ || true); if [ "$status" = 200 ] || [ "$status" = 401 ]; then exit 0; fi; if ! pgrep -f "[o]pencode serve.*--port 3000" >/dev/null; then nohup opencode serve --hostname 0.0.0.0 --port 3000 >/tmp/opencode-serve.log 2>&1 & fi\'';
+  'bash -lc \'status=$(curl --connect-timeout 2 --max-time 3 -s -o /dev/null -w "%{http_code}" http://127.0.0.1:3000/ || true); if [ "$status" = 200 ] || [ "$status" = 401 ]; then exit 0; fi; nohup opencode serve --hostname 0.0.0.0 --port 3000 >/tmp/opencode-serve.log 2>&1 &\'';
 const WEB_READINESS_COMMAND =
-  'bash -lc \'for attempt in $(seq 1 30); do status=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:3000/ || true); if [ "$status" = "200" ] || [ "$status" = "401" ]; then exit 0; fi; sleep 1; done; exit 1\'';
+  'bash -lc \'for attempt in $(seq 1 30); do status=$(curl --connect-timeout 1 --max-time 1 -s -o /dev/null -w "%{http_code}" http://127.0.0.1:3000/ || true); if [ "$status" = "200" ] || [ "$status" = "401" ]; then exit 0; fi; sleep 1; done; exit 1\'';
 const WEB_AUTH_PROBE_COMMAND = "bash -lc 'curl -s -o /dev/null -w \"%{http_code}\" http://127.0.0.1:3000/ || true'";
 const WEB_START_TIMEOUT_MS = 10_000;
-const WEB_READY_TIMEOUT_MS = 35_000;
+const WEB_READY_TIMEOUT_MS = 60_000;
 const WEB_AUTH_TIMEOUT_MS = 10_000;
 
 export async function startWebMode(

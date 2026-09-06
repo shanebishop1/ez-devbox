@@ -13,4 +13,11 @@ describe("package scripts", () => {
 
     expect(validateScript).toContain("npm run e2e:live");
   });
+
+  it("enforces source coverage in offline validation", () => {
+    const raw = readFileSync(new URL("../package.json", import.meta.url), "utf8");
+    const parsed = JSON.parse(raw) as PackageJsonScriptsShape;
+
+    expect(parsed.scripts?.["validate:offline"]).toContain("npm run test:coverage");
+  });
 });

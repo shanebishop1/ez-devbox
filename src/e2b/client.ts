@@ -22,7 +22,7 @@ export interface E2BSandbox {
   };
   getHost(port: number): string;
   setTimeout(timeoutMs: number): Promise<void>;
-  kill(): Promise<void>;
+  kill(): Promise<boolean>;
 }
 
 export interface E2BClientOptions {
@@ -68,10 +68,15 @@ export function createE2BClient(): E2BClient {
       });
     },
     async list(opts) {
-      const sandboxes = await Sandbox.list({
+      const paginator = Sandbox.list({
         query: opts?.metadata === undefined ? undefined : { metadata: opts.metadata },
         requestTimeoutMs: opts?.requestTimeoutMs,
       });
+      const sandboxes = [];
+
+      while (paginator.hasNext) {
+        sandboxes.push(...(await paginator.nextItems()));
+      }
 
       return sandboxes.map((sandbox) => ({
         sandboxId: sandbox.sandboxId,

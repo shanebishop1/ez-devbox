@@ -377,4 +377,5 @@ function toErrorMessage(error: unknown): string {
   }
   return "unknown error";
 }
+
 export { syncToolingForMode };

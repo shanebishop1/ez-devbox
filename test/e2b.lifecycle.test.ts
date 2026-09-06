@@ -239,7 +239,7 @@ function createMockSandbox(
     },
     getHost: vi.fn().mockReturnValue(`${sandboxId}.host`),
     setTimeout: vi.fn().mockResolvedValue(undefined),
-    kill: vi.fn().mockResolvedValue(undefined),
+    kill: vi.fn().mockResolvedValue(true),
   };
 }
 

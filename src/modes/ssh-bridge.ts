@@ -12,11 +12,11 @@ import { allocateSshBridgePorts } from "./ssh-bridge.ports.js";
 import type { SshBridgePorts, SshBridgeSession, SshBridgeSessionArtifacts, SshModeDeps } from "./ssh-bridge.types.js";
 import { quoteShellArg, toWsUrl } from "./ssh-bridge.utils.js";
 
-export type { SshBridgePorts, SshBridgeSession, SshBridgeSessionArtifacts, SshModeDeps };
-export { cleanupSshBridgeSession };
 export { buildInteractiveRemoteCommand, buildSshClientArgs, runInteractiveSshSession } from "./ssh-bridge.commands.js";
 export { allocateSshBridgePorts } from "./ssh-bridge.ports.js";
 export { stageInteractiveStartupEnv } from "./ssh-bridge.startup-env.js";
+export type { SshBridgePorts, SshBridgeSession, SshBridgeSessionArtifacts, SshModeDeps };
+export { cleanupSshBridgeSession };
 
 export async function prepareSshBridgeSession(handle: SandboxHandle): Promise<SshBridgeSession> {
   logger.verbose("SSH bridge: checking/installing dependencies.");

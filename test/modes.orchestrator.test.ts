@@ -35,8 +35,9 @@ describe("persistent startup modes", () => {
     const run = vi.fn().mockResolvedValueOnce(ok()).mockResolvedValueOnce(ok()).mockResolvedValueOnce(ok("CREATED"));
     const result = await startOpenCodeMode(createHandle({ run }), { detach: true });
 
-    expect(String(run.mock.calls[0]?.[0])).toContain("pgrep -f");
+    expect(String(run.mock.calls[0]?.[0])).toContain("opencode serve --hostname 127.0.0.1 --port 4096");
     expect(String(run.mock.calls[1]?.[0])).toContain("global/health api/health");
+    expect(run.mock.calls[1]?.[1]).toMatchObject({ timeoutMs: 0 });
     expect(String(run.mock.calls[2]?.[0])).toContain("opencode attach http://127.0.0.1:4096");
     expect(run.mock.calls.some(([command]) => String(command).includes("opencode --version"))).toBe(false);
     expect(result.connection).toMatchObject({ type: "tmux", socketName: "ez-devbox-opencode" });

@@ -20,6 +20,12 @@ interface CheckResult {
   detail: string;
 }
 
+interface CleanupResult {
+  sandboxId: string;
+  killed: boolean;
+  error?: string;
+}
+
 const MARKER_PATH = "/tmp/ez-devbox-live-marker.txt";
 
 async function main(): Promise<void> {
@@ -188,31 +194,49 @@ async function cleanupSandboxes(
   codexSandboxId: string | null,
   claudeSandboxId: string | null,
 ): Promise<void> {
-  await Promise.all(
+  const cleanupResults = await Promise.all(
     sandboxIds.map(async (sandboxId) => {
       try {
-        await killSandbox(sandboxId);
-      } catch {
-        // best effort cleanup in smoke script
+        return { sandboxId, killed: await killSandbox(sandboxId) };
+      } catch (error) {
+        return { sandboxId, killed: false, error: formatError(error) };
       }
     }),
   );
+  const cleanupBySandboxId = new Map(cleanupResults.map((result) => [result.sandboxId, result]));
 
-  checks.push({
-    name: "cleanup opencode sandbox",
-    status: opencodeSandboxId ? "PASS" : "SKIP",
-    detail: opencodeSandboxId ? `requested kill for ${opencodeSandboxId}` : "opencode sandbox was not created",
-  });
-  checks.push({
-    name: "cleanup codex sandbox",
-    status: codexSandboxId ? "PASS" : "SKIP",
-    detail: codexSandboxId ? `requested kill for ${codexSandboxId}` : "codex sandbox was not created",
-  });
-  checks.push({
-    name: "cleanup claude sandbox",
-    status: claudeSandboxId ? "PASS" : "SKIP",
-    detail: claudeSandboxId ? `requested kill for ${claudeSandboxId}` : "claude sandbox was not created",
-  });
+  checks.push(buildCleanupCheck("opencode", opencodeSandboxId, cleanupBySandboxId));
+  checks.push(buildCleanupCheck("codex", codexSandboxId, cleanupBySandboxId));
+  checks.push(buildCleanupCheck("claude", claudeSandboxId, cleanupBySandboxId));
+}
+
+function buildCleanupCheck(
+  mode: "opencode" | "codex" | "claude",
+  sandboxId: string | null,
+  cleanupBySandboxId: Map<string, CleanupResult>,
+): CheckResult {
+  if (sandboxId === null) {
+    return {
+      name: `cleanup ${mode} sandbox`,
+      status: "SKIP",
+      detail: `${mode} sandbox was not created`,
+    };
+  }
+
+  const cleanup = cleanupBySandboxId.get(sandboxId);
+  if (cleanup?.killed) {
+    return {
+      name: `cleanup ${mode} sandbox`,
+      status: "PASS",
+      detail: `killed ${sandboxId}`,
+    };
+  }
+
+  return {
+    name: `cleanup ${mode} sandbox`,
+    status: "FAIL",
+    detail: cleanup?.error ?? `sandbox ${sandboxId} was not found during cleanup`,
+  };
 }
 
 function formatError(error: unknown): string {
