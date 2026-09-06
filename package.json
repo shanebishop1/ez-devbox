@@ -1,6 +1,6 @@
 {
   "name": "ez-devbox",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "description": "Launch and reconnect disposable E2B sandboxes for coding-agent workflows",
   "main": "dist/src/cli/index.js",
   "types": "dist/src/cli/index.d.ts",
