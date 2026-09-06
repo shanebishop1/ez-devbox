@@ -20,4 +20,11 @@ describe("package scripts", () => {
 
     expect(parsed.scripts?.["validate:offline"]).toContain("npm run test:coverage");
   });
+
+  it("smoke-tests installed package bins during package verification", () => {
+    const raw = readFileSync(new URL("../package.json", import.meta.url), "utf8");
+    const parsed = JSON.parse(raw) as PackageJsonScriptsShape;
+
+    expect(parsed.scripts?.["pack:check"]).toContain("verify-installed-package.ts");
+  });
 });
