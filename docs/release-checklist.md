@@ -10,7 +10,7 @@ Run this checklist before publishing a new `ez-devbox` version.
    - (or run offline and live checks together) `npm run validate`
 3. Verify package contents and runtime entrypoints (already included in `validate:offline`):
    - `npm run pack:check`
-   - this packs and installs the package locally, then invokes both npm-created bins with `--version` and `--help`
+   - this creates the tarball, then uses an offline local-package link backed by the root `npm ci` dependencies to invoke both npm-created bins with `--version` and `--help` and verify passive library imports; it requires no registry metadata after `npm ci`
    - (optional inspect raw output) `npm pack --dry-run --json`
 4. Confirm required artifacts are present in the pack output:
    - `dist/src/cli/index.js`

@@ -1,8 +1,8 @@
 import { execFileSync, spawnSync } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { lstatSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 interface PackageJsonShape {
   version: string;
@@ -13,20 +13,34 @@ interface NpmPackRecord {
 }
 
 const REQUIRED_BINS = ["ez-devbox", "ezdb"] as const;
-const packageJson = JSON.parse(readFileSync("package.json", "utf8")) as PackageJsonShape;
+const PROJECT_ROOT = fileURLToPath(new URL("..", import.meta.url));
+const packageJson = JSON.parse(readFileSync(join(PROJECT_ROOT, "package.json"), "utf8")) as PackageJsonShape;
 
-function runNpm(args: string[]): string {
+function runNpm(args: string[], cacheRoot: string): string {
   const npmCli = process.env.npm_execpath;
   if (npmCli === undefined) {
     throw new Error("npm_execpath is required; run this check through 'npm run pack:check'.");
   }
 
-  return execFileSync(process.execPath, [npmCli, ...args], { encoding: "utf8" });
+  return execFileSync(process.execPath, [npmCli, ...args], {
+    encoding: "utf8",
+    env: {
+      ...process.env,
+      npm_config_cache: cacheRoot,
+      npm_config_offline: "true",
+      npm_config_update_notifier: "false",
+    },
+  });
 }
 
-function runInstalledBin(installRoot: string, bin: string, argument: "--help" | "--version"): string {
+function runInstalledBin(
+  installRoot: string,
+  cacheRoot: string,
+  bin: string,
+  argument: "--help" | "--version",
+): string {
   if (process.platform === "win32") {
-    return runNpm(["exec", "--offline", "--prefix", installRoot, "--", bin, argument]);
+    return runNpm(["exec", "--prefix", installRoot, "--", bin, argument], cacheRoot);
   }
 
   const executable = join(installRoot, "node_modules", ".bin", bin);
@@ -38,6 +52,15 @@ function runInstalledBin(installRoot: string, bin: string, argument: "--help" | 
     throw new Error(`${bin} ${argument} exited ${result.status}: ${result.stderr}`);
   }
   return result.stdout;
+}
+
+function assertNpmBinLink(installRoot: string, bin: string): void {
+  const executableName = process.platform === "win32" ? `${bin}.cmd` : bin;
+  const executable = join(installRoot, "node_modules", ".bin", executableName);
+  const stats = lstatSync(executable);
+  if (process.platform !== "win32" && !stats.isSymbolicLink()) {
+    throw new Error(`npm did not create '${executable}' as a symbolic link.`);
+  }
 }
 
 function parsePackOutput(output: string): NpmPackRecord {
@@ -59,38 +82,53 @@ function assertLibraryImportIsPassive(installRoot: string): void {
 
 function main(): void {
   const workRoot = mkdtempSync(join(tmpdir(), "ez-devbox-package-smoke-"));
-  const packageRoot = join(workRoot, "package");
+  const installRoot = join(workRoot, "consumer");
+  const cacheRoot = join(workRoot, "empty-npm-cache");
 
   try {
-    const packRecord = parsePackOutput(runNpm(["pack", "--json", "--pack-destination", workRoot]));
+    const packRecord = parsePackOutput(
+      runNpm(["pack", PROJECT_ROOT, "--json", "--pack-destination", workRoot], cacheRoot),
+    );
     const tarballPath = join(workRoot, packRecord.filename);
-    runNpm([
-      "install",
-      "--prefix",
-      packageRoot,
-      "--ignore-scripts",
-      "--no-audit",
-      "--no-fund",
-      "--offline",
-      tarballPath,
-    ]);
+    if (!lstatSync(tarballPath).isFile()) {
+      throw new Error(`npm pack did not create '${tarballPath}'.`);
+    }
+
+    runNpm(
+      [
+        "install",
+        "--prefix",
+        installRoot,
+        "--ignore-scripts",
+        "--no-audit",
+        "--no-fund",
+        "--no-package-lock",
+        "--no-save",
+        "--no-install-links",
+        "--bin-links=true",
+        PROJECT_ROOT,
+      ],
+      cacheRoot,
+    );
 
     for (const bin of REQUIRED_BINS) {
-      const versionOutput = runInstalledBin(packageRoot, bin, "--version").trim();
+      assertNpmBinLink(installRoot, bin);
+
+      const versionOutput = runInstalledBin(installRoot, cacheRoot, bin, "--version").trim();
       if (versionOutput !== packageJson.version) {
         throw new Error(`${bin} --version returned '${versionOutput}', expected '${packageJson.version}'.`);
       }
 
-      const helpOutput = runInstalledBin(packageRoot, bin, "--help");
+      const helpOutput = runInstalledBin(installRoot, cacheRoot, bin, "--help");
       if (!helpOutput.includes("ez-devbox CLI")) {
         throw new Error(`${bin} --help did not return the CLI help text.`);
       }
     }
 
-    assertLibraryImportIsPassive(packageRoot);
+    assertLibraryImportIsPassive(installRoot);
 
     console.log(
-      `Installed-package smoke passed for ${REQUIRED_BINS.join(" and ")} (--version and --help); library import remained passive.`,
+      `Offline npm bin-link smoke passed for ${REQUIRED_BINS.join(" and ")} (--version and --help); packed artifact exists and library import remained passive.`,
     );
   } finally {
     rmSync(workRoot, { recursive: true, force: true });
