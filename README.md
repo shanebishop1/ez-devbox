@@ -6,6 +6,8 @@
 
 `ez-devbox` runs coding agents in disposable [E2B](https://e2b.dev) sandboxes. It clones your repos, syncs selected tool config and credentials, and lets you reconnect to persistent sessions.
 
+![ez-devbox: create a sandbox, use OpenCode, and resume the session](docs/assets/ez-devbox-demo.gif)
+
 > **Release status:** npm's latest release is `0.6.0`. This README tracks the current `main` branch, which includes unreleased CLI improvements. The `--detach`, prompt-file, and prompt-stdin examples require a current source checkout until the next npm release.
 
 ## Features
@@ -17,7 +19,7 @@
 
 ## Demo flow
 
-No recording is linked until this flow can be captured with sandbox IDs and private repository names redacted. From a current source checkout:
+From a current source checkout:
 
 ```bash
 npm run dev -- create --mode ssh-opencode --detach --json
