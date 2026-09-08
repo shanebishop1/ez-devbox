@@ -35,6 +35,8 @@ npx ez-devbox@latest wipe --sandbox-id "$SANDBOX_ID"
 - `web`: start `opencode serve` and print the URL.
 - `ssh-shell`: SSH into an interactive shell inside a persistent `tmux` session.
 
+Web mode requires a nonempty `OPENCODE_SERVER_PASSWORD` when it starts a new public listener. See [the web mode guide](docs/modes-web.md) for reuse and recovery behavior.
+
 ## Install
 
 Prerequisites:
@@ -85,7 +87,7 @@ Common optional vars:
 - `FIRECRAWL_API_URL`: used by your own tooling/workloads inside the sandbox (for example tunneled MCP/API endpoints).
 - `FIRECRAWL_API_KEY`: forwarded only if configured through `env.pass_through`.
 - `GITHUB_TOKEN` / `GH_TOKEN`: used for GitHub auth flows (especially when `[gh].enabled = true`).
-- `OPENCODE_SERVER_PASSWORD`: used for `web` mode auth.
+- `OPENCODE_SERVER_PASSWORD`: required before `web` mode starts a new public listener; an already-running listener is reused only when it responds with an authentication challenge.
 
 The npm package also ships `.env.example`. Do not commit `.env`; it contains local secrets.
 
