@@ -1,8 +1,10 @@
 import { readFile } from "node:fs/promises";
+import { CommandExitError } from "e2b";
 import { type LoadConfigOptions, loadConfig, loadConfigWithMetadata } from "../config/load.js";
 import { resolveSandboxCreateEnv, type SandboxCreateEnvResolution } from "../e2b/env.js";
 import {
   connectSandbox,
+  LauncherE2BLifecycleError,
   type LifecycleOperationOptions,
   type ListSandboxesOptions,
   listSandboxes,
@@ -115,11 +117,16 @@ export async function runCommandCommand(
         ...(parsed.timeoutMs ? { timeoutMs: parsed.timeoutMs } : {}),
       });
     } catch (error) {
-      throw asStructuredCliError(error, {
-        code: "REMOTE_COMMAND_FAILED",
-        stage: "remote-command",
-        sandboxId: sandboxTarget.sandboxId,
-      });
+      const commandExitError = getCommandExitError(error);
+      if (commandExitError) {
+        result = commandExitError;
+      } else {
+        throw asStructuredCliError(error, {
+          code: "REMOTE_COMMAND_FAILED",
+          stage: "remote-command",
+          sandboxId: sandboxTarget.sandboxId,
+        });
+      }
     }
     const stdout = result.stdout.trim() === "" ? "(empty)" : result.stdout;
     const stderr = result.stderr.trim() === "" ? "(empty)" : result.stderr;
@@ -160,4 +167,16 @@ export async function runCommandCommand(
       exitCode: result.exitCode,
     };
   });
+}
+
+function getCommandExitError(error: unknown): { stdout: string; stderr: string; exitCode: number } | null {
+  if (error instanceof CommandExitError) {
+    return error;
+  }
+
+  if (error instanceof LauncherE2BLifecycleError && error.cause instanceof CommandExitError) {
+    return error.cause;
+  }
+
+  return null;
 }
