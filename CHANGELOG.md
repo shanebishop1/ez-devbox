@@ -4,6 +4,12 @@ Notable changes are recorded here. This project follows semantic versioning when
 
 ## Unreleased
 
+## 0.6.5 - 2026-09-08
+
+### Changed
+
+- Added full-project TypeScript type checking to the offline validation gate used locally and in CI.
+
 ## 0.6.4 - 2026-09-08
 
 ### Fixed
