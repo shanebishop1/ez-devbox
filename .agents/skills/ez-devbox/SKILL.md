@@ -1,18 +1,18 @@
 ---
 name: ez-devbox
-description: Install, configure, and use ez-devbox, a CLI that runs coding agents in disposable E2B cloud sandboxes with persistent sessions.
+description: Install and configure ez-devbox; create, list, reconnect, prompt agents, run remote commands, and delete E2B cloud devboxes.
 ---
 
 # ez-devbox
 
 `ez-devbox` creates E2B cloud sandboxes, clones and bootstraps repositories, and launches OpenCode, Codex, Claude Code, or a shell in sessions you can reconnect to later.
 
-Use explicit sandbox IDs for automation. `resume` uses shared last-run state and can race across concurrent callers.
+1. Install the CLI and prepare credentials/config using [setup](references/setup.md).
+2. Create or list devboxes, attach over SSH/web, send agent prompts, and clean up using [sessions](references/sessions.md).
+3. Execute remote commands and inspect agent output using [commands](references/commands.md).
 
-Start with `create --detach --json`; `lifecycle.agent: ready` indicates agent readiness. `--detach` skips attachment; `--json` formats output.
+These references are bundled with this skill; no source checkout or repository documentation is required. Run CLI commands from the configured project directory, not the skill directory.
 
-- For installation, credentials, and configuration, read [references/setup.md](references/setup.md).
-- For creating, attaching, prompting, inspecting, or cleanup, read [references/sessions.md](references/sessions.md).
-- For remote argv, shell scripts, output, and timeouts, read [references/commands.md](references/commands.md).
+For automation, use `create --detach --json` and save `sandboxId`, `mode`, `workingDirectory`, and `connection`. `lifecycle.agent: ready` means the agent session is ready, not that its task is complete. `--detach` skips attachment; `--json` only formats output.
 
-Reuse the returned sandbox and tmux identities.
+Use explicit sandbox IDs and returned tmux identities. `resume` uses shared last-run state and can race across callers. Preserve remote work before deletion; exiting or detaching does not delete a devbox.
