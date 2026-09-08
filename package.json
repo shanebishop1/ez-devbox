@@ -10,7 +10,8 @@
   },
   "files": [
     "dist",
-    "docs",
+    "docs/*.md",
+    "docs/assets",
     "examples",
     "scripts/ws-ssh-proxy.mjs",
     ".env.example",

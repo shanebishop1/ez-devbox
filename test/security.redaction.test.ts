@@ -15,6 +15,12 @@ describe("redactSensitiveText", () => {
     expect(redacted).toContain("SERVICE_TOKEN=[REDACTED]");
   });
 
+  it("redacts colon assignments when values contain equals signs", () => {
+    const input = 'E2B_API_KEY:abc=def E2B_API_KEY:"abc=def" E2B_API_KEY=abc=def';
+
+    expect(redactSensitiveText(input)).toBe("E2B_API_KEY:[REDACTED] E2B_API_KEY:[REDACTED] E2B_API_KEY=[REDACTED]");
+  });
+
   it("redacts URL credentials", () => {
     const input = "https://user:secret@example.com/path";
     expect(redactSensitiveText(input)).toBe("https://user:[REDACTED]@example.com/path");

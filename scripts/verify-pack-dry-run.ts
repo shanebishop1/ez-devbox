@@ -32,6 +32,7 @@ interface PackageJsonShape {
 }
 
 const REQUIRED_BINS = ["ez-devbox", "ezdb"] as const;
+const EXCLUDED_PATH_PREFIXES = ["docs/plans/"] as const;
 
 function parsePackDryRunOutput(output: string): NpmPackDryRunRecord {
   const parsed: unknown = JSON.parse(output);
@@ -82,6 +83,15 @@ function assertBinTarget(filesSet: ReadonlySet<string>): void {
   }
 }
 
+function assertExcludedPaths(filesSet: ReadonlySet<string>): void {
+  const includedExcludedPaths = [...filesSet].filter((path) =>
+    EXCLUDED_PATH_PREFIXES.some((prefix) => path.startsWith(prefix)),
+  );
+  if (includedExcludedPaths.length > 0) {
+    throw new Error(`Pack dry-run unexpectedly includes excluded files: ${includedExcludedPaths.join(", ")}`);
+  }
+}
+
 function main(): void {
   const output = execSync("npm pack --dry-run --json", { encoding: "utf8" });
   const packRecord = parsePackDryRunOutput(output);
@@ -89,6 +99,7 @@ function main(): void {
 
   assertRequiredPaths(filePaths);
   assertBinTarget(filePaths);
+  assertExcludedPaths(filePaths);
 
   console.log(
     `Pack verification passed: ${packRecord.filename} includes ${packRecord.files.length} files and required runtime artifacts.`,
