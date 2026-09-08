@@ -4,6 +4,16 @@ Notable changes are recorded here. This project follows semantic versioning when
 
 ## Unreleased
 
+## 0.6.3 - 2026-09-08
+
+### Fixed
+
+- Fixed redaction of colon-delimited credential assignments whose values contain equals signs.
+
+### Changed
+
+- Updated the packaged documentation and demo instructions.
+
 ## 0.6.2 - 2026-09-06
 
 ### Fixed
