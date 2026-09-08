@@ -111,6 +111,41 @@ describe("persistent startup modes", () => {
     expect(String(runInteractiveSession.mock.calls[0]?.[1])).not.toContain("new-session");
   });
 
+  it("cleans up a prepared bridge when interactive tmux startup fails", async () => {
+    const events: string[] = [];
+    const run = vi.fn().mockImplementation(async (command: string) => {
+      if (command.includes("command -v codex")) {
+        events.push("codex");
+        return ok("PRESENT");
+      }
+      events.push("tmux");
+      throw new Error("tmux failed");
+    });
+    const bridge = { tempDir: "/tmp/bridge", privateKeyPath: "/tmp/key", wsUrl: "wss://host" };
+    const prepareSession = vi.fn().mockImplementation(async () => {
+      events.push("bridge");
+      return bridge;
+    });
+    const cleanupSession = vi.fn().mockResolvedValue(undefined);
+
+    await expect(
+      startCodexMode(
+        createHandle({ run }),
+        {},
+        {
+          isInteractiveTerminal: () => true,
+          prepareSession,
+          runInteractiveSession: vi.fn(),
+          cleanupSession,
+        },
+      ),
+    ).rejects.toThrow("tmux failed");
+
+    expect(prepareSession).toHaveBeenCalledTimes(1);
+    expect(events).toEqual(["codex", "bridge", "tmux"]);
+    expect(cleanupSession).toHaveBeenCalledWith(expect.anything(), bridge);
+  });
+
   it("installs Codex when missing before starting the session", async () => {
     const run = vi
       .fn()

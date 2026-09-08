@@ -1,6 +1,8 @@
-import { access, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { execFile } from "node:child_process";
+import { access, chmod, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { promisify } from "node:util";
 import { describe, expect, it, vi } from "vitest";
 import type { SandboxHandle } from "../src/e2b/lifecycle.js";
 import { ensureSshBridgeDependencies } from "../src/modes/ssh-bridge.dependencies.js";
@@ -13,6 +15,9 @@ import {
   type SshBridgeSession,
   stageInteractiveStartupEnv,
 } from "../src/modes/ssh-bridge.js";
+import { quoteShellArg } from "../src/modes/ssh-bridge.utils.js";
+
+const execFileAsync = promisify(execFile);
 
 describe("ssh bridge security behavior", () => {
   it("allocateSshBridgePorts skips occupied candidates and returns available pair", async () => {
@@ -104,6 +109,12 @@ describe("ssh bridge security behavior", () => {
     }
   });
 
+  it("quotes shell arguments without allowing embedded shell syntax", () => {
+    expect(quoteShellArg("path with spaces; $(touch /tmp/pwned) 'quoted'")).toBe(
+      "'path with spaces; $(touch /tmp/pwned) '\"'\"'quoted'\"'\"''",
+    );
+  });
+
   it("cleanupSshBridgeSession attempts remote cleanup and always cleans local temp dir", async () => {
     const tempDir = await mkdtemp(join(tmpdir(), "ez-devbox-ssh-cleanup-test-"));
     await writeFile(join(tempDir, "marker.txt"), "cleanup me", "utf8");
@@ -152,21 +163,19 @@ describe("ssh bridge security behavior", () => {
       if (command.includes("command -v websockify")) {
         return { stdout: "READY", stderr: "", exitCode: 0 };
       }
-      if (command === "whoami") {
-        return { stdout: "user", stderr: "", exitCode: 0 };
-      }
-      if (command.includes('printf %s "$HOME"')) {
-        return { stdout: "/home/user", stderr: "", exitCode: 0 };
+      if (command.includes("whoami")) {
+        return { stdout: "user\n/home/user\n", stderr: "", exitCode: 0 };
       }
       if (command.includes("sshd_port=")) {
         return { stdout: "24000 24001", stderr: "", exitCode: 0 };
       }
+      if (command.includes("SSH bridge authorized keys setup")) {
+        sessionDir = command.match(/'\/home\/user\/\.ez-devbox-ssh\/(ez-devbox-ssh-[^']+)'/)?.[1] ?? "";
+        throw new Error("remote write failed");
+      }
       if (command.includes("mkdir -p") && command.includes(".ez-devbox-ssh")) {
         sessionDir = command.match(/'\/home\/user\/\.ez-devbox-ssh\/(ez-devbox-ssh-[^']+)'/)?.[1] ?? "";
         return { stdout: "", stderr: "", exitCode: 0 };
-      }
-      if (command.includes("base64 -d") && command.includes("authorized_keys")) {
-        throw new Error("remote write failed");
       }
       return { stdout: "", stderr: "", exitCode: 0 };
     });
@@ -178,6 +187,125 @@ describe("ssh bridge security behavior", () => {
     expect(run.mock.calls.some((call) => call[0].includes(`rm -rf '/home/user/.ez-devbox-ssh/${sessionDir}'`))).toBe(
       true,
     );
+  });
+
+  it("batches remote SSH bridge setup while preserving restrictive permissions", async () => {
+    const run = vi.fn().mockImplementation(async (command: string) => {
+      if (command.includes("command -v websockify")) {
+        return { stdout: "READY", stderr: "", exitCode: 0 };
+      }
+      if (command.includes("whoami")) {
+        return { stdout: "user\n/home/user\n", stderr: "", exitCode: 0 };
+      }
+      if (command.includes("sshd_port=")) {
+        return { stdout: "24000 24001", stderr: "", exitCode: 0 };
+      }
+      if (command.includes("SSH bridge websockify start")) {
+        return { stdout: "ssh-ed25519 AAAAhostkey", stderr: "", exitCode: 0 };
+      }
+      return { stdout: "", stderr: "", exitCode: 0 };
+    });
+    const handle = createHandle({ run });
+
+    const session = await prepareSshBridgeSession(handle);
+    try {
+      expect(run).toHaveBeenCalledTimes(4);
+      const setupCommand = String(run.mock.calls[3]?.[0]);
+      expect(setupCommand).toContain("set -euo pipefail");
+      expect(setupCommand).toContain("SSH bridge host key generation");
+      expect(setupCommand).toContain("SSH bridge websockify start");
+      expect(setupCommand).toContain("chmod 600");
+      expect(await readFile(session.knownHostsPath, "utf8")).toBe("e2b-sandbox ssh-ed25519 AAAAhostkey\n");
+    } finally {
+      await cleanupSshBridgeSession(handle, session);
+    }
+  });
+
+  it("reports the failed operation from batched remote setup and cleans up", async () => {
+    const run = vi.fn().mockImplementation(async (command: string) => {
+      if (command.includes("command -v websockify")) {
+        return { stdout: "READY", stderr: "", exitCode: 0 };
+      }
+      if (command.includes("whoami")) {
+        return { stdout: "user\n/home/user\n", stderr: "", exitCode: 0 };
+      }
+      if (command.includes("sshd_port=")) {
+        return { stdout: "24000 24001", stderr: "", exitCode: 0 };
+      }
+      if (command.includes("SSH bridge host key generation")) {
+        return {
+          stdout: "",
+          stderr: "SSH bridge host key generation failed with exit code 23",
+          exitCode: 23,
+        };
+      }
+      return { stdout: "", stderr: "", exitCode: 0 };
+    });
+
+    await expect(prepareSshBridgeSession(createHandle({ run }))).rejects.toThrow(
+      "SSH bridge remote setup failed with exit code 23: SSH bridge host key generation failed with exit code 23",
+    );
+    expect(run.mock.calls.some(([command]) => String(command).includes("rm -rf"))).toBe(true);
+  });
+
+  it("executes the batched websockify setup with a pid-writing stub", async () => {
+    const remoteHome = await mkdtemp(join(tmpdir(), "ez-devbox-ssh-setup-home-"));
+    let setupCommand = "";
+    let websockifyPidPath: string | undefined;
+    const run = vi.fn().mockImplementation(async (command: string) => {
+      if (command.includes("command -v websockify")) {
+        return { stdout: "READY", stderr: "", exitCode: 0 };
+      }
+      if (command.includes("whoami")) {
+        return { stdout: `user\n${remoteHome}\n`, stderr: "", exitCode: 0 };
+      }
+      if (command.includes("sshd_port=")) {
+        return { stdout: "24000 24001", stderr: "", exitCode: 0 };
+      }
+      if (command.includes("SSH bridge websockify start")) {
+        setupCommand = command;
+        return { stdout: "ssh-ed25519 AAAAhostkey", stderr: "", exitCode: 0 };
+      }
+      return { stdout: "", stderr: "", exitCode: 0 };
+    });
+    const stubPath = join(remoteHome, "websockify-stub");
+    await writeFile(stubPath, "#!/bin/sh\nsleep 30\n", "utf8");
+    await chmod(stubPath, 0o755);
+
+    try {
+      const session = await prepareSshBridgeSession(createHandle({ run }));
+      const artifacts = session.artifacts;
+      if (!artifacts) {
+        throw new Error("Expected SSH bridge artifacts in setup execution test.");
+      }
+      websockifyPidPath = artifacts.websockifyPidPath;
+
+      const executableSetupCommand = setupCommand
+        .replace("sudo mkdir -p /run/sshd", `mkdir -p ${join(remoteHome, "run/sshd")}`)
+        .replace("sudo /usr/sbin/sshd -f", "true")
+        .replace("nohup websockify 0.0.0.0:", `nohup ${stubPath} 0.0.0.0:`);
+      const result = await execFileAsync("bash", ["-c", executableSetupCommand], {
+        encoding: "utf8",
+        timeout: 10_000,
+      });
+
+      expect(result.stdout.trim()).toMatch(/^ssh-ed25519 \S+ \S+$/);
+      const websockifyPid = Number.parseInt((await readFile(artifacts.websockifyPidPath, "utf8")).trim(), 10);
+      expect(websockifyPid).toBeGreaterThan(0);
+      expect(await readFile(artifacts.websockifyLogPath, "utf8")).toBe("");
+      await rm(session.tempDir, { recursive: true, force: true });
+    } finally {
+      if (websockifyPidPath) {
+        const pidContents = await readFile(websockifyPidPath, "utf8").catch(() => "");
+        const websockifyPid = Number.parseInt(pidContents.trim(), 10);
+        if (websockifyPid > 0) {
+          try {
+            process.kill(websockifyPid, "SIGTERM");
+          } catch {}
+        }
+      }
+      await rm(remoteHome, { recursive: true, force: true });
+    }
   });
 
   it("stageInteractiveStartupEnv writes restrictive env script with valid keys only", async () => {

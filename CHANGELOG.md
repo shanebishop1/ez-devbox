@@ -4,6 +4,13 @@ Notable changes are recorded here. This project follows semantic versioning when
 
 ## Unreleased
 
+## 0.6.6 - 2026-09-08
+
+### Changed
+
+- Reduced interactive SSH startup and reconnect latency by batching bridge setup and installing SSH dependencies together with tmux.
+- Added a reusable live SSH startup benchmark with automatic sandbox cleanup.
+
 ## 0.6.5 - 2026-09-08
 
 ### Changed
