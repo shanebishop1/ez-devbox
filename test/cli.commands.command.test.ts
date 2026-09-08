@@ -52,6 +52,26 @@ const baseConfig: ResolvedLauncherConfig = {
   },
 };
 
+const createRepo = (name: string) => ({
+  name,
+  url: `https://example.com/${name}.git`,
+  branch: "main",
+  setup_command: "",
+  setup_env: {},
+  startup_env: {},
+});
+
+const multiRepoConfig = (project: Partial<ResolvedLauncherConfig["project"]> = {}): ResolvedLauncherConfig => ({
+  ...baseConfig,
+  project: {
+    ...baseConfig.project,
+    mode: "single",
+    active: "prompt",
+    repos: [createRepo("repo-one"), createRepo("repo-two")],
+    ...project,
+  },
+});
+
 describe("runCommandCommand", () => {
   it("rejects unexpected flags before command tokens with help guidance", async () => {
     await expect(
@@ -167,10 +187,147 @@ describe("runCommandCommand", () => {
       }),
       listSandboxes: vi.fn().mockResolvedValue([]),
       connectSandbox: vi.fn().mockResolvedValue({ sandboxId: "sbx-1", run }),
-      loadLastRunState: vi.fn().mockResolvedValue(null),
+      loadLastRunState: vi.fn().mockResolvedValue({
+        sandboxId: "sbx-1",
+        mode: "web",
+        activeRepo: "repo-one",
+        updatedAt: "2026-01-01T00:00:00.000Z",
+      }),
     });
 
     expect(run).toHaveBeenCalledWith("pwd", { cwd: "/workspace/repo-one" });
+  });
+
+  it("uses the saved active repo when its sandbox matches in non-interactive mode", async () => {
+    const run = vi.fn().mockResolvedValue({ stdout: "ok", stderr: "", exitCode: 0 });
+
+    await runCommandCommand(["--sandbox-id", "sbx-1", "pwd"], {
+      loadConfig: vi.fn().mockResolvedValue(multiRepoConfig()),
+      listSandboxes: vi.fn().mockResolvedValue([]),
+      connectSandbox: vi.fn().mockResolvedValue({ sandboxId: "sbx-1", run }),
+      loadLastRunState: vi.fn().mockResolvedValue({
+        sandboxId: "sbx-1",
+        mode: "web",
+        activeRepo: "repo-two",
+        updatedAt: "2026-01-01T00:00:00.000Z",
+      }),
+      isInteractiveTerminal: () => false,
+    });
+
+    expect(run).toHaveBeenCalledWith("pwd", { cwd: "/workspace/repo-two" });
+  });
+
+  it("uses the saved active repo for implicit sandbox selection and json output", async () => {
+    const run = vi.fn().mockResolvedValue({ stdout: "ok", stderr: "", exitCode: 0 });
+
+    const result = await runCommandCommand(["--json", "pwd"], {
+      loadConfig: vi.fn().mockResolvedValue(multiRepoConfig()),
+      listSandboxes: vi.fn().mockResolvedValue([{ sandboxId: "sbx-1", state: "running" }]),
+      connectSandbox: vi.fn().mockResolvedValue({ sandboxId: "sbx-1", run }),
+      loadLastRunState: vi.fn().mockResolvedValue({
+        sandboxId: "sbx-1",
+        mode: "web",
+        activeRepo: "repo-two",
+        updatedAt: "2026-01-01T00:00:00.000Z",
+      }),
+      isInteractiveTerminal: () => true,
+    });
+
+    expect(JSON.parse(result.message)).toMatchObject({ sandboxId: "sbx-1", cwd: "/workspace/repo-two" });
+    expect(run).toHaveBeenCalledWith("pwd", { cwd: "/workspace/repo-two" });
+  });
+
+  it("rejects a saved active repo from a different sandbox before connecting", async () => {
+    const connectSandbox = vi.fn();
+
+    await expect(
+      runCommandCommand(["--sandbox-id", "sbx-current", "pwd"], {
+        loadConfig: vi.fn().mockResolvedValue(multiRepoConfig()),
+        listSandboxes: vi.fn().mockResolvedValue([]),
+        connectSandbox,
+        loadLastRunState: vi.fn().mockResolvedValue({
+          sandboxId: "sbx-other",
+          mode: "web",
+          activeRepo: "repo-two",
+          updatedAt: "2026-01-01T00:00:00.000Z",
+        }),
+        isInteractiveTerminal: () => false,
+      }),
+    ).rejects.toThrow("Configure project.active='name'");
+
+    expect(connectSandbox).not.toHaveBeenCalled();
+  });
+
+  it("rejects an unknown saved active repo before connecting", async () => {
+    const connectSandbox = vi.fn();
+
+    await expect(
+      runCommandCommand(["--sandbox-id", "sbx-1", "pwd"], {
+        loadConfig: vi.fn().mockResolvedValue(multiRepoConfig()),
+        listSandboxes: vi.fn().mockResolvedValue([]),
+        connectSandbox,
+        loadLastRunState: vi.fn().mockResolvedValue({
+          sandboxId: "sbx-1",
+          mode: "web",
+          activeRepo: "stale-repo",
+          updatedAt: "2026-01-01T00:00:00.000Z",
+        }),
+        isInteractiveTerminal: () => false,
+      }),
+    ).rejects.toThrow("no valid saved active repo matches this sandbox");
+
+    expect(connectSandbox).not.toHaveBeenCalled();
+  });
+
+  it("rejects a missing saved active repo before connecting", async () => {
+    const connectSandbox = vi.fn();
+
+    await expect(
+      runCommandCommand(["--sandbox-id", "sbx-1", "pwd"], {
+        loadConfig: vi.fn().mockResolvedValue(multiRepoConfig()),
+        listSandboxes: vi.fn().mockResolvedValue([]),
+        connectSandbox,
+        loadLastRunState: vi.fn().mockResolvedValue({
+          sandboxId: "sbx-1",
+          mode: "web",
+          updatedAt: "2026-01-01T00:00:00.000Z",
+        }),
+        isInteractiveTerminal: () => false,
+      }),
+    ).rejects.toThrow("no valid saved active repo matches this sandbox");
+
+    expect(connectSandbox).not.toHaveBeenCalled();
+  });
+
+  it("prompts for repo selection interactively despite a saved active repo", async () => {
+    const promptInput = vi.fn().mockResolvedValue("2");
+    const run = vi.fn().mockResolvedValue({ stdout: "ok", stderr: "", exitCode: 0 });
+
+    await runCommandCommand(["--sandbox-id", "sbx-1", "pwd"], {
+      loadConfig: vi.fn().mockResolvedValue(multiRepoConfig()),
+      listSandboxes: vi.fn().mockResolvedValue([]),
+      connectSandbox: vi.fn().mockResolvedValue({ sandboxId: "sbx-1", run }),
+      loadLastRunState: vi.fn().mockResolvedValue({
+        sandboxId: "sbx-1",
+        mode: "web",
+        activeRepo: "repo-one",
+        updatedAt: "2026-01-01T00:00:00.000Z",
+      }),
+      isInteractiveTerminal: () => true,
+      promptInput,
+    });
+
+    expect(promptInput).toHaveBeenCalledWith(
+      [
+        "Multiple repos available. Select one:",
+        "-------------------------------------",
+        "1) repo-one",
+        "2) repo-two",
+        "",
+        "Enter choice [1-2]: ",
+      ].join("\n"),
+    );
+    expect(run).toHaveBeenCalledWith("pwd", { cwd: "/workspace/repo-two" });
   });
 
   it("selects cwd using project.active=name", async () => {
@@ -205,7 +362,12 @@ describe("runCommandCommand", () => {
       }),
       listSandboxes: vi.fn().mockResolvedValue([]),
       connectSandbox: vi.fn().mockResolvedValue({ sandboxId: "sbx-1", run }),
-      loadLastRunState: vi.fn().mockResolvedValue(null),
+      loadLastRunState: vi.fn().mockResolvedValue({
+        sandboxId: "sbx-1",
+        mode: "web",
+        activeRepo: "repo-one",
+        updatedAt: "2026-01-01T00:00:00.000Z",
+      }),
       isInteractiveTerminal: () => false,
     });
 
@@ -244,7 +406,12 @@ describe("runCommandCommand", () => {
       }),
       listSandboxes: vi.fn().mockResolvedValue([]),
       connectSandbox: vi.fn().mockResolvedValue({ sandboxId: "sbx-1", run }),
-      loadLastRunState: vi.fn().mockResolvedValue(null),
+      loadLastRunState: vi.fn().mockResolvedValue({
+        sandboxId: "sbx-1",
+        mode: "web",
+        activeRepo: "repo-one",
+        updatedAt: "2026-01-01T00:00:00.000Z",
+      }),
       isInteractiveTerminal: () => true,
     });
 
