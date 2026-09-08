@@ -4,6 +4,14 @@ Notable changes are recorded here. This project follows semantic versioning when
 
 ## Unreleased
 
+## 0.6.4 - 2026-09-08
+
+### Fixed
+
+- Preserved remote command exit codes, stdout, and stderr when the E2B SDK reports a nonzero command result.
+- Matched non-interactive command working directories to the active repository saved for the target sandbox.
+- Required password authentication before starting a web listener, rejected unsafe existing listeners, and limited failed-startup cleanup to listener processes owned by the current launch.
+
 ## 0.6.3 - 2026-09-08
 
 ### Fixed
