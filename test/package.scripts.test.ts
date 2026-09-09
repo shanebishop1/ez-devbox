@@ -28,4 +28,11 @@ describe("package scripts", () => {
 
     expect(parsed.scripts?.["pack:check"]).toContain("verify-installed-package.ts");
   });
+
+  it("installs the tmux integration-test dependency across the CI matrix", () => {
+    const workflow = readFileSync(new URL("../.github/workflows/ci.yml", import.meta.url), "utf8");
+
+    expect(workflow).toContain("sudo apt-get install -y tmux");
+    expect(workflow).toContain("brew install tmux");
+  });
 });

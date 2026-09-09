@@ -17,6 +17,7 @@ import {
 const execFileAsync = promisify(execFile);
 const socketNames: string[] = [];
 const tempRoots: string[] = [];
+const linuxIt = process.platform === "linux" ? it : it.skip;
 
 afterEach(async () => {
   await Promise.all(
@@ -144,7 +145,7 @@ describe("tmux lifecycle coordination", () => {
     expect(gateCommand).not.toContain("#{@ez_devbox_generation}\t#{@ez_devbox_owner}");
   });
 
-  it("re-elects a creator after an incomplete existing session disappears", async () => {
+  linuxIt("re-elects a creator after an incomplete existing session disappears", async () => {
     const socketName = uniqueName("registration-retry");
     socketNames.push(socketName);
     const handle = createLocalHandle();
@@ -169,7 +170,7 @@ describe("tmux lifecycle coordination", () => {
     expect(result).toMatchObject({ created: true, generation: "generation-a", registeredIdentity: "identity-a" });
   });
 
-  it("does not report ready when the configured executable exits after gate release", async () => {
+  linuxIt("does not report ready when the configured executable exits after gate release", async () => {
     const root = await mkdtemp(join(tmpdir(), "ez-devbox-gate-readiness-"));
     tempRoots.push(root);
     const socketName = uniqueName("readiness");
@@ -201,7 +202,7 @@ describe("tmux lifecycle coordination", () => {
     expect(readiness).not.toBe("ready");
   });
 
-  it("reports ready only after releasing the owned gate and observing the launched process", async () => {
+  linuxIt("reports ready only after releasing the owned gate and observing the launched process", async () => {
     const socketName = uniqueName("ready-process");
     socketNames.push(socketName);
     const ownerToken = "owner-a";
