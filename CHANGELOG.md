@@ -4,7 +4,15 @@ Notable changes are recorded here. This project follows semantic versioning when
 
 ## Unreleased
 
-## 0.7.0 - 2026-09-09
+## 0.7.1 - 2026-09-09
+
+First published release of configurable custom agents; includes the 0.7.0 changes below.
+
+### Fixed
+
+- Fixed cross-platform lifecycle test setup by provisioning tmux throughout the CI matrix while keeping `/proc`-dependent process-readiness integration coverage on Linux runners.
+
+## 0.7.0 - 2026-09-09 (Unpublished)
 
 ### Added
 
