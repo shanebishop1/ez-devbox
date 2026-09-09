@@ -14,7 +14,8 @@ Include the affected version, host OS, startup mode, impact, and minimal reprodu
 
 - ez-devbox copies only configured tool state and selected environment variables into an E2B sandbox. That sandbox and its repositories must be trusted with those credentials.
 - `.env`, OpenCode/Codex/Claude auth state, GitHub CLI state, and tunnel URLs are secrets. Never commit or publish them.
-- Quick-tunnel URLs act as bearer links. Protect the upstream service and share URLs only with intended users.
+- Cloudflare quick tunnels provide public HTTPS URLs, not private, sandbox-only access. HTTPS protects transport but does not authorize callers. ez-devbox does not configure Cloudflare Access or add tunnel authentication: anyone with the URL can reach the forwarded service while the tunnel is running, subject to that service's own authentication.
+- Treat tunnel URLs as bearer secrets. Keep them out of public logs, screenshots, and shared agent transcripts. Require upstream authentication for sensitive services; do not tunnel unauthenticated administrative endpoints. If a URL is disclosed, stop the tunnel and review upstream access logs and credentials as appropriate.
 - Sandboxes persist independently of the local terminal until their E2B timeout or explicit deletion. Use `ez-devbox wipe` when work is complete and revoke credentials if a sandbox may be compromised.
 
 Dependency-only reports without a demonstrated impact on this package may be handled through routine upgrades rather than a security advisory.
