@@ -35,8 +35,9 @@ describe("persistent startup modes", () => {
     const run = vi.fn().mockResolvedValueOnce(ok()).mockResolvedValueOnce(ok()).mockResolvedValueOnce(ok("CREATED"));
     const result = await startOpenCodeMode(createHandle({ run }), { detach: true });
 
-    expect(String(run.mock.calls[0]?.[0])).toContain("pgrep -f");
+    expect(String(run.mock.calls[0]?.[0])).toContain("opencode serve --hostname 127.0.0.1 --port 4096");
     expect(String(run.mock.calls[1]?.[0])).toContain("global/health api/health");
+    expect(run.mock.calls[1]?.[1]).toMatchObject({ timeoutMs: 0 });
     expect(String(run.mock.calls[2]?.[0])).toContain("opencode attach http://127.0.0.1:4096");
     expect(run.mock.calls.some(([command]) => String(command).includes("opencode --version"))).toBe(false);
     expect(result.connection).toMatchObject({ type: "tmux", socketName: "ez-devbox-opencode" });
@@ -110,6 +111,41 @@ describe("persistent startup modes", () => {
     expect(String(runInteractiveSession.mock.calls[0]?.[1])).not.toContain("new-session");
   });
 
+  it("cleans up a prepared bridge when interactive tmux startup fails", async () => {
+    const events: string[] = [];
+    const run = vi.fn().mockImplementation(async (command: string) => {
+      if (command.includes("command -v codex")) {
+        events.push("codex");
+        return ok("PRESENT");
+      }
+      events.push("tmux");
+      throw new Error("tmux failed");
+    });
+    const bridge = { tempDir: "/tmp/bridge", privateKeyPath: "/tmp/key", wsUrl: "wss://host" };
+    const prepareSession = vi.fn().mockImplementation(async () => {
+      events.push("bridge");
+      return bridge;
+    });
+    const cleanupSession = vi.fn().mockResolvedValue(undefined);
+
+    await expect(
+      startCodexMode(
+        createHandle({ run }),
+        {},
+        {
+          isInteractiveTerminal: () => true,
+          prepareSession,
+          runInteractiveSession: vi.fn(),
+          cleanupSession,
+        },
+      ),
+    ).rejects.toThrow("tmux failed");
+
+    expect(prepareSession).toHaveBeenCalledTimes(1);
+    expect(events).toEqual(["codex", "bridge", "tmux"]);
+    expect(cleanupSession).toHaveBeenCalledWith(expect.anything(), bridge);
+  });
+
   it("installs Codex when missing before starting the session", async () => {
     const run = vi
       .fn()
@@ -133,16 +169,136 @@ describe("persistent startup modes", () => {
   });
 
   it("web mode remains a ready HTTP endpoint and rejects prompt input", async () => {
-    const run = vi.fn().mockResolvedValueOnce(ok()).mockResolvedValueOnce(ok()).mockResolvedValueOnce(ok("401"));
+    const run = vi
+      .fn()
+      .mockResolvedValueOnce(ok("ez-devbox-web:started:1234"))
+      .mockResolvedValueOnce(ok())
+      .mockResolvedValueOnce(ok("401"));
     const result = await launchMode(createHandle({ run, getHost: vi.fn().mockResolvedValue("box.e2b.app") }), "web");
     expect(result).toMatchObject({
       readiness: "ready",
       attachment: "not-applicable",
       connection: { type: "http", endpoint: "https://box.e2b.app" },
     });
+    expect(result.command).toContain("opencode serve --hostname 0.0.0.0 --port 3000");
     await expect(
       launchMode(createHandle({ run: vi.fn() }), "web", { prompt: { kind: "initial", text: "no" } }),
     ).rejects.toThrow("not supported in web mode");
+  });
+
+  it("web mode refuses to launch without an effective sandbox password", async () => {
+    const run = vi.fn().mockResolvedValueOnce(ok("ez-devbox-web:password-required"));
+
+    await expect(launchMode(createHandle({ run }), "web")).rejects.toThrow(
+      "requires a nonempty OPENCODE_SERVER_PASSWORD",
+    );
+    expect(run).toHaveBeenCalledTimes(1);
+  });
+
+  it("web mode passes configured startup password without putting it in commands", async () => {
+    const run = vi
+      .fn()
+      .mockResolvedValueOnce(ok("ez-devbox-web:started:1234"))
+      .mockResolvedValueOnce(ok())
+      .mockResolvedValueOnce(ok("401"));
+    const password = "configured-password";
+
+    await launchMode(createHandle({ run }), "web", { startupEnv: { OPENCODE_SERVER_PASSWORD: password } });
+
+    expect(run.mock.calls.every(([command]) => !String(command).includes(password))).toBe(true);
+    expect(run.mock.calls[0]?.[1]).toMatchObject({ envs: { OPENCODE_SERVER_PASSWORD: password } });
+    expect(run.mock.calls[1]?.[1]).toMatchObject({ envs: { OPENCODE_SERVER_PASSWORD: password } });
+  });
+
+  it("web mode accepts a nonempty password inherited by the sandbox", async () => {
+    const run = vi
+      .fn()
+      .mockResolvedValueOnce(ok("ez-devbox-web:started:1234"))
+      .mockResolvedValueOnce(ok())
+      .mockResolvedValueOnce(ok("401"));
+
+    await launchMode(createHandle({ run }), "web");
+
+    expect(run.mock.calls[0]?.[1]?.envs).not.toHaveProperty("OPENCODE_SERVER_PASSWORD");
+  });
+
+  it("web mode reuses an existing authenticated listener without checking host password", async () => {
+    const run = vi.fn().mockResolvedValueOnce(ok("ez-devbox-web:existing-authenticated"));
+    const handle = createHandle({ run });
+
+    const result = await launchMode(handle, "web");
+
+    expect(result.details).toMatchObject({ authRequired: true, authStatus: 401 });
+    expect(run).toHaveBeenCalledTimes(1);
+    expect(handle.getHost).toHaveBeenCalledWith(3000);
+  });
+
+  it("web mode refuses an existing unauthenticated listener without stopping it", async () => {
+    const run = vi.fn().mockResolvedValueOnce(ok("ez-devbox-web:existing-unsafe:200"));
+
+    await expect(launchMode(createHandle({ run }), "web")).rejects.toThrow("Refusing to reuse or stop it");
+    expect(run).toHaveBeenCalledTimes(1);
+  });
+
+  it("web mode cleans up only its owned listener after readiness failure", async () => {
+    const run = vi
+      .fn()
+      .mockResolvedValueOnce(ok("ez-devbox-web:started:4321"))
+      .mockResolvedValueOnce({ stdout: "", stderr: "not ready", exitCode: 1 })
+      .mockResolvedValueOnce(ok("ez-devbox-web-cleanup:stopped"));
+
+    await expect(launchMode(createHandle({ run }), "web")).rejects.toThrow("readiness check");
+    const cleanupCommand = String(run.mock.calls[2]?.[0]);
+    expect(cleanupCommand).toContain("/proc/$pid/environ");
+    expect(cleanupCommand).toContain("'4321'");
+    expect(cleanupCommand).toContain("EZ_DEVBOX_WEB_OWNER");
+    expect(cleanupCommand).not.toContain("cmdline");
+    expect(cleanupCommand).not.toContain("pkill");
+  });
+
+  it("web mode cleans up its owned listener after authentication verification failure", async () => {
+    const run = vi
+      .fn()
+      .mockResolvedValueOnce(ok("ez-devbox-web:started:9876"))
+      .mockResolvedValueOnce(ok())
+      .mockResolvedValueOnce(ok("200"))
+      .mockResolvedValueOnce(ok("ez-devbox-web-cleanup:stopped"));
+
+    await expect(launchMode(createHandle({ run }), "web")).rejects.toThrow(
+      "did not become password-protected. Set OPENCODE_SERVER_PASSWORD and retry. The listener process owned by this invocation was stopped.",
+    );
+    const cleanupCommand = String(run.mock.calls[3]?.[0]);
+    expect(cleanupCommand).toContain("'9876'");
+    expect(cleanupCommand).toContain("EZ_DEVBOX_WEB_OWNER");
+    expect(cleanupCommand).not.toContain("pkill");
+  });
+
+  it("web mode awaits host resolution and cleans up its owned listener if it fails", async () => {
+    const run = vi
+      .fn()
+      .mockResolvedValueOnce(ok("ez-devbox-web:started:2468"))
+      .mockResolvedValueOnce(ok())
+      .mockResolvedValueOnce(ok("401"))
+      .mockResolvedValueOnce(ok("ez-devbox-web-cleanup:stopped"));
+    const getHost = vi.fn().mockRejectedValue(new Error("host unavailable"));
+
+    await expect(launchMode(createHandle({ run, getHost }), "web")).rejects.toThrow(
+      "host unavailable. The listener process owned by this invocation was stopped.",
+    );
+    expect(run).toHaveBeenCalledTimes(4);
+  });
+
+  it("web mode reports when cleanup cannot verify ownership instead of claiming the listener stopped", async () => {
+    const run = vi
+      .fn()
+      .mockResolvedValueOnce(ok("ez-devbox-web:started:1357"))
+      .mockResolvedValueOnce(ok())
+      .mockResolvedValueOnce(ok("200"))
+      .mockResolvedValueOnce(ok("ez-devbox-web-cleanup:not-owned"));
+
+    await expect(launchMode(createHandle({ run }), "web")).rejects.toThrow(
+      "Cleanup refused to stop the process because ownership could not be verified",
+    );
   });
 });
 

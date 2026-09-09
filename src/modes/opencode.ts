@@ -1,6 +1,7 @@
 import { spawnSync } from "node:child_process";
 import type { SandboxHandle } from "../e2b/lifecycle.js";
 import { logger } from "../logging/logger.js";
+import { redactSensitiveText } from "../security/redaction.js";
 import type { LaunchContextOptions, ModeLaunchResult } from "./index.js";
 import { assertRemoteCommandSucceeded } from "./remote-command.js";
 import {
@@ -16,11 +17,12 @@ const OPEN_CODE_ATTACH_COMMAND = "opencode attach http://127.0.0.1:4096";
 const OPEN_CODE_ATTACH_TMUX_SOCKET = "ez-devbox-opencode";
 const OPEN_CODE_ATTACH_TMUX_SESSION = "ez-devbox-opencode";
 const OPEN_CODE_SERVER_BOOT_COMMAND =
-  'bash -lc \'status=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:4096/global/health || true); if [ "$status" = 200 ] || [ "$status" = 401 ]; then exit 0; fi; if ! pgrep -f "[o]pencode serve.*--port 4096" >/dev/null; then nohup opencode serve --hostname 127.0.0.1 --port 4096 >/tmp/opencode-serve-ssh.log 2>&1 & fi\'';
+  'bash -lc \'status=$(curl --connect-timeout 2 --max-time 3 -s -o /dev/null -w "%{http_code}" http://127.0.0.1:4096/global/health || true); if [ "$status" = 200 ] || [ "$status" = 401 ]; then exit 0; fi; nohup opencode serve --hostname 127.0.0.1 --port 4096 >/tmp/opencode-serve-ssh.log 2>&1 &\'';
 const OPEN_CODE_SERVER_READINESS_COMMAND =
-  'bash -lc \'for attempt in $(seq 1 35); do for path in global/health api/health; do status=$(curl -s -o /dev/null -w "%{http_code}" "http://127.0.0.1:4096/$path" || true); if [ "$status" = "200" ] || [ "$status" = "401" ]; then exit 0; fi; done; sleep 1; done; printf "%s\\n" "OpenCode did not become ready; see /tmp/opencode-serve-ssh.log" >&2; exit 1\'';
+  'bash -lc \'for attempt in $(seq 1 30); do for path in global/health api/health; do status=$(curl --connect-timeout 1 --max-time 1 -s -o /dev/null -w "%{http_code}" "http://127.0.0.1:4096/$path" || true); if [ "$status" = "200" ] || [ "$status" = "401" ]; then exit 0; fi; done; sleep 1; done; printf "%s\\n" "OpenCode did not become ready; see /tmp/opencode-serve-ssh.log" >&2; exit 1\'';
 const SERVER_START_TIMEOUT_MS = 10_000;
-const SERVER_READY_TIMEOUT_MS = 35_000;
+// The shell probe has a 55-second limit; disable E2B's shorter request deadline.
+const SERVER_READY_TIMEOUT_MS = 0;
 const VERSION_CHECK_TIMEOUT_MS = 20_000;
 const VERSION_UPGRADE_TIMEOUT_MS = 90_000;
 const LOCAL_VERSION_TIMEOUT_MS = 8_000;
@@ -198,12 +200,25 @@ async function ensurePersistentServerReady(
     timeoutMs: SERVER_START_TIMEOUT_MS,
   });
   assertRemoteCommandSucceeded(startResult, "OpenCode server start");
-  const readinessResult = await handle.run(OPEN_CODE_SERVER_READINESS_COMMAND, {
-    ...(commandContext.cwd ? { cwd: commandContext.cwd } : {}),
-    ...(Object.keys(commandContext.envs).length > 0 ? { envs: commandContext.envs } : {}),
-    timeoutMs: SERVER_READY_TIMEOUT_MS,
-  });
-  assertRemoteCommandSucceeded(readinessResult, "OpenCode server readiness check");
+  try {
+    const readinessResult = await handle.run(OPEN_CODE_SERVER_READINESS_COMMAND, {
+      ...(commandContext.cwd ? { cwd: commandContext.cwd } : {}),
+      ...(Object.keys(commandContext.envs).length > 0 ? { envs: commandContext.envs } : {}),
+      timeoutMs: SERVER_READY_TIMEOUT_MS,
+    });
+    assertRemoteCommandSucceeded(readinessResult, "OpenCode server readiness check");
+  } catch (error) {
+    throw await createServerReadinessError(handle, error);
+  }
+}
+
+async function createServerReadinessError(handle: SandboxHandle, error: unknown): Promise<Error> {
+  const logResult = await handle
+    .run("bash -lc 'tail -n 30 /tmp/opencode-serve-ssh.log 2>/dev/null || true'", { timeoutMs: 10_000 })
+    .catch(() => undefined);
+  const log = logResult ? logResult.stdout.trim() || logResult.stderr.trim() : "";
+  const detail = log ? `${toErrorMessage(error)}: ${redactSensitiveText(log)}` : toErrorMessage(error);
+  return new Error(`OpenCode server readiness check failed: ${detail}`);
 }
 
 function resolveCommandContext(launchContext: LaunchContextOptions): { cwd?: string; envs: Record<string, string> } {

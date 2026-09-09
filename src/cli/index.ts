@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
-import { pathToFileURL } from "node:url";
+import { realpathSync } from "node:fs";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { logger, setJsonOutputEnabled, setVerboseLoggingEnabled } from "../logging/logger.js";
 import type { CommandResult } from "../types/index.js";
 import { runCommandCommand } from "./commands.command.js";
@@ -127,7 +128,17 @@ function isJsonOutputRequested(argv: string[]): boolean {
 
 function isMainModule(): boolean {
   const entrypoint = process.argv[1];
-  return entrypoint !== undefined && pathToFileURL(entrypoint).href === import.meta.url;
+  if (entrypoint === undefined) {
+    return false;
+  }
+
+  try {
+    const entrypointUrl = pathToFileURL(realpathSync(entrypoint)).href;
+    const moduleUrl = pathToFileURL(realpathSync(fileURLToPath(import.meta.url))).href;
+    return entrypointUrl === moduleUrl;
+  } catch {
+    return false;
+  }
 }
 
 if (isMainModule()) {

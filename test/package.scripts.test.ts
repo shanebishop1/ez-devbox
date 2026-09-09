@@ -13,4 +13,19 @@ describe("package scripts", () => {
 
     expect(validateScript).toContain("npm run e2e:live");
   });
+
+  it("enforces source coverage and package checks in offline validation", () => {
+    const raw = readFileSync(new URL("../package.json", import.meta.url), "utf8");
+    const parsed = JSON.parse(raw) as PackageJsonScriptsShape;
+
+    expect(parsed.scripts?.["validate:offline"]).toContain("npm run test:coverage");
+    expect(parsed.scripts?.["validate:offline"]).toContain("npm run pack:check");
+  });
+
+  it("smoke-tests npm-created package bin links during package verification", () => {
+    const raw = readFileSync(new URL("../package.json", import.meta.url), "utf8");
+    const parsed = JSON.parse(raw) as PackageJsonScriptsShape;
+
+    expect(parsed.scripts?.["pack:check"]).toContain("verify-installed-package.ts");
+  });
 });

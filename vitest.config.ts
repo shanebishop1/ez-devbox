@@ -12,5 +12,16 @@ export default defineConfig({
       HOME: isolatedHome,
       XDG_CONFIG_HOME: join(isolatedHome, ".config"),
     },
+    coverage: {
+      provider: "v8",
+      include: ["src/**/*.ts"],
+      exclude: ["src/**/*.types.ts", "src/types/**"],
+      thresholds: {
+        branches: 70,
+        functions: 80,
+        lines: 75,
+        statements: 75,
+      },
+    },
   },
 });

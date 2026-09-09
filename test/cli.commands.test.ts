@@ -749,6 +749,7 @@ describe("CLI command integration", () => {
     await writeFile(join(ghConfigDir, "config.yml"), "git_protocol: https\n", "utf8");
     await writeFile(join(ghConfigDir, "hosts.yml"), "github.com:\n  user: test\n", "utf8");
 
+    const runInSandbox = vi.fn().mockResolvedValue({ stdout: "", stderr: "", exitCode: 0 });
     const writeFileInSandbox = vi.fn().mockResolvedValue(undefined);
     const summaryDisabled = await syncToolingForCreateMode(
       {
@@ -756,7 +757,7 @@ describe("CLI command integration", () => {
         opencode: { config_dir: opencodeConfigDir, auth_path: opencodeAuthPath },
         gh: { enabled: false, config_dir: ghConfigDir },
       },
-      { writeFile: writeFileInSandbox },
+      { run: runInSandbox, writeFile: writeFileInSandbox },
       "ssh-opencode",
     );
     const summaryEnabled = await syncToolingForCreateMode(
@@ -765,7 +766,7 @@ describe("CLI command integration", () => {
         opencode: { config_dir: opencodeConfigDir, auth_path: opencodeAuthPath },
         gh: { enabled: true, config_dir: ghConfigDir },
       },
-      { writeFile: writeFileInSandbox },
+      { run: runInSandbox, writeFile: writeFileInSandbox },
       "ssh-opencode",
     );
 

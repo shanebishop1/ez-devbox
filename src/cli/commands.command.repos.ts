@@ -16,6 +16,7 @@ export async function resolveSelectedRepos(
   activeName: string | undefined,
   activeIndex: number | undefined,
   deps: RepoSelectionDeps,
+  preferredActiveRepo?: string,
 ): Promise<Awaited<ReturnType<typeof loadConfig>>["project"]["repos"]> {
   if (repos.length === 0) {
     return [];
@@ -53,12 +54,15 @@ export async function resolveSelectedRepos(
   }
 
   if (active === "prompt") {
-    return selectReposForProvisioning({
-      mode,
-      active,
-      repos,
-      promptIndex: 0,
-    });
+    const preferredRepoName = preferredActiveRepo?.trim();
+    const preferredRepo = preferredRepoName ? repos.find((repo) => repo.name === preferredRepoName) : undefined;
+    if (preferredRepo) {
+      return [preferredRepo];
+    }
+
+    throw new Error(
+      "Unable to select a repo non-interactively: no valid saved active repo matches this sandbox. Configure project.active='name' with project.active_name set to a repo name, or run from an interactive terminal to select a repo.",
+    );
   }
 
   return selectReposForProvisioning({

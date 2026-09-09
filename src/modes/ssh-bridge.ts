@@ -12,11 +12,11 @@ import { allocateSshBridgePorts } from "./ssh-bridge.ports.js";
 import type { SshBridgePorts, SshBridgeSession, SshBridgeSessionArtifacts, SshModeDeps } from "./ssh-bridge.types.js";
 import { quoteShellArg, toWsUrl } from "./ssh-bridge.utils.js";
 
-export type { SshBridgePorts, SshBridgeSession, SshBridgeSessionArtifacts, SshModeDeps };
-export { cleanupSshBridgeSession };
 export { buildInteractiveRemoteCommand, buildSshClientArgs, runInteractiveSshSession } from "./ssh-bridge.commands.js";
 export { allocateSshBridgePorts } from "./ssh-bridge.ports.js";
 export { stageInteractiveStartupEnv } from "./ssh-bridge.startup-env.js";
+export type { SshBridgePorts, SshBridgeSession, SshBridgeSessionArtifacts, SshModeDeps };
+export { cleanupSshBridgeSession };
 
 export async function prepareSshBridgeSession(handle: SandboxHandle): Promise<SshBridgeSession> {
   logger.verbose("SSH bridge: checking/installing dependencies.");
@@ -30,6 +30,7 @@ export async function prepareSshBridgeSession(handle: SandboxHandle): Promise<Ss
   try {
     logger.verbose("SSH bridge: generating local key pair.");
     await runLocalCommand("ssh-keygen", ["-t", "ed25519", "-N", "", "-f", privateKeyPath, "-q"], SSH_SHORT_TIMEOUT_MS);
+    await chmod(privateKeyPath, 0o600);
 
     const publicKey = (await readFile(`${privateKeyPath}.pub`, "utf8")).trim();
     if (publicKey === "") {
@@ -37,12 +38,14 @@ export async function prepareSshBridgeSession(handle: SandboxHandle): Promise<Ss
     }
 
     const sessionId = basename(tempDir);
-    const remoteUserResult = await handle.run("whoami", { timeoutMs: SSH_SHORT_TIMEOUT_MS });
-    assertRemoteCommandSucceeded(remoteUserResult, "SSH bridge remote user lookup");
-    const remoteUser = remoteUserResult.stdout.trim() || SSH_USER_FALLBACK;
-    const remoteHomeResult = await handle.run("bash -lc 'printf %s \"$HOME\"'", { timeoutMs: SSH_SHORT_TIMEOUT_MS });
-    assertRemoteCommandSucceeded(remoteHomeResult, "SSH bridge remote home lookup");
-    const remoteHome = remoteHomeResult.stdout.trim();
+    const remoteIdentityResult = await handle.run(
+      `bash -lc ${quoteShellArg('printf "%s\\n%s\\n" "$(whoami)" "$HOME"')}`,
+      { timeoutMs: SSH_SHORT_TIMEOUT_MS },
+    );
+    assertRemoteCommandSucceeded(remoteIdentityResult, "SSH bridge remote identity lookup");
+    const [remoteUserLine, remoteHomeLine] = remoteIdentityResult.stdout.split(/\r?\n/);
+    const remoteUser = remoteUserLine?.trim() || SSH_USER_FALLBACK;
+    const remoteHome = remoteHomeLine?.trim() ?? "";
     if (remoteHome === "") {
       throw new Error("Failed to resolve remote home directory for SSH bridge session.");
     }
@@ -63,37 +66,15 @@ export async function prepareSshBridgeSession(handle: SandboxHandle): Promise<Ss
       websockifyLogPath: posix.join(sessionDir, "websockify.log"),
     } satisfies SshBridgeSessionArtifacts;
 
-    logger.verbose("SSH bridge: configuring remote sshd/websockify.");
-    const directorySetupResult = await handle.run(
-      `bash -lc 'mkdir -p ${quoteShellArg(sshRootDir)} && chmod 700 ${quoteShellArg(
-        sshRootDir,
-      )} && rm -rf ${quoteShellArg(sessionDir)} && mkdir -p ${quoteShellArg(sessionDir)} && chmod 700 ${quoteShellArg(sessionDir)}'`,
-      { timeoutMs: SSH_SHORT_TIMEOUT_MS },
-    );
-    assertRemoteCommandSucceeded(directorySetupResult, "SSH bridge session directory setup");
-
     const publicKeyBase64 = Buffer.from(publicKey, "utf8").toString("base64");
-
-    const authorizedKeysResult = await handle.run(
-      `bash -lc 'printf %s ${publicKeyBase64} | base64 -d > ${quoteShellArg(artifacts.authorizedKeysPath)} && chmod 600 ${quoteShellArg(artifacts.authorizedKeysPath)}'`,
+    logger.verbose("SSH bridge: configuring remote sshd/websockify.");
+    const setupResult = await handle.run(
+      buildSshBridgeSetupCommand(artifacts, publicKeyBase64, buildSshdConfig(artifacts)),
       { timeoutMs: SSH_SHORT_TIMEOUT_MS },
     );
-    assertRemoteCommandSucceeded(authorizedKeysResult, "SSH bridge authorized keys setup");
+    assertRemoteCommandSucceeded(setupResult, "SSH bridge remote setup");
 
-    const hostKeyGenerationResult = await handle.run(
-      `ssh-keygen -t ed25519 -N "" -f ${quoteShellArg(artifacts.hostPrivateKeyPath)} -q`,
-      {
-        timeoutMs: SSH_SHORT_TIMEOUT_MS,
-      },
-    );
-    assertRemoteCommandSucceeded(hostKeyGenerationResult, "SSH bridge host key generation");
-
-    const hostKeyResult = await handle.run(`bash -lc 'cat ${quoteShellArg(artifacts.hostPublicKeyPath)}'`, {
-      timeoutMs: SSH_SHORT_TIMEOUT_MS,
-    });
-    assertRemoteCommandSucceeded(hostKeyResult, "SSH bridge host public key read");
-
-    const hostPublicKey = hostKeyResult.stdout.trim();
+    const hostPublicKey = setupResult.stdout.trim();
     if (hostPublicKey === "") {
       throw new Error("Failed to load SSH host public key.");
     }
@@ -101,28 +82,6 @@ export async function prepareSshBridgeSession(handle: SandboxHandle): Promise<Ss
     const knownHostEntry = `${SSH_HOST} ${hostPublicKey}\n`;
     await writeFile(knownHostsPath, knownHostEntry);
     await chmod(knownHostsPath, 0o600);
-
-    const sshdConfigResult = await handle.run(
-      `bash -lc 'cat > ${quoteShellArg(artifacts.sshdConfigPath)} <<"EOF"\n${buildSshdConfig(artifacts)}\nEOF'`,
-      { timeoutMs: SSH_SHORT_TIMEOUT_MS },
-    );
-    assertRemoteCommandSucceeded(sshdConfigResult, "SSH bridge sshd configuration");
-
-    const sshdRuntimeDirectoryResult = await handle.run("sudo mkdir -p /run/sshd", {
-      timeoutMs: SSH_SHORT_TIMEOUT_MS,
-    });
-    assertRemoteCommandSucceeded(sshdRuntimeDirectoryResult, "SSH bridge sshd runtime directory setup");
-    const sshdStartResult = await handle.run(`sudo /usr/sbin/sshd -f ${quoteShellArg(artifacts.sshdConfigPath)}`, {
-      timeoutMs: SSH_SHORT_TIMEOUT_MS,
-    });
-    assertRemoteCommandSucceeded(sshdStartResult, "SSH bridge sshd start");
-    const websockifyStartResult = await handle.run(
-      `nohup websockify 0.0.0.0:${artifacts.websockifyPort} 127.0.0.1:${artifacts.sshdPort} >${quoteShellArg(
-        artifacts.websockifyLogPath,
-      )} 2>&1 & echo $! > ${quoteShellArg(artifacts.websockifyPidPath)}`,
-      { timeoutMs: SSH_SHORT_TIMEOUT_MS },
-    );
-    assertRemoteCommandSucceeded(websockifyStartResult, "SSH bridge websockify start");
 
     const wsUrl = toWsUrl(await handle.getHost(artifacts.websockifyPort));
     logger.verbose(`SSH bridge ready: ${wsUrl}`);
@@ -146,4 +105,53 @@ export async function prepareSshBridgeSession(handle: SandboxHandle): Promise<Ss
     });
     throw error;
   }
+}
+
+function buildSshBridgeSetupCommand(
+  artifacts: SshBridgeSessionArtifacts,
+  publicKeyBase64: string,
+  sshdConfig: string,
+): string {
+  const sshRootDir = posix.dirname(artifacts.sessionDir);
+  const authorizedKeysCommand = [
+    `printf %s ${quoteShellArg(publicKeyBase64)} | base64 -d > ${quoteShellArg(artifacts.authorizedKeysPath)}`,
+    `chmod 600 ${quoteShellArg(artifacts.authorizedKeysPath)}`,
+  ].join(" && ");
+  const configBase64 = Buffer.from(sshdConfig, "utf8").toString("base64");
+  const configCommand = [
+    `printf %s ${quoteShellArg(configBase64)} | base64 -d > ${quoteShellArg(artifacts.sshdConfigPath)}`,
+    `chmod 600 ${quoteShellArg(artifacts.sshdConfigPath)}`,
+  ].join(" && ");
+  const websockifyCommand = [
+    `nohup websockify 0.0.0.0:${artifacts.websockifyPort} 127.0.0.1:${artifacts.sshdPort} >${quoteShellArg(
+      artifacts.websockifyLogPath,
+    )} 2>&1 & pid=$!`,
+    `if printf '%s\\n' "$pid" > ${quoteShellArg(artifacts.websockifyPidPath)}; then :; else kill "$pid" >/dev/null 2>&1 || true; exit 1; fi`,
+  ].join("\n");
+  const script = [
+    "set -euo pipefail",
+    'run_step() { operation=$1; shift; if "$@"; then return 0; else status=$?; printf \'SSH bridge %s failed with exit code %s\\n\' "$operation" "$status" >&2; exit "$status"; fi; }',
+    'capture_step() { operation=$1; shift; if output=$("$@"); then printf \'%s\' "$output"; return 0; else status=$?; printf \'SSH bridge %s failed with exit code %s\\n\' "$operation" "$status" >&2; exit "$status"; fi; }',
+    "umask 077",
+    `run_step ${quoteShellArg("SSH bridge root directory setup")} mkdir -p ${quoteShellArg(sshRootDir)}`,
+    `run_step ${quoteShellArg("SSH bridge root directory permissions")} chmod 700 ${quoteShellArg(sshRootDir)}`,
+    `run_step ${quoteShellArg("SSH bridge session directory cleanup")} rm -rf ${quoteShellArg(artifacts.sessionDir)}`,
+    `run_step ${quoteShellArg("SSH bridge session directory setup")} mkdir -p ${quoteShellArg(artifacts.sessionDir)}`,
+    `run_step ${quoteShellArg("SSH bridge session directory permissions")} chmod 700 ${quoteShellArg(artifacts.sessionDir)}`,
+    `run_step ${quoteShellArg("SSH bridge authorized keys setup")} sh -c ${quoteShellArg(authorizedKeysCommand)}`,
+    `run_step ${quoteShellArg("SSH bridge host key generation")} ssh-keygen -t ed25519 -N ${quoteShellArg("")} -f ${quoteShellArg(
+      artifacts.hostPrivateKeyPath,
+    )} -q`,
+    `host_public_key=$(capture_step ${quoteShellArg("SSH bridge host public key read")} cat ${quoteShellArg(
+      artifacts.hostPublicKeyPath,
+    )})`,
+    'if [ -z "$host_public_key" ]; then printf "%s\\n" "SSH bridge host public key read failed: generated key is empty" >&2; exit 1; fi',
+    `run_step ${quoteShellArg("SSH bridge sshd configuration")} sh -c ${quoteShellArg(configCommand)}`,
+    `run_step ${quoteShellArg("SSH bridge sshd runtime directory setup")} sudo mkdir -p /run/sshd`,
+    `run_step ${quoteShellArg("SSH bridge sshd start")} sudo /usr/sbin/sshd -f ${quoteShellArg(artifacts.sshdConfigPath)}`,
+    `run_step ${quoteShellArg("SSH bridge websockify start")} sh -c ${quoteShellArg(websockifyCommand)}`,
+    'printf "%s\\n" "$host_public_key"',
+  ].join("\n");
+
+  return `bash -lc ${quoteShellArg(script)}`;
 }

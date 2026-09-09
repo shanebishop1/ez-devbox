@@ -1,8 +1,10 @@
 import { readFile } from "node:fs/promises";
+import { CommandExitError } from "e2b";
 import { type LoadConfigOptions, loadConfig, loadConfigWithMetadata } from "../config/load.js";
 import { resolveSandboxCreateEnv, type SandboxCreateEnvResolution } from "../e2b/env.js";
 import {
   connectSandbox,
+  LauncherE2BLifecycleError,
   type LifecycleOperationOptions,
   type ListSandboxesOptions,
   listSandboxes,
@@ -18,6 +20,7 @@ import { parseCommandArgs } from "./commands.command.args.js";
 import { withoutOpenCodeServerPassword } from "./commands.command.env.js";
 import { resolveCommandWorkingDirectory, resolveSelectedRepos } from "./commands.command.repos.js";
 import { resolveSandboxTarget } from "./commands.command.target.js";
+import { resolvePreferredActiveRepo } from "./commands.connect.target.js";
 import { loadCliEnvSource } from "./env-source.js";
 import { asStructuredCliError } from "./structured-error.js";
 
@@ -67,6 +70,7 @@ export async function runCommandCommand(
   }
   return withConfiguredTunnel(config, async (tunnelRuntimeEnv) => {
     const sandboxTarget = await resolveSandboxTarget(parsed.sandboxId, commandDeps);
+    const preferredActiveRepo = await resolvePreferredActiveRepo(config, sandboxTarget.sandboxId, commandDeps, {});
     const selectedRepos = await resolveSelectedRepos(
       config.project.repos,
       config.project.mode,
@@ -74,6 +78,7 @@ export async function runCommandCommand(
       config.project.active_name,
       config.project.active_index,
       commandDeps,
+      preferredActiveRepo,
     );
     const cwd = resolveCommandWorkingDirectory(config.project.dir, selectedRepos);
     const envSource = deps.resolveEnvSource ? await deps.resolveEnvSource() : {};
@@ -115,11 +120,16 @@ export async function runCommandCommand(
         ...(parsed.timeoutMs ? { timeoutMs: parsed.timeoutMs } : {}),
       });
     } catch (error) {
-      throw asStructuredCliError(error, {
-        code: "REMOTE_COMMAND_FAILED",
-        stage: "remote-command",
-        sandboxId: sandboxTarget.sandboxId,
-      });
+      const commandExitError = getCommandExitError(error);
+      if (commandExitError) {
+        result = commandExitError;
+      } else {
+        throw asStructuredCliError(error, {
+          code: "REMOTE_COMMAND_FAILED",
+          stage: "remote-command",
+          sandboxId: sandboxTarget.sandboxId,
+        });
+      }
     }
     const stdout = result.stdout.trim() === "" ? "(empty)" : result.stdout;
     const stderr = result.stderr.trim() === "" ? "(empty)" : result.stderr;
@@ -160,4 +170,16 @@ export async function runCommandCommand(
       exitCode: result.exitCode,
     };
   });
+}
+
+function getCommandExitError(error: unknown): { stdout: string; stderr: string; exitCode: number } | null {
+  if (error instanceof CommandExitError) {
+    return error;
+  }
+
+  if (error instanceof LauncherE2BLifecycleError && error.cause instanceof CommandExitError) {
+    return error.cause;
+  }
+
+  return null;
 }

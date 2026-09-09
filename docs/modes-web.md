@@ -15,7 +15,7 @@ For web mode to be usable in sandbox:
 
 - Your `ez-devbox.config.toml` must point `[opencode].config_dir` and `[opencode].auth_path` to valid local OpenCode config/auth paths.
 - Those local OpenCode auth/config files must already exist on your machine.
-- If you want password-protected web access, set `OPENCODE_SERVER_PASSWORD` in `.env`.
+- A nonempty `OPENCODE_SERVER_PASSWORD` must be available in the sandbox before web mode starts a new public listener. The usual host-side setup is to set it in `.env`.
 
 Example `ez-devbox.config.toml` values (typical macOS/Linux):
 
@@ -48,8 +48,11 @@ npx ez-devbox resume
 
 ## Auth for web mode
 
-- If `OPENCODE_SERVER_PASSWORD` is set in your env, ez-devbox injects it for web mode startup.
-- This protects the web endpoint with OpenCode server auth.
+- For a new listener, ez-devbox checks the effective sandbox environment before starting `opencode serve` and verifies that the endpoint returns `401`.
+- If an already-running listener returns `401`, ez-devbox reuses it without requiring the host password again.
+- An existing listener that does not return `401` is rejected and is neither reused nor stopped. This includes an unauthenticated listener inherited from a pre-provisioned template (normally HTTP `200`). Stop that listener yourself inside the sandbox, remove it from the template, or use another sandbox before retrying.
+- If `OPENCODE_SERVER_PASSWORD` is set in your host env, ez-devbox injects it for web mode startup. An inherited nonempty sandbox value also satisfies the prerequisite.
+- If a newly started listener fails readiness or authentication verification, ez-devbox stops it only after matching the per-launch ownership tag. If ownership cannot be verified, startup fails with instructions to inspect port 3000 instead of killing an unknown process.
 
 ## Quick examples
 

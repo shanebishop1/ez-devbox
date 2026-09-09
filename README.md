@@ -15,6 +15,18 @@
 - Forward selected environment variables and sync local tool auth/config.
 - Reach local MCP servers, Docker containers, or other services through optional tunnels.
 
+## Demo flow
+
+After the [Quick start](#quick-start), with Node.js 20+, an `E2B_API_KEY` in `.env`, and an `ez-devbox.config.toml` in the current directory:
+
+```bash
+npx ez-devbox@latest create --mode ssh-opencode --detach --json
+# Set SANDBOX_ID to the sandboxId from the create result.
+npx ez-devbox@latest resume
+npx ez-devbox@latest list --json
+npx ez-devbox@latest wipe --sandbox-id "$SANDBOX_ID"
+```
+
 ## Agent Modes
 
 - `ssh-opencode`: SSH into the sandbox and attach the OpenCode TUI to a persistent in-sandbox `opencode serve` backend.
@@ -22,6 +34,8 @@
 - `ssh-claude`: SSH into the sandbox and attach Claude Code inside a persistent `tmux` session.
 - `web`: start `opencode serve` and print the URL.
 - `ssh-shell`: SSH into an interactive shell inside a persistent `tmux` session.
+
+Web mode requires a nonempty `OPENCODE_SERVER_PASSWORD` when it starts a new public listener. See [the web mode guide](docs/modes-web.md) for reuse and recovery behavior.
 
 ## Install
 
@@ -52,7 +66,7 @@ npm install -g ez-devbox
 ez-devbox --help
 ```
 
-Use `ez-devbox` in portable instructions. The short `ezdb` binary is declared by the current package and will first be available on npm in the release after `0.5.5`; npm `0.5.5` exposes only `ez-devbox`. Once you install a version that includes it, `ezdb --help` is equivalent.
+The package installs both `ez-devbox` and its shorter alias, `ezdb`.
 
 ## Environment variables
 
@@ -73,7 +87,7 @@ Common optional vars:
 - `FIRECRAWL_API_URL`: used by your own tooling/workloads inside the sandbox (for example tunneled MCP/API endpoints).
 - `FIRECRAWL_API_KEY`: forwarded only if configured through `env.pass_through`.
 - `GITHUB_TOKEN` / `GH_TOKEN`: used for GitHub auth flows (especially when `[gh].enabled = true`).
-- `OPENCODE_SERVER_PASSWORD`: used for `web` mode auth.
+- `OPENCODE_SERVER_PASSWORD`: required before `web` mode starts a new public listener; an already-running listener is reused only when it responds with an authentication challenge.
 
 The npm package also ships `.env.example`. Do not commit `.env`; it contains local secrets.
 

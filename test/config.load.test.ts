@@ -197,27 +197,22 @@ describe("loadConfig", () => {
     await expect(loadConfig({ configPath, envPath })).rejects.toThrow("project.dir");
   });
 
-  it.each([
-    "../escape",
-    "nested/repo",
-    ".",
-    "..",
-    " leading",
-    "trailing ",
-    "line\\nbreak",
-  ])("rejects unsafe repo name %j", async (name) => {
-    const configPath = join(tempDir, "ez-devbox.config.toml");
-    const envPath = join(tempDir, ".env");
-    const tomlName = name.replace("\\n", "\\u000a");
+  it.each(["../escape", "nested/repo", ".", "..", " leading", "trailing ", "line\\nbreak"])(
+    "rejects unsafe repo name %j",
+    async (name) => {
+      const configPath = join(tempDir, "ez-devbox.config.toml");
+      const envPath = join(tempDir, ".env");
+      const tomlName = name.replace("\\n", "\\u000a");
 
-    await writeFile(
-      configPath,
-      ["[[project.repos]]", `name = "${tomlName}"`, 'url = "https://example.com/repo.git"'].join("\n"),
-    );
-    await writeFile(envPath, "E2B_API_KEY=test-e2b-key\n");
+      await writeFile(
+        configPath,
+        ["[[project.repos]]", `name = "${tomlName}"`, 'url = "https://example.com/repo.git"'].join("\n"),
+      );
+      await writeFile(envPath, "E2B_API_KEY=test-e2b-key\n");
 
-    await expect(loadConfig({ configPath, envPath })).rejects.toThrow("safe single POSIX path component");
-  });
+      await expect(loadConfig({ configPath, envPath })).rejects.toThrow("safe single POSIX path component");
+    },
+  );
 
   it("rejects duplicate repo names", async () => {
     const configPath = join(tempDir, "ez-devbox.config.toml");

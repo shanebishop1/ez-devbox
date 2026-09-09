@@ -1,6 +1,9 @@
+import { CommandExitError, TimeoutError } from "e2b";
 import { describe, expect, it, vi } from "vitest";
 import { runCommandCommand } from "../src/cli/commands.command.js";
 import type { ResolvedLauncherConfig } from "../src/config/schema.js";
+import type { E2BClient, E2BSandbox } from "../src/e2b/client.js";
+import { connectSandbox as connectSandboxWithLifecycle } from "../src/e2b/lifecycle.js";
 import { logger } from "../src/logging/logger.js";
 
 const baseConfig: ResolvedLauncherConfig = {
@@ -48,6 +51,26 @@ const baseConfig: ResolvedLauncherConfig = {
     ports: [],
   },
 };
+
+const createRepo = (name: string) => ({
+  name,
+  url: `https://example.com/${name}.git`,
+  branch: "main",
+  setup_command: "",
+  setup_env: {},
+  startup_env: {},
+});
+
+const multiRepoConfig = (project: Partial<ResolvedLauncherConfig["project"]> = {}): ResolvedLauncherConfig => ({
+  ...baseConfig,
+  project: {
+    ...baseConfig.project,
+    mode: "single",
+    active: "prompt",
+    repos: [createRepo("repo-one"), createRepo("repo-two")],
+    ...project,
+  },
+});
 
 describe("runCommandCommand", () => {
   it("rejects unexpected flags before command tokens with help guidance", async () => {
@@ -164,10 +187,147 @@ describe("runCommandCommand", () => {
       }),
       listSandboxes: vi.fn().mockResolvedValue([]),
       connectSandbox: vi.fn().mockResolvedValue({ sandboxId: "sbx-1", run }),
-      loadLastRunState: vi.fn().mockResolvedValue(null),
+      loadLastRunState: vi.fn().mockResolvedValue({
+        sandboxId: "sbx-1",
+        mode: "web",
+        activeRepo: "repo-one",
+        updatedAt: "2026-01-01T00:00:00.000Z",
+      }),
     });
 
     expect(run).toHaveBeenCalledWith("pwd", { cwd: "/workspace/repo-one" });
+  });
+
+  it("uses the saved active repo when its sandbox matches in non-interactive mode", async () => {
+    const run = vi.fn().mockResolvedValue({ stdout: "ok", stderr: "", exitCode: 0 });
+
+    await runCommandCommand(["--sandbox-id", "sbx-1", "pwd"], {
+      loadConfig: vi.fn().mockResolvedValue(multiRepoConfig()),
+      listSandboxes: vi.fn().mockResolvedValue([]),
+      connectSandbox: vi.fn().mockResolvedValue({ sandboxId: "sbx-1", run }),
+      loadLastRunState: vi.fn().mockResolvedValue({
+        sandboxId: "sbx-1",
+        mode: "web",
+        activeRepo: "repo-two",
+        updatedAt: "2026-01-01T00:00:00.000Z",
+      }),
+      isInteractiveTerminal: () => false,
+    });
+
+    expect(run).toHaveBeenCalledWith("pwd", { cwd: "/workspace/repo-two" });
+  });
+
+  it("uses the saved active repo for implicit sandbox selection and json output", async () => {
+    const run = vi.fn().mockResolvedValue({ stdout: "ok", stderr: "", exitCode: 0 });
+
+    const result = await runCommandCommand(["--json", "pwd"], {
+      loadConfig: vi.fn().mockResolvedValue(multiRepoConfig()),
+      listSandboxes: vi.fn().mockResolvedValue([{ sandboxId: "sbx-1", state: "running" }]),
+      connectSandbox: vi.fn().mockResolvedValue({ sandboxId: "sbx-1", run }),
+      loadLastRunState: vi.fn().mockResolvedValue({
+        sandboxId: "sbx-1",
+        mode: "web",
+        activeRepo: "repo-two",
+        updatedAt: "2026-01-01T00:00:00.000Z",
+      }),
+      isInteractiveTerminal: () => true,
+    });
+
+    expect(JSON.parse(result.message)).toMatchObject({ sandboxId: "sbx-1", cwd: "/workspace/repo-two" });
+    expect(run).toHaveBeenCalledWith("pwd", { cwd: "/workspace/repo-two" });
+  });
+
+  it("rejects a saved active repo from a different sandbox before connecting", async () => {
+    const connectSandbox = vi.fn();
+
+    await expect(
+      runCommandCommand(["--sandbox-id", "sbx-current", "pwd"], {
+        loadConfig: vi.fn().mockResolvedValue(multiRepoConfig()),
+        listSandboxes: vi.fn().mockResolvedValue([]),
+        connectSandbox,
+        loadLastRunState: vi.fn().mockResolvedValue({
+          sandboxId: "sbx-other",
+          mode: "web",
+          activeRepo: "repo-two",
+          updatedAt: "2026-01-01T00:00:00.000Z",
+        }),
+        isInteractiveTerminal: () => false,
+      }),
+    ).rejects.toThrow("Configure project.active='name'");
+
+    expect(connectSandbox).not.toHaveBeenCalled();
+  });
+
+  it("rejects an unknown saved active repo before connecting", async () => {
+    const connectSandbox = vi.fn();
+
+    await expect(
+      runCommandCommand(["--sandbox-id", "sbx-1", "pwd"], {
+        loadConfig: vi.fn().mockResolvedValue(multiRepoConfig()),
+        listSandboxes: vi.fn().mockResolvedValue([]),
+        connectSandbox,
+        loadLastRunState: vi.fn().mockResolvedValue({
+          sandboxId: "sbx-1",
+          mode: "web",
+          activeRepo: "stale-repo",
+          updatedAt: "2026-01-01T00:00:00.000Z",
+        }),
+        isInteractiveTerminal: () => false,
+      }),
+    ).rejects.toThrow("no valid saved active repo matches this sandbox");
+
+    expect(connectSandbox).not.toHaveBeenCalled();
+  });
+
+  it("rejects a missing saved active repo before connecting", async () => {
+    const connectSandbox = vi.fn();
+
+    await expect(
+      runCommandCommand(["--sandbox-id", "sbx-1", "pwd"], {
+        loadConfig: vi.fn().mockResolvedValue(multiRepoConfig()),
+        listSandboxes: vi.fn().mockResolvedValue([]),
+        connectSandbox,
+        loadLastRunState: vi.fn().mockResolvedValue({
+          sandboxId: "sbx-1",
+          mode: "web",
+          updatedAt: "2026-01-01T00:00:00.000Z",
+        }),
+        isInteractiveTerminal: () => false,
+      }),
+    ).rejects.toThrow("no valid saved active repo matches this sandbox");
+
+    expect(connectSandbox).not.toHaveBeenCalled();
+  });
+
+  it("prompts for repo selection interactively despite a saved active repo", async () => {
+    const promptInput = vi.fn().mockResolvedValue("2");
+    const run = vi.fn().mockResolvedValue({ stdout: "ok", stderr: "", exitCode: 0 });
+
+    await runCommandCommand(["--sandbox-id", "sbx-1", "pwd"], {
+      loadConfig: vi.fn().mockResolvedValue(multiRepoConfig()),
+      listSandboxes: vi.fn().mockResolvedValue([]),
+      connectSandbox: vi.fn().mockResolvedValue({ sandboxId: "sbx-1", run }),
+      loadLastRunState: vi.fn().mockResolvedValue({
+        sandboxId: "sbx-1",
+        mode: "web",
+        activeRepo: "repo-one",
+        updatedAt: "2026-01-01T00:00:00.000Z",
+      }),
+      isInteractiveTerminal: () => true,
+      promptInput,
+    });
+
+    expect(promptInput).toHaveBeenCalledWith(
+      [
+        "Multiple repos available. Select one:",
+        "-------------------------------------",
+        "1) repo-one",
+        "2) repo-two",
+        "",
+        "Enter choice [1-2]: ",
+      ].join("\n"),
+    );
+    expect(run).toHaveBeenCalledWith("pwd", { cwd: "/workspace/repo-two" });
   });
 
   it("selects cwd using project.active=name", async () => {
@@ -202,7 +362,12 @@ describe("runCommandCommand", () => {
       }),
       listSandboxes: vi.fn().mockResolvedValue([]),
       connectSandbox: vi.fn().mockResolvedValue({ sandboxId: "sbx-1", run }),
-      loadLastRunState: vi.fn().mockResolvedValue(null),
+      loadLastRunState: vi.fn().mockResolvedValue({
+        sandboxId: "sbx-1",
+        mode: "web",
+        activeRepo: "repo-one",
+        updatedAt: "2026-01-01T00:00:00.000Z",
+      }),
       isInteractiveTerminal: () => false,
     });
 
@@ -241,7 +406,12 @@ describe("runCommandCommand", () => {
       }),
       listSandboxes: vi.fn().mockResolvedValue([]),
       connectSandbox: vi.fn().mockResolvedValue({ sandboxId: "sbx-1", run }),
-      loadLastRunState: vi.fn().mockResolvedValue(null),
+      loadLastRunState: vi.fn().mockResolvedValue({
+        sandboxId: "sbx-1",
+        mode: "web",
+        activeRepo: "repo-one",
+        updatedAt: "2026-01-01T00:00:00.000Z",
+      }),
       isInteractiveTerminal: () => true,
     });
 
@@ -416,6 +586,82 @@ describe("runCommandCommand", () => {
       ),
     );
     expect(result.exitCode).toBe(0);
+  });
+
+  it("recovers a real SDK command exit error through the lifecycle for json and plain output", async () => {
+    const commandExitError = new CommandExitError({
+      stdout: "partial output\n",
+      stderr: "command failed\n",
+      exitCode: 7,
+    });
+    const run = vi.fn().mockRejectedValue(commandExitError);
+    const sdkSandbox: E2BSandbox = {
+      sandboxId: "sbx-1",
+      commands: { run },
+      files: { write: vi.fn().mockResolvedValue(undefined) },
+      getHost: vi.fn().mockReturnValue("sbx-1.host"),
+      setTimeout: vi.fn().mockResolvedValue(undefined),
+      kill: vi.fn().mockResolvedValue(true),
+    };
+    const client: E2BClient = {
+      create: vi.fn(),
+      connect: vi.fn().mockResolvedValue(sdkSandbox),
+      list: vi.fn().mockResolvedValue([]),
+      kill: vi.fn().mockResolvedValue(true),
+    };
+    const deps = {
+      loadConfig: vi.fn().mockResolvedValue(baseConfig),
+      listSandboxes: vi.fn().mockResolvedValue([]),
+      connectSandbox: (sandboxId: string, config: ResolvedLauncherConfig) =>
+        connectSandboxWithLifecycle(sandboxId, config, { client }),
+      loadLastRunState: vi.fn().mockResolvedValue(null),
+    };
+
+    const jsonResult = await runCommandCommand(["--sandbox-id", "sbx-1", "--json", "--", "false"], deps);
+    const plainResult = await runCommandCommand(["--sandbox-id", "sbx-1", "--", "false"], deps);
+
+    expect(JSON.parse(jsonResult.message)).toMatchObject({
+      stdout: "partial output\n",
+      stderr: "command failed\n",
+      exitCode: 7,
+    });
+    expect(jsonResult.exitCode).toBe(7);
+    expect(plainResult.message).toContain("stdout:\npartial output\n");
+    expect(plainResult.message).toContain("stderr:\ncommand failed\n");
+    expect(plainResult.exitCode).toBe(7);
+    expect(client.connect).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps timeout failures as structured remote command errors", async () => {
+    const run = vi.fn().mockRejectedValue(new TimeoutError("command timed out"));
+    const sdkSandbox: E2BSandbox = {
+      sandboxId: "sbx-1",
+      commands: { run },
+      files: { write: vi.fn().mockResolvedValue(undefined) },
+      getHost: vi.fn().mockReturnValue("sbx-1.host"),
+      setTimeout: vi.fn().mockResolvedValue(undefined),
+      kill: vi.fn().mockResolvedValue(true),
+    };
+    const client: E2BClient = {
+      create: vi.fn(),
+      connect: vi.fn().mockResolvedValue(sdkSandbox),
+      list: vi.fn().mockResolvedValue([]),
+      kill: vi.fn().mockResolvedValue(true),
+    };
+
+    await expect(
+      runCommandCommand(["--sandbox-id", "sbx-1", "--", "false"], {
+        loadConfig: vi.fn().mockResolvedValue(baseConfig),
+        listSandboxes: vi.fn().mockResolvedValue([]),
+        connectSandbox: (sandboxId: string, config: ResolvedLauncherConfig) =>
+          connectSandboxWithLifecycle(sandboxId, config, { client }),
+        loadLastRunState: vi.fn().mockResolvedValue(null),
+      }),
+    ).rejects.toMatchObject({
+      code: "REMOTE_COMMAND_FAILED",
+      stage: "remote-command",
+      sandboxId: "sbx-1",
+    });
   });
 
   it("injects passthrough envs when running command", async () => {
