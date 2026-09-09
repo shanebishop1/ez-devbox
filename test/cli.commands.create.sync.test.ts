@@ -46,6 +46,32 @@ describe("syncToolingForMode", () => {
     expect(summary.opencodeConfigSynced).toBe(false);
     expect(summary.claudeConfigSynced).toBe(false);
   });
+
+  it("syncs only explicitly configured custom files for ssh-custom", async () => {
+    const root = await mkdtemp(join(tmpdir(), "ez-devbox-custom-mode-sync-"));
+    tempRoots.push(root);
+    const customDir = join(root, "custom");
+    await mkdir(customDir);
+    const source = join(customDir, "auth.json");
+    await writeFile(source, "custom-secret");
+    const config = {
+      ...createConfig(root),
+      startup: { mode: "ssh-custom" as const },
+      agent: {
+        command: ["my-agent"],
+        files: [{ source, destination: "/home/user/.config/my-agent/auth.json", optional: false }],
+      },
+    };
+    const writeSandboxFile = vi.fn().mockResolvedValue(undefined);
+    const run = vi.fn().mockResolvedValue({ stdout: "", stderr: "", exitCode: 0 });
+
+    const summary = await syncToolingForMode(config, { run, writeFile: writeSandboxFile }, "ssh-custom");
+
+    expect(writeSandboxFile).toHaveBeenCalledWith("/home/user/.config/my-agent/auth.json", expect.any(ArrayBuffer));
+    expect(summary.totalWritten).toBe(1);
+    expect(summary.codexConfigSynced).toBe(false);
+    expect(summary.opencodeConfigSynced).toBe(false);
+  });
 });
 
 function createConfig(root: string): ResolvedLauncherConfig {

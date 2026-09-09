@@ -68,7 +68,7 @@ For `web`, also set a nonempty `OPENCODE_SERVER_PASSWORD` in `.env` or the shell
 
 ## Common settings
 
-- `[startup].mode`: `ssh-opencode`, `ssh-codex`, `ssh-claude`, `ssh-shell`, or `web`. Override with `--mode`.
+- `[startup].mode`: `ssh-opencode`, `ssh-codex`, `ssh-claude`, `ssh-custom`, `ssh-shell`, or `web`. Override with `--mode`.
 - Repeat `[[project.repos]]` for multiple repos. `[project].mode = "all"` provisions all; for one deterministic repo use `mode = "single"`, `active = "name"`, and `active_name = "your-repo"`. Avoid interactive selection in automation.
 - `[project].dir` defaults to `/home/user/projects/workspace`; each repo is cloned under its `name`. `working_dir = "auto"` launches in the single selected repo, or the workspace for multiple repos. `setup_on_connect = false` avoids rerunning setup on reconnect (the default).
 - `[tunnel]` with `ports = [3000]` exposes local services to the sandbox through cloudflared; requires local `cloudflared` or Docker. Default `ports = []` disables tunnels. Tunnel URLs are bearer links: require upstream authentication for sensitive services.
@@ -76,3 +76,28 @@ For `web`, also set a nonempty `OPENCODE_SERVER_PASSWORD` in `.env` or the shell
 The sandbox timeout applies at creation; reconnecting does not reset it. Detaching leaves the sandbox running until timeout or explicit cleanup.
 
 Once configured, follow [sessions.md](sessions.md) to create and reconnect to a session.
+
+### Custom terminal agent
+
+Custom mode requires an explicit compatible non-`base` `sandbox.template`; the template must provide the OS/runtime packages your agent needs. Add one `[agent]` definition:
+
+```toml
+[startup]
+mode = "ssh-custom"
+
+[sandbox]
+template = "your-compatible-template"
+
+[agent]
+command = ["my-agent", "--interactive"]
+check_command = "command -v my-agent"
+install_command = "npm install -g my-agent@1.2.3"
+initial_prompt_command = ["my-agent", "--special-prompt-flag", "{prompt}"]
+follow_up = "tmux"
+
+[[agent.files]]
+source = "~/.config/my-agent/auth.json"
+destination = "/home/user/.config/my-agent/auth.json"
+```
+
+Check/install strings are trusted shell commands executed only in the sandbox. An install command requires a check; a successful check skips installation, and installation is verified afterward. `{prompt}` must be a whole argument and is passed literally, and the effective prompt-command executable must match `agent.command`. The supported shell wrapper is a narrow `bash -c 'exec ... "$1"'` form: put a `$0` label before `{prompt}`, keep `"$1"` final and quoted, and do not nest another shell. File mappings are regular files only, required by default, copied on `create` only, and restricted below `/home/user`; use `[env].pass_through` for selected provider variables. These mechanisms do not cover browser sessions, keychains, or every OAuth flow.

@@ -1,4 +1,4 @@
-# SSH Agent Modes Guide (`ssh-opencode`, `ssh-codex`, `ssh-claude`)
+# SSH Agent Modes Guide (`ssh-opencode`, `ssh-codex`, `ssh-claude`, `ssh-custom`)
 
 Use SSH agent modes when you want an interactive terminal session for OpenCode, Codex, or Claude inside the sandbox.
 
@@ -7,6 +7,18 @@ Use SSH agent modes when you want an interactive terminal session for OpenCode, 
 - `ssh-opencode`: starts/uses a persistent OpenCode server (`opencode serve`) in the sandbox, then attaches the TUI client over SSH (`opencode attach`) inside a persistent `tmux` session.
 - `ssh-codex`: launches Codex CLI in the sandbox inside a persistent `tmux` session.
 - `ssh-claude`: launches Claude Code CLI in the sandbox inside a persistent `tmux` session.
+- `ssh-custom`: launches the configured `[agent].command` in the explicitly selected compatible template inside a persistent `tmux` session.
+
+## Custom agent mode
+
+Use `ssh-custom` when the agent is not one of the built-in presets. The complete config contract is in the [launcher config reference](launcher-config-reference.md). In brief, set an explicit compatible `sandbox.template`, configure `agent.command`, and optionally configure a sandbox `check_command` plus `install_command`.
+
+```bash
+npx ez-devbox create --mode ssh-custom --detach --json
+npx ez-devbox connect --sandbox-id <sandbox-id> --mode ssh-custom --detach --json
+```
+
+Initial prompts use `agent.initial_prompt_command` and its one whole-argument `{prompt}` element. Follow-ups are opt-in with `agent.follow_up = "tmux"`; otherwise a follow-up is rejected instead of launching a second process. Custom file mappings are explicit regular files, copied during `create` only, and do not copy built-in agent credentials. Reconnecting to an existing custom session requires the same agent configuration fingerprint; changing the command or delivery configuration requires stopping the old session first.
 
 ### `ssh-opencode` persistence behavior
 

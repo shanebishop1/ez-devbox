@@ -109,4 +109,20 @@ describe("last-run state persistence", () => {
       activeRepo: undefined,
     });
   });
+
+  it("accepts ssh-custom mode values when loading state", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "ez-devbox-last-run-"));
+    const statePath = join(directory, "last-run.json");
+
+    await writeFile(
+      statePath,
+      JSON.stringify({ sandboxId: "sbx-custom", mode: "ssh-custom", updatedAt: "2026-01-01T00:00:00.000Z" }),
+      "utf8",
+    );
+
+    await expect(loadLastRunState(statePath)).resolves.toMatchObject({
+      sandboxId: "sbx-custom",
+      mode: "ssh-custom",
+    });
+  });
 });

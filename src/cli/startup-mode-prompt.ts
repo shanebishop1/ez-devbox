@@ -12,6 +12,7 @@ const PROMPT_CHOICE_NUMBERS: Record<string, Exclude<StartupMode, "prompt">> = {
   "3": "ssh-codex",
   "4": "web",
   "5": "ssh-shell",
+  "6": "ssh-custom",
 };
 
 export interface StartupModePromptDeps {
@@ -51,6 +52,7 @@ export async function resolvePromptStartupMode(
     formatPromptChoice(3, "ssh-codex"),
     formatPromptChoice(4, WEB_PROMPT_LABEL),
     formatPromptChoice(5, "ssh-shell"),
+    formatPromptChoice(6, "ssh-custom"),
     "",
     "Enter choice: ",
   ].join("\n");
@@ -72,7 +74,7 @@ export async function resolvePromptStartupMode(
   }
 
   throw new Error(
-    `Invalid startup mode selection after ${PROMPT_MAX_ATTEMPTS} attempts. Expected one of ssh-opencode|ssh-claude|ssh-codex|${WEB_PROMPT_LABEL}|ssh-shell.`,
+    `Invalid startup mode selection after ${PROMPT_MAX_ATTEMPTS} attempts. Expected one of ssh-opencode|ssh-claude|ssh-codex|${WEB_PROMPT_LABEL}|ssh-shell|ssh-custom.`,
   );
 }
 
@@ -82,7 +84,8 @@ function isConcreteStartupMode(value: string): value is Exclude<StartupMode, "pr
     value === "ssh-codex" ||
     value === "ssh-claude" ||
     value === "web" ||
-    value === "ssh-shell"
+    value === "ssh-shell" ||
+    value === "ssh-custom"
   );
 }
 

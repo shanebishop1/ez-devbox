@@ -56,9 +56,53 @@ The timeout is sent when the sandbox is created. A later `connect` does not refr
 
 ## `[startup]`
 
-- `mode` (enum): default startup mode. Allowed values: `prompt|ssh-opencode|ssh-codex|ssh-claude|web|ssh-shell`.
-- `prompt` behavior: prompts in interactive terminals (accepts `1-5` or mode name), reprompts invalid input up to 3 times, then fails with an actionable error.
+- `mode` (enum): default startup mode. Allowed values: `prompt|ssh-opencode|ssh-codex|ssh-claude|web|ssh-shell|ssh-custom`.
+- `prompt` behavior: prompts in interactive terminals (accepts `1-6` or mode name), reprompts invalid input up to 3 times, then fails with an actionable error.
 - Non-interactive fallback is `ssh-opencode`.
+
+## `[agent]` (custom terminal agent)
+
+`ssh-custom` is one project-defined terminal agent. It reuses the normal SSH/tmux lifecycle, but does not assume a particular provider, binary, or login flow. The launcher itself expects a POSIX sandbox with Bash, tmux, and `/home/user`; custom mode requires an explicit non-`base` `sandbox.template` that provides those dependencies plus the runtime packages your agent needs.
+
+```toml
+[sandbox]
+template = "your-compatible-template"
+
+[startup]
+mode = "ssh-custom"
+
+[agent]
+command = ["my-agent", "--interactive"]
+check_command = "command -v my-agent"
+install_command = "npm install -g my-agent@1.2.3"
+initial_prompt_command = ["my-agent", "--special-prompt-flag", "{prompt}"]
+follow_up = "tmux"
+
+[[agent.files]]
+source = "~/.config/my-agent/auth.json"
+destination = "/home/user/.config/my-agent/auth.json"
+```
+
+- `command` (string array): normal persistent-session argv. The array must be non-empty, its executable must be non-empty, and values cannot contain NUL bytes. It is not run on the host.
+- `check_command` (string, optional): trusted shell command run in the sandbox before launch. Exit code `0` means available; any other exit code means missing. Its output is not copied to CLI errors.
+- `install_command` (string, optional): trusted shell command run in the sandbox only after a configured check reports missing. Installation requires `check_command`; after installation the check runs again. A missing check or failed verification never reports the agent ready.
+- `initial_prompt_command` (string array, optional): argv used only for a new `create` session with a prompt. It must contain exactly one `{prompt}` element as a whole argument, not as the executable, and its effective executable must match `agent.command`. Direct argv and a constrained `bash -c` positional wrapper are supported. A shell program cannot be `{prompt}` or contain `{prompt}`; the wrapper must put a `$0` label before the whole-argument placeholder so the prompt becomes quoted `"$1"` data. Without this field, initial prompt options fail clearly while a prompt-less launch still works.
+- `follow_up` (currently only `"tmux"`, optional): explicitly enables `connect --prompt-file`/`--prompt-stdin` delivery through the existing tmux session. Without it, custom follow-ups fail rather than starting another process.
+- `[[agent.files]]` (optional): explicit regular host-file mappings copied during custom `create` only. `source` supports the same `~`, `$HOME`, and `${HOME}` expansion as built-in sync. Sources are required unless `optional = true`; missing required files fail. Symlink sources are rejected. Destinations must be absolute paths below `/home/user`, cannot contain traversal or control characters, and are permission-restricted before custom bytes are written. Unrelated sandbox files are never pruned.
+
+The placeholder is an argv contract, not shell interpolation. Use direct argv when possible:
+
+```toml
+initial_prompt_command = ["env", "AGENT_MODE=1", "my-agent", "--special-prompt-flag", "{prompt}"]
+```
+
+When a shell wrapper is required, the supported form is deliberately narrow: `bash -c`, one `exec` command made from plain shell-safe words, and one final quoted `"$1"`. Keep `{prompt}` out of the shell program and pass it after the `$0` label. Nested shells, operators, redirections, expansions, and unquoted `$1` are rejected:
+
+```toml
+initial_prompt_command = ["bash", "-c", "exec my-agent --flag \"$1\"", "wrapper", "{prompt}"]
+```
+
+Only the command/check/install strings are trusted configuration scripts. Prompt text remains data, including quotes, newlines, `$()`, backticks, semicolons, redirection characters, and leading dashes. Custom launch preflight measures UTF-8 bytes and rejects command argv over 16 KiB, prompts over 32 KiB, or startup environment over 32 KiB including a 4 KiB safety headroom; an initial prompt is also part of its substituted argv and therefore subject to the 16 KiB aggregate argv limit. Agent provider authentication is not universal: use `[env].pass_through` for selected environment variables, explicit file mappings for portable files, or log in inside the sandbox for keychains/browser/OAuth-bound credentials. Custom files are not refreshed on `connect`.
 
 ## `[project]`
 

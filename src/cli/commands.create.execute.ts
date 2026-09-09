@@ -63,6 +63,7 @@ export interface CreateCommandDeps {
       onBeforeInteractiveSession?: () => void;
       onLaunchStageUpdate?: (loadingMessage: string, completionMessage: string) => void;
       matchLocalOpenCodeVersion?: boolean;
+      customAgent?: Awaited<ReturnType<typeof loadConfig>>["agent"];
     },
   ) => Promise<ModeLaunchResult>;
   bootstrapProjectWorkspace?: (
@@ -170,6 +171,7 @@ export async function executeCreateWorkflow(options: CreateExecutionOptions): Pr
             matchLocalOpenCodeVersion: config.opencode.match_local_version ?? true,
           }
         : {}),
+      ...(resolvedMode === "ssh-custom" && config.agent ? { customAgent: config.agent } : {}),
       ...(isInteractiveTerminal() && resolvedMode === "ssh-opencode"
         ? {
             onLaunchStageUpdate: (loadingMessage: string, completionMessage: string) =>

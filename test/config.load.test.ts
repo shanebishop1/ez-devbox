@@ -2,6 +2,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { validateCustomAgentForMode, validateCustomAgentLaunch } from "../src/config/custom-agent.validation.js";
 import { defaultConfig } from "../src/config/defaults.js";
 import { loadConfig, loadConfigWithMetadata } from "../src/config/load.js";
 
@@ -143,6 +144,321 @@ describe("loadConfig", () => {
       enabled: true,
       config_dir: "/tmp/gh-config",
     });
+  });
+
+  it("loads a custom agent definition with argv prompt and file mappings", async () => {
+    const configPath = join(tempDir, "ez-devbox.config.toml");
+    const envPath = join(tempDir, ".env");
+
+    await writeFile(
+      configPath,
+      [
+        "[startup]",
+        'mode = "ssh-custom"',
+        "",
+        "[sandbox]",
+        'template = "custom-template"',
+        "",
+        "[agent]",
+        'command = ["my-agent", "--interactive"]',
+        'check_command = "command -v my-agent"',
+        'install_command = "npm install -g my-agent@1.2.3"',
+        'initial_prompt_command = ["my-agent", "--special-prompt-flag", "{prompt}"]',
+        'follow_up = "tmux"',
+        "",
+        "[[agent.files]]",
+        'source = "~/.config/my-agent/auth.json"',
+        'destination = "/home/user/.config/my-agent/auth.json"',
+      ].join("\n"),
+    );
+    await writeFile(envPath, "E2B_API_KEY=test-e2b-key\n");
+
+    const resolved = await loadConfig({ configPath, envPath });
+
+    expect(resolved.agent).toEqual({
+      command: ["my-agent", "--interactive"],
+      check_command: "command -v my-agent",
+      install_command: "npm install -g my-agent@1.2.3",
+      initial_prompt_command: ["my-agent", "--special-prompt-flag", "{prompt}"],
+      follow_up: "tmux",
+      files: [
+        {
+          source: "~/.config/my-agent/auth.json",
+          destination: "/home/user/.config/my-agent/auth.json",
+          optional: false,
+        },
+      ],
+    });
+  });
+
+  it("rejects ssh-custom without an agent definition", async () => {
+    const configPath = join(tempDir, "ez-devbox.config.toml");
+    const envPath = join(tempDir, ".env");
+    await writeFile(configPath, '[startup]\nmode = "ssh-custom"\n\n[sandbox]\ntemplate = "custom-template"\n');
+    await writeFile(envPath, "E2B_API_KEY=test-e2b-key\n");
+
+    await expect(loadConfig({ configPath, envPath })).rejects.toThrow("agent: required");
+  });
+
+  it.each([
+    ["empty command", '[startup]\nmode = "ssh-custom"\n\n[agent]\ncommand = []', "agent.command"],
+    [
+      "install without check",
+      '[startup]\nmode = "ssh-custom"\n\n[agent]\ncommand = ["agent"]\ninstall_command = "install agent"',
+      "check_command",
+    ],
+    [
+      "placeholder embedded in an argument",
+      '[startup]\nmode = "ssh-custom"\n\n[agent]\ncommand = ["agent"]\ninitial_prompt_command = ["agent", "--prompt={prompt}"]',
+      "whole argument",
+    ],
+    [
+      "shell program used for prompt delivery",
+      '[startup]\nmode = "ssh-custom"\n\n[agent]\ncommand = ["agent"]\ninitial_prompt_command = ["bash", "-c", "{prompt}"]',
+      "shell",
+    ],
+    [
+      "nested shell executes prompt as code",
+      '[startup]\nmode = "ssh-custom"\n\n[agent]\ncommand = ["agent"]\ninitial_prompt_command = ["bash", "-c", "exec bash -c \\"$1\\"", "wrapper", "{prompt}"]',
+      "shell",
+    ],
+    [
+      "unquoted positional prompt in shell wrapper",
+      '[startup]\nmode = "ssh-custom"\n\n[agent]\ncommand = ["agent"]\ninitial_prompt_command = ["bash", "-c", "exec agent --flag $1", "wrapper", "{prompt}"]',
+      "shell",
+    ],
+    [
+      "prompt used as shell wrapper executable",
+      '[startup]\nmode = "ssh-custom"\n\n[agent]\ncommand = ["agent"]\ninitial_prompt_command = ["bash", "-c", "exec \\"$1\\"", "wrapper", "{prompt}"]',
+      "shell",
+    ],
+    [
+      "prompt used after shell exec option",
+      '[startup]\nmode = "ssh-custom"\n\n[agent]\ncommand = ["agent"]\ninitial_prompt_command = ["bash", "-c", "exec -- \\"$1\\"", "wrapper", "{prompt}"]',
+      "shell",
+    ],
+    [
+      "split-string shell wrapper used for prompt delivery",
+      '[startup]\nmode = "ssh-custom"\n\n[agent]\ncommand = ["agent"]\ninitial_prompt_command = ["env", "-S", "bash", "-c", "{prompt}"]',
+      "shell",
+    ],
+    [
+      "noncanonical env assignment hides a shell",
+      '[startup]\nmode = "ssh-custom"\n\n[agent]\ncommand = ["agent"]\ninitial_prompt_command = ["env", "a-b=c", "bash", "-c", "{prompt}"]',
+      "shell",
+    ],
+    [
+      "prompt placeholder used as executable",
+      '[startup]\nmode = "ssh-custom"\n\n[agent]\ncommand = ["agent"]\ninitial_prompt_command = ["{prompt}", "--literal"]',
+      "executable",
+    ],
+    [
+      "prompt placeholder used as executable through env",
+      '[startup]\nmode = "ssh-custom"\n\n[agent]\ncommand = ["agent"]\ninitial_prompt_command = ["env", "AGENT_MODE=1", "{prompt}"]',
+      "executable",
+    ],
+    [
+      "prompt dispatched as a direct executable",
+      '[startup]\nmode = "ssh-custom"\n\n[agent]\ncommand = ["agent"]\ninitial_prompt_command = ["nice", "{prompt}"]',
+      "dispatch utilities",
+    ],
+    [
+      "prompt dispatched through a bash wrapper",
+      '[startup]\nmode = "ssh-custom"\n\n[agent]\ncommand = ["agent"]\ninitial_prompt_command = ["bash", "-c", "exec nice \\"$1\\"", "wrapper", "{prompt}"]',
+      "dispatch utilities",
+    ],
+    [
+      "multicall shell executes prompt as code",
+      '[startup]\nmode = "ssh-custom"\n\n[agent]\ncommand = ["busybox"]\ninitial_prompt_command = ["busybox", "sh", "-c", "{prompt}"]',
+      "dispatch utilities",
+    ],
+    [
+      "configured dispatcher executes prompt as a program",
+      '[startup]\nmode = "ssh-custom"\n\n[agent]\ncommand = ["nice", "agent"]\ninitial_prompt_command = ["nice", "{prompt}"]',
+      "dispatch utilities",
+    ],
+    [
+      "nested multicall shell executes prompt as code",
+      '[startup]\nmode = "ssh-custom"\n\n[agent]\ncommand = ["busybox"]\ninitial_prompt_command = ["busybox", "env", "sh", "-c", "{prompt}"]',
+      "dispatch utilities",
+    ],
+    [
+      "interpreter program option executes prompt as code",
+      '[startup]\nmode = "ssh-custom"\n\n[agent]\ncommand = ["python"]\ninitial_prompt_command = ["python", "-c", "{prompt}"]',
+      "program options",
+    ],
+    [
+      "versioned interpreter executes prompt as code",
+      '[startup]\nmode = "ssh-custom"\n\n[agent]\ncommand = ["python3.12"]\ninitial_prompt_command = ["python3.12", "-c", "{prompt}"]',
+      "program options",
+    ],
+    [
+      "combined interpreter options execute prompt as code",
+      '[startup]\nmode = "ssh-custom"\n\n[agent]\ncommand = ["node", "agent.js"]\ninitial_prompt_command = ["node", "-pe", "{prompt}"]',
+      "program options",
+    ],
+    [
+      "bash wrapper interpreter option executes prompt as code",
+      '[startup]\nmode = "ssh-custom"\n\n[agent]\ncommand = ["node", "agent.js"]\ninitial_prompt_command = ["bash", "-c", "exec node -e \\"$1\\"", "wrapper", "{prompt}"]',
+      "program options",
+    ],
+    [
+      "interpreter executes prompt as a script path",
+      '[startup]\nmode = "ssh-custom"\n\n[agent]\ncommand = ["python", "agent.py"]\ninitial_prompt_command = ["python", "{prompt}"]',
+      "program options",
+    ],
+    [
+      "additional shell executes prompt as code",
+      '[startup]\nmode = "ssh-custom"\n\n[agent]\ncommand = ["agent"]\ninitial_prompt_command = ["mksh", "-c", "{prompt}"]',
+      "shell",
+    ],
+    [
+      "unresolved configured env command disables target matching",
+      '[startup]\nmode = "ssh-custom"\n\n[agent]\ncommand = ["env", "-S", "agent --interactive"]\ninitial_prompt_command = ["agent", "{prompt}"]',
+      "effective executable",
+    ],
+    [
+      "unsupported follow-up strategy",
+      '[startup]\nmode = "ssh-custom"\n\n[agent]\ncommand = ["agent"]\nfollow_up = "new-process"',
+      "agent.follow_up",
+    ],
+    [
+      "unsafe custom destination",
+      '[startup]\nmode = "ssh-custom"\n\n[agent]\ncommand = ["agent"]\n\n[[agent.files]]\nsource = "auth.json"\ndestination = "/home/user/../root/auth.json"',
+      "agent.files[0].destination",
+    ],
+    [
+      "control character in custom destination",
+      '[startup]\nmode = "ssh-custom"\n\n[agent]\ncommand = ["agent"]\n\n[[agent.files]]\nsource = "auth.json"\ndestination = "/home/user/.config/agent/auth.json\\n.next"',
+      "control",
+    ],
+  ])("rejects malformed custom agent config: %s", async (_label, configText, message) => {
+    const configPath = join(tempDir, "ez-devbox.config.toml");
+    const envPath = join(tempDir, ".env");
+    await writeFile(configPath, configText);
+    await writeFile(envPath, "E2B_API_KEY=test-e2b-key\n");
+
+    await expect(loadConfig({ configPath, envPath })).rejects.toThrow(message);
+  });
+
+  it("validates an ssh-custom CLI override even when the configured mode is different", () => {
+    const config = {
+      ...defaultConfig,
+      startup: { ...defaultConfig.startup, mode: "web" as const },
+      agent: {
+        command: ["agent"],
+        initial_prompt_command: ["bash", "-c", "{prompt}"],
+        files: [],
+      },
+    };
+
+    expect(() => validateCustomAgentForMode(config, "ssh-custom", "initial")).toThrow("shell");
+  });
+
+  it("accepts a safe positional environment wrapper for prompt delivery", () => {
+    expect(() =>
+      validateCustomAgentForMode(
+        {
+          ...defaultConfig,
+          agent: {
+            command: ["agent"],
+            initial_prompt_command: ["env", "AGENT_MODE=1", "agent", "--prompt", "{prompt}"],
+            files: [],
+          },
+        },
+        "ssh-custom",
+        "initial",
+      ),
+    ).not.toThrow();
+  });
+
+  it("accepts a safe bash -c wrapper with the prompt as positional data", () => {
+    expect(() =>
+      validateCustomAgentForMode(
+        {
+          ...defaultConfig,
+          agent: {
+            command: ["agent"],
+            initial_prompt_command: ["bash", "-c", 'exec agent --flag "$1"', "wrapper", "{prompt}"],
+            files: [],
+          },
+        },
+        "ssh-custom",
+        "initial",
+      ),
+    ).not.toThrow();
+  });
+
+  it("does not treat a normal agent -c option as a shell program", () => {
+    expect(() =>
+      validateCustomAgentForMode(
+        {
+          ...defaultConfig,
+          agent: {
+            command: ["agent"],
+            initial_prompt_command: ["agent", "-c", "config.json", "--prompt", "{prompt}"],
+            files: [],
+          },
+        },
+        "ssh-custom",
+        "initial",
+      ),
+    ).not.toThrow();
+  });
+
+  it.each([
+    ["direct", ["node", "agent.js", "--prompt", "{prompt}"]],
+    ["bash wrapper", ["bash", "-c", 'exec node agent.js --prompt "$1"', "wrapper", "{prompt}"]],
+  ])("accepts a recognized interpreter script-file form through %s", (_label, initialPromptCommand) => {
+    expect(() =>
+      validateCustomAgentForMode(
+        {
+          ...defaultConfig,
+          agent: {
+            command: ["node", "agent.js"],
+            initial_prompt_command: initialPromptCommand,
+            files: [],
+          },
+        },
+        "ssh-custom",
+        "initial",
+      ),
+    ).not.toThrow();
+  });
+
+  it("rejects an unsupported custom follow-up strategy during launch preflight", () => {
+    const config = {
+      ...defaultConfig,
+      agent: {
+        command: ["agent"],
+        follow_up: "new-process",
+        files: [],
+      },
+    } as unknown as typeof defaultConfig;
+
+    expect(() =>
+      validateCustomAgentLaunch(config, "ssh-custom", {
+        prompt: { kind: "follow-up", text: "hello" },
+      }),
+    ).toThrow("agent.follow_up");
+  });
+
+  it("rejects oversized UTF-8 prompt argv and environment payloads before launch", () => {
+    const oversizedArgConfig = {
+      ...defaultConfig,
+      agent: { command: ["agent", "é".repeat(10_000)], files: [] },
+    };
+    expect(() => validateCustomAgentLaunch(oversizedArgConfig, "ssh-custom")).toThrow(/argv.*bytes/i);
+
+    const oversizedEnvConfig = {
+      ...defaultConfig,
+      agent: { command: ["agent"], files: [] },
+    };
+    expect(() =>
+      validateCustomAgentLaunch(oversizedEnvConfig, "ssh-custom", {
+        startupEnv: { CUSTOM_VALUE: "é".repeat(20_000) },
+      }),
+    ).toThrow(/environment.*bytes/i);
   });
 
   it("rejects empty gh.config_dir", async () => {

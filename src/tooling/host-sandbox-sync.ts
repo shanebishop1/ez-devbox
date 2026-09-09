@@ -1,4 +1,5 @@
-import type { ResolvedLauncherConfig } from "../config/schema.js";
+import { isSafeSandboxFilePath } from "../config/custom-agent.validation.js";
+import type { ResolvedCustomAgentFileConfig, ResolvedLauncherConfig } from "../config/schema.js";
 import type { SandboxHandle } from "../e2b/lifecycle.js";
 import {
   CLAUDE_CONFIG_DEST,
@@ -13,6 +14,7 @@ import {
 import { discoverDirectoryFiles } from "./host-sandbox-sync.fs.js";
 import type { HostToSandboxSyncOptions, PathSyncSummary } from "./host-sandbox-sync.operations.js";
 import { syncDirectory, syncFile } from "./host-sandbox-sync.operations.js";
+import { assertSandboxPathHasNoSymlinks } from "./host-sandbox-sync.permissions.js";
 
 export type {
   DirectorySyncProgress,
@@ -51,7 +53,7 @@ export async function syncOpenCodeConfigDir(
 
 export async function syncOpenCodeAuthFile(
   config: ToolingSyncConfig,
-  sandbox: Pick<SandboxHandle, "writeFile">,
+  sandbox: SandboxWritableHandle,
   options?: HostToSandboxSyncOptions,
 ): Promise<PathSyncSummary> {
   return syncFile(config.opencode.auth_path, OPEN_CODE_AUTH_DEST, sandbox, options);
@@ -87,6 +89,31 @@ export async function syncClaudeStateFile(
   options?: HostToSandboxSyncOptions,
 ): Promise<PathSyncSummary> {
   return syncFile(config.claude.state_path, CLAUDE_STATE_DEST, sandbox, options);
+}
+
+export async function syncCustomAgentFiles(
+  files: ResolvedCustomAgentFileConfig[],
+  sandbox: SandboxWritableHandle,
+  options?: HostToSandboxSyncOptions,
+): Promise<PathSyncSummary> {
+  const summaries: PathSyncSummary[] = [];
+  for (const [index, file] of files.entries()) {
+    if (!isSafeSandboxFilePath(file.destination)) {
+      throw new Error(`Invalid agent.files[${index}].destination: unsafe sandbox destination.`);
+    }
+    await assertSandboxPathHasNoSymlinks(sandbox, file.destination);
+    const summary = await syncFile(file.source, file.destination, sandbox, {
+      ...options,
+      preparePrivateFile: true,
+      rejectSymlink: true,
+    });
+    if (summary.skippedMissing && !file.optional) {
+      throw new Error(`Custom agent file source is missing: '${file.source}'.`);
+    }
+    summaries.push(summary);
+  }
+
+  return summarizePathSync(summaries);
 }
 
 export async function syncGhConfigDir(
@@ -134,3 +161,12 @@ export async function syncToolingToSandbox(
 }
 
 export { discoverDirectoryFiles };
+
+function summarizePathSync(summaries: PathSyncSummary[]): PathSyncSummary {
+  return {
+    skippedMissing: summaries.some((summary) => summary.skippedMissing),
+    filesDiscovered: summaries.reduce((total, summary) => total + summary.filesDiscovered, 0),
+    filesWritten: summaries.reduce((total, summary) => total + summary.filesWritten, 0),
+    filesUnchanged: summaries.reduce((total, summary) => total + summary.filesUnchanged, 0),
+  };
+}

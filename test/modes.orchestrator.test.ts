@@ -46,7 +46,12 @@ describe("persistent startup modes", () => {
   it("passes an initial Codex prompt through a staged file without embedding it in commands", async () => {
     const prompt = "first line\n$HOME `do-not-run` 'quoted'";
     const writeFile = vi.fn().mockResolvedValue(undefined);
-    const run = vi.fn().mockResolvedValueOnce(ok("PRESENT")).mockResolvedValueOnce(ok("CREATED"));
+    const run = vi
+      .fn()
+      .mockResolvedValueOnce(ok("PRESENT"))
+      .mockResolvedValueOnce(ok())
+      .mockResolvedValueOnce(ok())
+      .mockResolvedValueOnce(ok("CREATED"));
 
     await startCodexMode(createHandle({ run, writeFile }), {
       detach: true,
@@ -55,7 +60,7 @@ describe("persistent startup modes", () => {
 
     expect(writeFile).toHaveBeenCalledWith(expect.stringContaining("ez-devbox-initial-prompt-"), prompt);
     expect(run.mock.calls.map(([command]) => String(command)).join("\n")).not.toContain(prompt);
-    expect(String(run.mock.calls[1]?.[0])).toContain("exec codex");
+    expect(run.mock.calls.some(([command]) => String(command).includes("exec codex"))).toBe(true);
   });
 
   it("sends follow-ups with tmux load-buffer/paste-buffer", async () => {
@@ -66,7 +71,8 @@ describe("persistent startup modes", () => {
       .mockResolvedValueOnce(ok("PRESENT"))
       .mockResolvedValueOnce(ok("EXISTING"))
       .mockResolvedValueOnce(ok())
-      .mockResolvedValueOnce(ok());
+      .mockResolvedValueOnce(ok())
+      .mockResolvedValue(ok());
 
     await startCodexMode(createHandle({ run, writeFile }), {
       detach: true,
@@ -74,9 +80,13 @@ describe("persistent startup modes", () => {
     });
 
     expect(writeFile).toHaveBeenCalledWith(expect.stringContaining("ez-devbox-prompt-"), prompt);
-    expect(String(run.mock.calls[2]?.[0])).toContain("load-buffer");
-    expect(String(run.mock.calls[2]?.[0])).toContain("paste-buffer");
-    expect(String(run.mock.calls[2]?.[0])).not.toContain(prompt);
+    const promptCommands = run.mock.calls
+      .map(([command]) => String(command))
+      .filter((command) => command.includes("buffer"));
+    expect(promptCommands.some((command) => command.includes("load-buffer"))).toBe(true);
+    expect(promptCommands.some((command) => command.includes("paste-buffer"))).toBe(true);
+    expect(promptCommands.every((command) => command.includes("-b"))).toBe(true);
+    expect(promptCommands.join("\n")).not.toContain(prompt);
   });
 
   it("explicitly rejects prompt input for shell mode", async () => {
@@ -303,6 +313,9 @@ describe("persistent startup modes", () => {
 });
 
 function ok(stdout = ""): { stdout: string; stderr: string; exitCode: number } {
+  if (stdout === "CREATED" || stdout === "EXISTING") {
+    stdout = `${stdout}\nEZ_DEVBOX_TMUX_SESSION\t${stdout}\t$1:1\t\t`;
+  }
   return { stdout, stderr: "", exitCode: 0 };
 }
 

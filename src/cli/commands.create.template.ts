@@ -5,6 +5,9 @@ export function resolveTemplateForMode(
   mode: ConcreteStartupMode,
 ): { template: string; autoSelected: boolean } {
   const normalized = configuredTemplate.trim();
+  if (mode === "ssh-custom" && (normalized === "" || normalized === "base")) {
+    throw new Error("ssh-custom requires an explicit template compatible with the configured agent.");
+  }
   if (normalized !== "" && normalized !== "base") {
     return {
       template: configuredTemplate,

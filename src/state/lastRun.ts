@@ -24,6 +24,7 @@ const STARTUP_MODES: ReadonlySet<StartupMode> = new Set([
   "ssh-claude",
   "web",
   "ssh-shell",
+  "ssh-custom",
 ]);
 
 export async function loadLastRunState(path?: string): Promise<LastRunState | null> {

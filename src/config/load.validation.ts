@@ -1,3 +1,4 @@
+import { validateCustomAgent } from "./custom-agent.validation.js";
 import type { ResolvedLauncherConfig } from "./schema.js";
 
 export function assertRequiredE2BApiKey(mergedEnv: Record<string, string | undefined>): void {
@@ -11,6 +12,8 @@ export function validateResolvedLauncherConfig(resolved: ResolvedLauncherConfig)
   if (resolved.sandbox.timeout_ms <= 0 || !Number.isInteger(resolved.sandbox.timeout_ms)) {
     throw new Error("Invalid sandbox.timeout_ms: expected a positive integer in milliseconds.");
   }
+
+  validateCustomAgent(resolved);
 
   if (resolved.project.setup_retries < 0 || !Number.isInteger(resolved.project.setup_retries)) {
     throw new Error("Invalid project.setup_retries: expected an integer greater than or equal to 0.");

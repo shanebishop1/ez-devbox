@@ -9,6 +9,7 @@ import {
   syncClaudeStateFile,
   syncCodexAuthFile,
   syncCodexConfigDir,
+  syncCustomAgentFiles,
   syncGhConfigDir,
   syncOpenCodeAuthFile,
   syncOpenCodeConfigDir,
@@ -29,6 +30,7 @@ export async function syncToolingForMode(
   let codexAuth: PathSyncSummary | null = null;
   let claudeConfig: PathSyncSummary | null = null;
   let claudeState: PathSyncSummary | null = null;
+  let customAgentFiles: PathSyncSummary | null = null;
 
   if (mode === "ssh-opencode" || mode === "web") {
     opencodeConfig = await runSyncUnit("OpenCode config", (onProgress) =>
@@ -45,6 +47,10 @@ export async function syncToolingForMode(
       syncClaudeConfigDir(config, sandbox, { onProgress }),
     );
     claudeState = await runSyncUnit("Claude state", () => syncClaudeStateFile(config, sandbox));
+  } else if (mode === "ssh-custom") {
+    customAgentFiles = await runSyncUnit("Custom agent files", () =>
+      syncCustomAgentFiles(config.agent?.files ?? [], sandbox),
+    );
   } else {
     logger.verbose(`Tooling sync: no agent config/auth applies to mode '${mode}'.`);
   }
@@ -56,6 +62,7 @@ export async function syncToolingForMode(
     claudeConfig,
     claudeState,
     ghConfig,
+    customAgentFiles,
     config.gh.enabled,
   );
 }
@@ -110,11 +117,19 @@ function summarizeToolingSync(
   claudeConfig: PathSyncSummary | null,
   claudeState: PathSyncSummary | null,
   ghConfig: PathSyncSummary | null,
+  customAgentFiles: PathSyncSummary | null,
   ghEnabled: boolean,
 ): ToolingSyncSummary {
-  const summaries = [opencodeConfig, opencodeAuth, codexConfig, codexAuth, claudeConfig, claudeState, ghConfig].filter(
-    (item): item is PathSyncSummary => item !== null,
-  );
+  const summaries = [
+    opencodeConfig,
+    opencodeAuth,
+    codexConfig,
+    codexAuth,
+    claudeConfig,
+    claudeState,
+    ghConfig,
+    customAgentFiles,
+  ].filter((item): item is PathSyncSummary => item !== null);
 
   return {
     totalDiscovered: summaries.reduce((total, item) => total + item.filesDiscovered, 0),

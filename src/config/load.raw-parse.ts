@@ -1,8 +1,9 @@
 import { defaultConfig } from "./defaults.js";
+import { resolveCustomAgent } from "./load.agent.js";
 import type { JsonRecord } from "./load.types.js";
 import type { ResolvedLauncherConfig } from "./schema.js";
 
-const STARTUP_MODES = ["prompt", "ssh-opencode", "ssh-codex", "ssh-claude", "web", "ssh-shell"] as const;
+const STARTUP_MODES = ["prompt", "ssh-opencode", "ssh-codex", "ssh-claude", "web", "ssh-shell", "ssh-custom"] as const;
 const PROJECT_MODES = ["single", "all"] as const;
 const PROJECT_ACTIVE_MODES = ["prompt", "name", "index"] as const;
 
@@ -11,6 +12,7 @@ export function parseRawLauncherConfig(rawConfig: JsonRecord): ResolvedLauncherC
   const startupRaw = getOptionalTable(rawConfig, "startup", "startup");
   const projectRaw = getOptionalTable(rawConfig, "project", "project");
   const envRaw = getOptionalTable(rawConfig, "env", "env");
+  const agentRaw = getOptionalTable(rawConfig, "agent", "agent");
   const opencodeRaw = getOptionalTable(rawConfig, "opencode", "opencode");
   const codexRaw = getOptionalTable(rawConfig, "codex", "codex");
   const claudeRaw = getOptionalTable(rawConfig, "claude", "claude");
@@ -60,6 +62,7 @@ export function parseRawLauncherConfig(rawConfig: JsonRecord): ResolvedLauncherC
       pass_through:
         getOptionalStringArray(envRaw, "pass_through", "env.pass_through") ?? defaultConfig.env.pass_through,
     },
+    agent: agentRaw === undefined ? undefined : resolveCustomAgent(agentRaw),
     opencode: {
       config_dir:
         getOptionalString(opencodeRaw, "config_dir", "opencode.config_dir") ?? defaultConfig.opencode.config_dir,

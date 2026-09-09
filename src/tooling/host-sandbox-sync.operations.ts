@@ -1,4 +1,4 @@
-import { readFile } from "node:fs/promises";
+import { lstat, readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { extname, isAbsolute, join, posix, relative, resolve, sep } from "node:path";
 import type { SandboxHandle } from "../e2b/lifecycle.js";
@@ -13,6 +13,7 @@ import {
 import { UNSUPPORTED_SYNC_FILE_EXTENSIONS } from "./host-sandbox-sync.constants.js";
 import { discoverDirectoryFiles, pathExists, shouldSkipSyncFile } from "./host-sandbox-sync.fs.js";
 import {
+  prepareSandboxPrivateFile,
   restrictSandboxDirectoryPermissions,
   restrictSandboxFilePermissions,
 } from "./host-sandbox-sync.permissions.js";
@@ -37,6 +38,8 @@ export interface DirectorySyncProgress {
 
 export interface HostToSandboxSyncOptions extends HostPathResolveOptions {
   onProgress?: (progress: DirectorySyncProgress) => void | Promise<void>;
+  preparePrivateFile?: boolean;
+  rejectSymlink?: boolean;
 }
 
 interface DirectorySyncOptions extends HostToSandboxSyncOptions {
@@ -148,6 +151,29 @@ export async function syncFile(
 ): Promise<PathSyncSummary> {
   const resolvedLocalFilePath = resolveHostPath(localFilePath, options);
   const syncState = getSandboxSyncState(sandbox);
+  let localStat: Awaited<ReturnType<typeof lstat>>;
+  try {
+    localStat = await lstat(resolvedLocalFilePath);
+  } catch (error) {
+    if (isNodeError(error) && error.code === "ENOENT") {
+      syncState.delete(sandboxFilePath);
+      return {
+        skippedMissing: true,
+        filesDiscovered: 0,
+        filesWritten: 0,
+        filesUnchanged: 0,
+      };
+    }
+    throw error;
+  }
+
+  if (localStat.isSymbolicLink() && options?.rejectSymlink) {
+    throw new Error(`Cannot sync '${resolvedLocalFilePath}': symbolic links are not supported.`);
+  }
+  if (!localStat.isFile() && !(localStat.isSymbolicLink() && !options?.rejectSymlink)) {
+    throw new Error(`Cannot sync '${resolvedLocalFilePath}': expected a regular file.`);
+  }
+
   if (!(await pathExists(resolvedLocalFilePath))) {
     syncState.delete(sandboxFilePath);
     return {
@@ -161,6 +187,9 @@ export async function syncFile(
   const content = await readFile(resolvedLocalFilePath);
   const fileDigest = digestBuffer(content);
   const previousDigest = syncState.get(sandboxFilePath);
+  if (options?.preparePrivateFile) {
+    await prepareSandboxPrivateFile(sandbox, sandboxFilePath);
+  }
   let filesWritten = 0;
   let filesUnchanged = 0;
   if (previousDigest === fileDigest) {
@@ -178,6 +207,10 @@ export async function syncFile(
     filesWritten,
     filesUnchanged,
   };
+}
+
+function isNodeError(error: unknown): error is NodeJS.ErrnoException {
+  return error instanceof Error && "code" in error;
 }
 
 function formatSkippedExtensionsSummary(counts: Map<string, number>): string {

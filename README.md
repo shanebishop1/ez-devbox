@@ -10,7 +10,7 @@
 
 ## Features
 
-- Launch and reconnect to OpenCode, Codex, Claude Code, or a shell in the same sandbox.
+- Launch and reconnect to OpenCode, Codex, Claude Code, a configured custom terminal agent, or a shell in the same sandbox.
 - Clone repos, check out branches, and run setup commands from a TOML config.
 - Forward selected environment variables and sync local tool auth/config.
 - Reach local MCP servers, Docker containers, or other services through optional tunnels.
@@ -34,6 +34,7 @@ npx ez-devbox@latest wipe --sandbox-id "$SANDBOX_ID"
 - `ssh-claude`: SSH into the sandbox and attach Claude Code inside a persistent `tmux` session.
 - `web`: start `opencode serve` and print the URL.
 - `ssh-shell`: SSH into an interactive shell inside a persistent `tmux` session.
+- `ssh-custom`: launch the configured `[agent].command` in a compatible explicit template inside a persistent `tmux` session.
 
 Web mode requires a nonempty `OPENCODE_SERVER_PASSWORD` when it starts a new public listener. See [the web mode guide](docs/modes-web.md) for reuse and recovery behavior.
 
@@ -149,6 +150,7 @@ npx ez-devbox connect
 
 - [Web mode (OpenCode in browser)](https://github.com/shanebishop1/ez-devbox/blob/main/docs/modes-web.md)
 - [SSH agent modes (OpenCode, Codex, and Claude Code)](https://github.com/shanebishop1/ez-devbox/blob/main/docs/modes-ssh-agents.md)
+- [Custom terminal agent configuration](https://github.com/shanebishop1/ez-devbox/blob/main/docs/launcher-config-reference.md#agent-custom-terminal-agent)
 
 ## Common commands
 

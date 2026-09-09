@@ -30,6 +30,8 @@ ez-devbox command --sandbox-id "$SANDBOX_ID" -- \
 
 Alternatively, run the returned `connection.captureCommand` using `command --shell`. This reads recent terminal output, not a structured agent result. Send conversation text with `connect --detach --prompt-file ...`; use targeted `tmux send-keys` only when an inspected interactive menu requires a key, not to interpolate arbitrary prompt text.
 
+For `ssh-custom`, follow-ups require `agent.follow_up = "tmux"`. Keep the same agent configuration when reconnecting: a different configuration fingerprint is rejected rather than replacing the running process. Capture output before deciding whether to stop a session, and preserve useful work before wiping its sandbox.
+
 ## Diagnose
 
 Transport/startup failures return `{ "error": { "code", "stage", "message", "sandboxId"? } }` with `--json`. Preserve the ID for recovery; do not blindly retry `create` and accumulate sandboxes. Add `--verbose` for startup details.

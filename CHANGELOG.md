@@ -4,6 +4,20 @@ Notable changes are recorded here. This project follows semantic versioning when
 
 ## Unreleased
 
+## 0.7.0 - 2026-09-09
+
+### Added
+
+- Added config-driven `ssh-custom` terminal-agent mode with sandbox-local check/install commands, safe whole-argument initial prompt templating, opt-in tmux follow-ups, selected environment forwarding, and explicit regular-file auth/config mappings.
+
+### Fixed
+
+- Hardened custom-agent preflight and reconnect identity checks, rejected shell-program prompt delivery and unsafe destinations, preserved built-in symlink auth compatibility, and protected credential/prompt staging files before transfer.
+
+### Documentation
+
+- Documented compatible template requirements, trusted sandbox commands, prompt and shell-wrapper semantics, create-only file sync, reconnect behavior, and authentication limitations for custom agents.
+
 ## 0.6.6 - 2026-09-08
 
 ### Changed

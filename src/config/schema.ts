@@ -3,6 +3,21 @@ import type { StartupMode } from "../types/index.js";
 export type ProjectMode = "single" | "all";
 export type ProjectActiveMode = "prompt" | "name" | "index";
 
+export interface ResolvedCustomAgentFileConfig {
+  source: string;
+  destination: string;
+  optional: boolean;
+}
+
+export interface ResolvedCustomAgentConfig {
+  command: string[];
+  check_command?: string;
+  install_command?: string;
+  initial_prompt_command?: string[];
+  follow_up?: "tmux";
+  files: ResolvedCustomAgentFileConfig[];
+}
+
 export interface ResolvedProjectRepoConfig {
   name: string;
   url: string;
@@ -39,6 +54,7 @@ export interface ResolvedLauncherConfig {
   env: {
     pass_through: string[];
   };
+  agent?: ResolvedCustomAgentConfig;
   opencode: {
     config_dir: string;
     auth_path: string;

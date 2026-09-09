@@ -99,7 +99,7 @@ export async function bootstrapProjectWorkspace(
   return {
     selectedRepoNames,
     workingDirectory: resolveWorkingDirectory(config.project.dir, config.project.working_dir, provisionedRepos),
-    startupEnv: resolveStartupEnv(selectedRepos),
+    startupEnv: resolveSelectedReposStartupEnv(selectedRepos),
     provisionedRepos,
     setup,
   };
@@ -125,7 +125,7 @@ function resolveWorkingDirectory(
   return posix.isAbsolute(workingDirConfig) ? workingDirConfig : posix.resolve(projectDir, workingDirConfig);
 }
 
-function resolveStartupEnv(selectedRepos: ResolvedProjectRepoConfig[]): Record<string, string> {
+export function resolveSelectedReposStartupEnv(selectedRepos: ResolvedProjectRepoConfig[]): Record<string, string> {
   if (selectedRepos.length !== 1) {
     return {};
   }

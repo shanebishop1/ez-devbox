@@ -1,8 +1,10 @@
+import { validateCustomAgentLaunch } from "../config/custom-agent.validation.js";
 import { loadConfig, loadConfigWithMetadata } from "../config/load.js";
 import { resolveSandboxCreateEnv } from "../e2b/env.js";
 import { createSandbox, type SandboxHandle } from "../e2b/lifecycle.js";
 import { isVerboseLoggingEnabled, logger } from "../logging/logger.js";
 import { launchMode, resolveStartupMode } from "../modes/index.js";
+import { resolveSelectedReposStartupEnv } from "../project/bootstrap.js";
 import { selectRepos } from "../project/bootstrap.repo-selection.js";
 import { saveLastRunState } from "../state/lastRun.js";
 import { withConfiguredTunnel } from "../tunnel/cloudflared.js";
@@ -138,6 +140,9 @@ export async function runCreateCommand(args: string[], deps: CreateCommandDeps =
   loading.setStage("Preparing tunnel...", "Prepared tunnel");
 
   const resolvedMode = resolveStartupMode(mode);
+  validateCustomAgentLaunch(config, resolvedMode, {
+    ...(promptText ? { prompt: { kind: "initial" as const, text: promptText } } : {}),
+  });
   const displayName = buildSandboxDisplayName(config.project.repos, deps.now());
   const templateResolution = resolveTemplateForMode(config.sandbox.template, resolvedMode);
   const createConfig =
@@ -163,6 +168,13 @@ export async function runCreateCommand(args: string[], deps: CreateCommandDeps =
     });
     const webServerPassword = resolveWebServerPassword(envSource);
     const createEnvs = { ...runtimeEnv };
+    validateCustomAgentLaunch(config, resolvedMode, {
+      ...(promptText ? { prompt: { kind: "initial" as const, text: promptText } } : {}),
+      startupEnv: {
+        ...resolveSelectedReposStartupEnv(selectedRepos),
+        ...createEnvs,
+      },
+    });
     logger.verbose(`Creating sandbox with envs: ${formatEnvVarNames(createEnvs)}`);
 
     logger.verbose(`Creating sandbox '${displayName}' with template '${createConfig.sandbox.template}'.`);

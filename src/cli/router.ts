@@ -106,7 +106,7 @@ export function renderHelp(): string {
     "  wipe-all Delete all sandboxes (use --yes to skip prompt)",
     "",
     "Options:",
-    "  --mode <mode>         Startup mode (prompt|ssh-opencode|ssh-codex|ssh-claude|web|ssh-shell)",
+    "  --mode <mode>         Startup mode (prompt|ssh-opencode|ssh-codex|ssh-claude|web|ssh-shell|ssh-custom)",
     "  --sandbox-id <id>     Sandbox id to connect/command",
     "  --detach              Start/reuse the session without attaching",
     "  --prompt-file <path>  Initial prompt (create) or follow-up (connect)",

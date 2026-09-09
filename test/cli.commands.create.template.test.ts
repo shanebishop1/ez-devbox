@@ -26,4 +26,12 @@ describe("resolveTemplateForMode", () => {
       autoSelected: true,
     });
   });
+
+  it("requires an explicit compatible template for custom mode", () => {
+    expect(() => resolveTemplateForMode("base", "ssh-custom")).toThrow("explicit template");
+    expect(resolveTemplateForMode("custom-template", "ssh-custom")).toEqual({
+      template: "custom-template",
+      autoSelected: false,
+    });
+  });
 });

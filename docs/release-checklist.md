@@ -7,6 +7,7 @@ Run this checklist before publishing a new `ez-devbox` version.
    - `npm run validate:offline`
 2. Run the credentialed live check from a trusted maintainer environment, then verify E2B resource cleanup:
    - `npm run e2e:live`
+   - `npm run e2e:custom:live` (custom detached/reconnect smoke; interactive SSH attach remains a separate manual check)
    - (or run offline and live checks together) `npm run validate`
 3. Verify package contents and runtime entrypoints (already included in `validate:offline`):
    - `npm run pack:check`

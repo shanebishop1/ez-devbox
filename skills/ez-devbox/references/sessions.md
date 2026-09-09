@@ -11,7 +11,7 @@ ez-devbox list --json
 
 Save the returned `sandboxId` as `SANDBOX_ID` in your shell; retain `mode`, `workingDirectory`, and `connection` too. `list --json` returns `{ "sandboxes": [...] }`. Use it to discover existing IDs instead of creating duplicate devboxes.
 
-Modes: `ssh-opencode`, `ssh-codex`, `ssh-claude`, `ssh-shell`, or `web`. `create` provisions a new sandbox; `connect` launches/reuses a session in an existing one. Prefer the same agent mode on reconnect: changing modes does not transfer conversations or resync the new agent's host credentials.
+Modes: `ssh-opencode`, `ssh-codex`, `ssh-claude`, `ssh-custom`, `ssh-shell`, or `web`. `create` provisions a new sandbox; `connect` launches/reuses a session in an existing one. Prefer the same agent mode on reconnect: changing modes does not transfer conversations or resync the new agent's host credentials.
 
 ## Prompt and inspect
 
@@ -23,6 +23,8 @@ ez-devbox connect --sandbox-id "$SANDBOX_ID" --mode ssh-codex --detach --prompt-
 ```
 
 `prompt.delivered` confirms input delivery, not task completion. Inspect progress with the tmux commands in [commands](commands.md); poll at sensible intervals and respond through detached `connect`. Prompt input is unsupported for `web` and `ssh-shell`.
+
+For `ssh-custom`, initial prompts require `agent.initial_prompt_command` with `{prompt}` as one complete argv element. Follow-ups require the explicit `agent.follow_up = "tmux"` setting; otherwise `connect --prompt-file` fails clearly. Use the `connection` values returned by JSON, including the custom tmux identity.
 
 ## Attach or open a shell
 

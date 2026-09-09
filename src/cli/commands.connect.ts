@@ -1,3 +1,4 @@
+import { validateCustomAgentLaunch } from "../config/custom-agent.validation.js";
 import { loadConfig, loadConfigWithMetadata } from "../config/load.js";
 import { resolveSandboxCreateEnv } from "../e2b/env.js";
 import { connectSandbox, listSandboxes, type SandboxHandle } from "../e2b/lifecycle.js";
@@ -78,6 +79,24 @@ export async function runConnectCommand(
 
   const showLoading = Boolean(process.stdout.isTTY && !parsed.json);
   const loading = createLoadingStageController({ enabled: showLoading, showCompletion: showLoading });
+  logger.verbose(`Resolving startup mode from '${requestedMode}'.`);
+  const mode = parsed.json
+    ? await deps.resolvePromptStartupMode(requestedMode, {
+        isInteractiveTerminal: () => false,
+        promptInput: async () => "",
+      })
+    : await deps.resolvePromptStartupMode(requestedMode);
+  const resolvedMode = resolveStartupMode(mode);
+  validateCustomAgentLaunch(config, resolvedMode, {
+    ...(promptText ? { prompt: { kind: "follow-up" as const, text: promptText } } : {}),
+  });
+  if (requestedMode === "prompt") {
+    logger.verbose(`Startup mode selected via prompt: ${mode}.`);
+    if (!parsed.json && isInteractive && !options.skipDetachHint) {
+      logger.info(SSH_SUSPEND_RESUME_HINT);
+      process.stdout.write("\n");
+    }
+  }
   const target = await resolveSandboxTarget(
     parsed.sandboxId,
     {
@@ -87,21 +106,6 @@ export async function runConnectCommand(
     options,
   );
   const targetLabel = target.label ?? target.sandboxId;
-  logger.verbose(`Resolving startup mode from '${requestedMode}'.`);
-  const mode = parsed.json
-    ? await deps.resolvePromptStartupMode(requestedMode, {
-        isInteractiveTerminal: () => false,
-        promptInput: async () => "",
-      })
-    : await deps.resolvePromptStartupMode(requestedMode);
-  const resolvedMode = resolveStartupMode(mode);
-  if (requestedMode === "prompt") {
-    logger.verbose(`Startup mode selected via prompt: ${mode}.`);
-    if (!parsed.json && isInteractive && !options.skipDetachHint) {
-      logger.info(SSH_SUSPEND_RESUME_HINT);
-      process.stdout.write("\n");
-    }
-  }
   const preferredActiveRepo = await resolvePreferredActiveRepo(config, target.sandboxId, deps, options);
 
   loading.setStage("Preparing tunnel...", "Prepared tunnel");
@@ -139,6 +143,10 @@ export async function runConnectCommand(
       ...tunnelRuntimeEnv,
       ...ghRuntimeEnv,
     });
+    validateCustomAgentLaunch(config, resolvedMode, {
+      ...(promptText ? { prompt: { kind: "follow-up" as const, text: promptText } } : {}),
+      startupEnv: runtimeEnv,
+    });
     const webServerPassword = resolveWebServerPassword(envSource);
 
     loading.setStage("Bootstrapping workspace...", "Bootstrapped workspace");
@@ -160,6 +168,14 @@ export async function runConnectCommand(
     }
     logger.verbose(`Selected repos summary: ${formatSelectedReposSummary(bootstrapResult.selectedRepoNames)}.`);
     logger.verbose(`Setup outcome summary: ${formatSetupOutcomeSummary(bootstrapResult.setup)}.`);
+
+    validateCustomAgentLaunch(config, resolvedMode, {
+      ...(promptText ? { prompt: { kind: "follow-up" as const, text: promptText } } : {}),
+      startupEnv: {
+        ...bootstrapResult.startupEnv,
+        ...runtimeEnv,
+      },
+    });
 
     if (!parsed.json && showLoading && resolvedMode !== "web") {
       logger.info(`Connected to sandbox ${targetLabel}.`);
@@ -187,6 +203,7 @@ export async function runConnectCommand(
               matchLocalOpenCodeVersion: config.opencode.match_local_version ?? true,
             }
           : {}),
+        ...(resolvedMode === "ssh-custom" && config.agent ? { customAgent: config.agent } : {}),
         ...(resolvedMode !== "web" && showLoading
           ? {
               onBeforeInteractiveSession: () => {

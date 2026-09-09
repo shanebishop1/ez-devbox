@@ -1,13 +1,23 @@
+import type { ResolvedCustomAgentConfig } from "../config/schema.js";
 import type { SandboxHandle } from "../e2b/lifecycle.js";
 import type { StartupMode } from "../types/index.js";
 import { startClaudeMode } from "./claude.js";
 import { startCodexMode } from "./codex.js";
+import { startCustomMode } from "./custom.js";
 import { startOpenCodeMode } from "./opencode.js";
 import { startShellMode } from "./shell.js";
 import type { TmuxConnectionInfo } from "./tmux.js";
 import { startWebMode } from "./web.js";
 
-export const supportedModes: StartupMode[] = ["prompt", "ssh-opencode", "ssh-codex", "ssh-claude", "web", "ssh-shell"];
+export const supportedModes: StartupMode[] = [
+  "prompt",
+  "ssh-opencode",
+  "ssh-codex",
+  "ssh-claude",
+  "web",
+  "ssh-shell",
+  "ssh-custom",
+];
 
 export type ConcreteStartupMode = Exclude<StartupMode, "prompt">;
 
@@ -36,6 +46,7 @@ export interface LaunchContextOptions {
   onBeforeInteractiveSession?: () => void;
   onLaunchStageUpdate?: (loadingMessage: string, completionMessage: string) => void;
   matchLocalOpenCodeVersion?: boolean;
+  customAgent?: ResolvedCustomAgentConfig;
 }
 
 export interface LaunchModeOptions {
@@ -48,6 +59,7 @@ export interface LaunchModeOptions {
   onBeforeInteractiveSession?: () => void;
   onLaunchStageUpdate?: (loadingMessage: string, completionMessage: string) => void;
   matchLocalOpenCodeVersion?: boolean;
+  customAgent?: ResolvedCustomAgentConfig;
 }
 
 type ConcreteModeRunner = (handle: SandboxHandle, options?: LaunchContextOptions) => Promise<ModeLaunchResult>;
@@ -59,6 +71,7 @@ const MODE_RUNNERS: Record<ConcreteStartupMode, ConcreteModeRunner> = {
   "ssh-codex": startCodexMode,
   "ssh-claude": startClaudeMode,
   "ssh-shell": startShellMode,
+  "ssh-custom": startCustomMode,
   web: startWebMode,
 };
 
@@ -85,6 +98,7 @@ export async function launchMode(
     onBeforeInteractiveSession,
     onLaunchStageUpdate,
     matchLocalOpenCodeVersion,
+    customAgent,
   } = options;
   const resolvedMode = resolveStartupMode(mode, { promptFallbackMode });
   return MODE_RUNNERS[resolvedMode](handle, {
@@ -96,5 +110,6 @@ export async function launchMode(
     onBeforeInteractiveSession,
     onLaunchStageUpdate,
     matchLocalOpenCodeVersion,
+    customAgent,
   });
 }
