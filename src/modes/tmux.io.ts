@@ -75,6 +75,8 @@ function buildPromptPasteCommand(
         "paste-buffer",
         "-b",
         bufferName,
+        "-p",
+        "-r",
         "-d",
         "-t",
         connection.sessionName,
@@ -93,7 +95,7 @@ function buildPromptPasteCommand(
     expected.paneId,
     "-F",
     condition,
-    `paste-buffer -b ${bufferName} -d -t ${expected.paneId} ; send-keys -t ${expected.paneId} Enter ; display-message -p SENT`,
+    `paste-buffer -b ${bufferName} -p -r -d -t ${expected.paneId} ; send-keys -t ${expected.paneId} Enter ; display-message -p SENT`,
     "display-message -p NOT_CURRENT",
   ]);
 }
