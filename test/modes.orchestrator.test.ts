@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { SandboxHandle } from "../src/e2b/lifecycle.js";
+import { logger } from "../src/logging/logger.js";
 import { startClaudeMode } from "../src/modes/claude.js";
 import { startCodexMode } from "../src/modes/codex.js";
 import { launchMode } from "../src/modes/index.js";
@@ -32,15 +33,275 @@ describe("persistent startup modes", () => {
   });
 
   it("starts and checks the OpenCode server before creating its attach session", async () => {
-    const run = vi.fn().mockResolvedValueOnce(ok()).mockResolvedValueOnce(ok()).mockResolvedValueOnce(ok("CREATED"));
-    const result = await startOpenCodeMode(createHandle({ run }), { detach: true });
+    const run = vi
+      .fn()
+      .mockResolvedValueOnce(healthProbe(7, 0))
+      .mockResolvedValueOnce(ok())
+      .mockResolvedValueOnce(ok())
+      .mockResolvedValueOnce(ok("CREATED"));
+    const result = await startOpenCodeMode(
+      createHandle({ run }),
+      { detach: true },
+      { isInteractiveTerminal: () => false, resolveLocalOpenCodeVersion: () => undefined },
+    );
 
-    expect(String(run.mock.calls[0]?.[0])).toContain("opencode serve --hostname 127.0.0.1 --port 4096");
-    expect(String(run.mock.calls[1]?.[0])).toContain("global/health api/health");
-    expect(run.mock.calls[1]?.[1]).toMatchObject({ timeoutMs: 0 });
-    expect(String(run.mock.calls[2]?.[0])).toContain("opencode attach http://127.0.0.1:4096");
+    expect(String(run.mock.calls[0]?.[0])).toContain("global/health");
+    expect(String(run.mock.calls[1]?.[0])).toContain("opencode serve --hostname 127.0.0.1 --port 4096");
+    expect(String(run.mock.calls[2]?.[0])).toContain("global/health");
+    expect(run.mock.calls[2]?.[1]).toMatchObject({ timeoutMs: 0 });
+    expect(String(run.mock.calls[3]?.[0])).toContain("opencode attach http://127.0.0.1:4096");
     expect(run.mock.calls.some(([command]) => String(command).includes("opencode --version"))).toBe(false);
     expect(result.connection).toMatchObject({ type: "tmux", socketName: "ez-devbox-opencode" });
+  });
+
+  it("matches a new sandbox executable before starting its OpenCode backend", async () => {
+    const infoSpy = vi.spyOn(logger, "info").mockImplementation(() => undefined);
+    const run = vi
+      .fn()
+      .mockResolvedValueOnce(healthProbe(7, 0))
+      .mockResolvedValueOnce(ok("1.0.0"))
+      .mockResolvedValueOnce(ok())
+      .mockResolvedValueOnce(ok("2.0.0"))
+      .mockResolvedValueOnce(ok())
+      .mockResolvedValueOnce(ok())
+      .mockResolvedValueOnce(ok("CREATED"));
+
+    try {
+      await startOpenCodeMode(
+        createHandle({ run }),
+        { detach: true },
+        { isInteractiveTerminal: () => false, resolveLocalOpenCodeVersion: () => "2.0.0" },
+      );
+
+      expect(String(run.mock.calls[2]?.[0])).toContain("opencode upgrade 2.0.0 -m npm");
+      expect(String(run.mock.calls[4]?.[0])).toContain("opencode serve --hostname 127.0.0.1 --port 4096");
+      expect(run.mock.calls.findIndex(([command]) => String(command).includes("opencode upgrade"))).toBeLessThan(
+        run.mock.calls.findIndex(([command]) => String(command).includes("opencode serve")),
+      );
+      expect(infoSpy).toHaveBeenCalledWith("Matched sandbox OpenCode version to local 2.0.0.");
+    } finally {
+      infoSpy.mockRestore();
+    }
+  });
+
+  it("reports an existing backend mismatch without upgrading before reusing its session", async () => {
+    const warnSpy = vi.spyOn(logger, "warn").mockImplementation(() => undefined);
+    const run = vi
+      .fn()
+      .mockResolvedValueOnce(healthProbe(0, 200, JSON.stringify({ healthy: true, version: "1.0.0" })))
+      .mockResolvedValueOnce(ok("1.0.0"))
+      .mockResolvedValueOnce(ok())
+      .mockResolvedValueOnce(ok())
+      .mockResolvedValueOnce(ok("EXISTING"));
+
+    try {
+      const result = await startOpenCodeMode(
+        createHandle({ run }),
+        { detach: true },
+        { isInteractiveTerminal: () => false, resolveLocalOpenCodeVersion: () => "2.0.0" },
+      );
+
+      expect(run.mock.calls.some(([command]) => String(command).includes("opencode upgrade"))).toBe(false);
+      expect(String(run.mock.calls[2]?.[0])).toContain("opencode serve --hostname 127.0.0.1 --port 4096");
+      expect(String(run.mock.calls[4]?.[0])).toContain("opencode attach http://127.0.0.1:4096");
+      expect(result.details).toEqual({ session: "existing", status: "ready" });
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining("OpenCode backend version mismatch"));
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining("stop the backend deliberately"));
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
+
+  it("does not inspect or upgrade the executable when an existing backend requires auth", async () => {
+    const run = vi
+      .fn()
+      .mockResolvedValueOnce(healthProbe(0, 401))
+      .mockResolvedValueOnce(ok())
+      .mockResolvedValueOnce(ok())
+      .mockResolvedValueOnce(ok("EXISTING"));
+
+    const warnSpy = vi.spyOn(logger, "warn").mockImplementation(() => undefined);
+    try {
+      await startOpenCodeMode(
+        createHandle({ run }),
+        { detach: true },
+        { isInteractiveTerminal: () => false, resolveLocalOpenCodeVersion: () => "2.0.0" },
+      );
+
+      expect(run.mock.calls.some(([command]) => String(command).includes("opencode --version"))).toBe(false);
+      expect(run.mock.calls.some(([command]) => String(command).includes("opencode upgrade"))).toBe(false);
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining("HTTP 401"));
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
+
+  it("skips upgrading when a new sandbox already matches the host version", async () => {
+    const infoSpy = vi.spyOn(logger, "info").mockImplementation(() => undefined);
+    const run = vi
+      .fn()
+      .mockResolvedValueOnce(healthProbe(7, 0))
+      .mockResolvedValueOnce(ok("2.0.0"))
+      .mockResolvedValueOnce(ok())
+      .mockResolvedValueOnce(ok())
+      .mockResolvedValueOnce(ok("CREATED"));
+
+    try {
+      await startOpenCodeMode(
+        createHandle({ run }),
+        { detach: true },
+        { isInteractiveTerminal: () => false, resolveLocalOpenCodeVersion: () => "2.0.0" },
+      );
+
+      expect(run.mock.calls.some(([command]) => String(command).includes("opencode upgrade"))).toBe(false);
+      expect(String(run.mock.calls[2]?.[0])).toContain("opencode serve --hostname 127.0.0.1 --port 4096");
+      expect(infoSpy).toHaveBeenCalledWith("OpenCode versions: local=2.0.0, sandbox=2.0.0");
+    } finally {
+      infoSpy.mockRestore();
+    }
+  });
+
+  it("continues best-effort startup and warns when version upgrade fails", async () => {
+    const warnSpy = vi.spyOn(logger, "warn").mockImplementation(() => undefined);
+    const run = vi
+      .fn()
+      .mockResolvedValueOnce(healthProbe(7, 0))
+      .mockResolvedValueOnce(ok("1.0.0"))
+      .mockResolvedValueOnce({ stdout: "", stderr: "upgrade unavailable", exitCode: 1 })
+      .mockResolvedValueOnce(ok())
+      .mockResolvedValueOnce(ok())
+      .mockResolvedValueOnce(ok("CREATED"));
+
+    try {
+      await startOpenCodeMode(
+        createHandle({ run }),
+        { detach: true },
+        { isInteractiveTerminal: () => false, resolveLocalOpenCodeVersion: () => "2.0.0" },
+      );
+
+      expect(String(run.mock.calls[3]?.[0])).toContain("opencode serve --hostname 127.0.0.1 --port 4096");
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining("version match failed before launch"));
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
+
+  it("does not resolve the host or upgrade when version matching is disabled", async () => {
+    const resolveLocalOpenCodeVersion = vi.fn().mockReturnValue("2.0.0");
+    const run = vi
+      .fn()
+      .mockResolvedValueOnce(healthProbe(7, 0))
+      .mockResolvedValueOnce(ok())
+      .mockResolvedValueOnce(ok())
+      .mockResolvedValueOnce(ok("CREATED"));
+
+    await startOpenCodeMode(
+      createHandle({ run }),
+      { detach: true, matchLocalOpenCodeVersion: false },
+      { isInteractiveTerminal: () => false, resolveLocalOpenCodeVersion },
+    );
+
+    expect(resolveLocalOpenCodeVersion).not.toHaveBeenCalled();
+    expect(run.mock.calls.some(([command]) => String(command).includes("opencode --version"))).toBe(false);
+    expect(run.mock.calls.some(([command]) => String(command).includes("opencode upgrade"))).toBe(false);
+  });
+
+  it("reports matching versions for an existing backend and sandbox client", async () => {
+    const infoSpy = vi.spyOn(logger, "info").mockImplementation(() => undefined);
+    const run = vi
+      .fn()
+      .mockResolvedValueOnce(healthProbe(0, 200, JSON.stringify({ healthy: true, version: "1.0.0" })))
+      .mockResolvedValueOnce(ok("1.0.0"))
+      .mockResolvedValueOnce(ok())
+      .mockResolvedValueOnce(ok())
+      .mockResolvedValueOnce(ok("EXISTING"));
+
+    try {
+      await startOpenCodeMode(
+        createHandle({ run }),
+        { detach: true },
+        { isInteractiveTerminal: () => false, resolveLocalOpenCodeVersion: () => "1.0.0" },
+      );
+
+      expect(infoSpy).toHaveBeenCalledWith("OpenCode backend, sandbox client, and local versions match at 1.0.0.");
+      expect(run.mock.calls.some(([command]) => String(command).includes("opencode upgrade"))).toBe(false);
+    } finally {
+      infoSpy.mockRestore();
+    }
+  });
+
+  it("reports an existing backend/client mismatch without upgrading or restarting", async () => {
+    const warnSpy = vi.spyOn(logger, "warn").mockImplementation(() => undefined);
+    const run = vi
+      .fn()
+      .mockResolvedValueOnce(healthProbe(0, 200, JSON.stringify({ healthy: true, version: "1.0.0" })))
+      .mockResolvedValueOnce(ok("2.0.0"))
+      .mockResolvedValueOnce(ok())
+      .mockResolvedValueOnce(ok())
+      .mockResolvedValueOnce(ok("EXISTING"));
+
+    try {
+      await startOpenCodeMode(
+        createHandle({ run }),
+        { detach: true },
+        { isInteractiveTerminal: () => false, resolveLocalOpenCodeVersion: () => "1.0.0" },
+      );
+
+      expect(run.mock.calls.some(([command]) => String(command).includes("opencode upgrade"))).toBe(false);
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining("client/backend version mismatch"));
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining("stop the backend deliberately"));
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
+
+  it("does not upgrade when the backend probe times out", async () => {
+    const warnSpy = vi.spyOn(logger, "warn").mockImplementation(() => undefined);
+    const run = vi
+      .fn()
+      .mockResolvedValueOnce(healthProbe(28, 0))
+      .mockResolvedValueOnce(ok())
+      .mockResolvedValueOnce(ok())
+      .mockResolvedValueOnce(ok("CREATED"));
+
+    try {
+      await startOpenCodeMode(
+        createHandle({ run }),
+        { detach: true },
+        { isInteractiveTerminal: () => false, resolveLocalOpenCodeVersion: () => "2.0.0" },
+      );
+
+      expect(run.mock.calls.some(([command]) => String(command).includes("opencode --version"))).toBe(false);
+      expect(run.mock.calls.some(([command]) => String(command).includes("opencode upgrade"))).toBe(false);
+      expect(String(run.mock.calls[1]?.[0])).toContain("curl_exit=$?");
+      expect(String(run.mock.calls[1]?.[0])).toContain('[ "$curl_exit" -ne 7 ]');
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining("skipping version upgrade"));
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
+
+  it("does not upgrade when the backend probe is otherwise unavailable", async () => {
+    const warnSpy = vi.spyOn(logger, "warn").mockImplementation(() => undefined);
+    const run = vi
+      .fn()
+      .mockResolvedValueOnce(ok("EZ_DEVBOX_OPENCODE_CURL_EXIT:127\n"))
+      .mockResolvedValueOnce(ok())
+      .mockResolvedValueOnce(ok())
+      .mockResolvedValueOnce(ok("CREATED"));
+
+    try {
+      await startOpenCodeMode(
+        createHandle({ run }),
+        { detach: true },
+        { isInteractiveTerminal: () => false, resolveLocalOpenCodeVersion: () => "2.0.0" },
+      );
+
+      expect(run.mock.calls.some(([command]) => String(command).includes("opencode upgrade"))).toBe(false);
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining("skipping version upgrade"));
+    } finally {
+      warnSpy.mockRestore();
+    }
   });
 
   it("passes an initial Codex prompt through a staged file without embedding it in commands", async () => {
@@ -317,6 +578,16 @@ function ok(stdout = ""): { stdout: string; stderr: string; exitCode: number } {
     stdout = `${stdout}\nEZ_DEVBOX_TMUX_SESSION\t${stdout}\t$1:1\t\t`;
   }
   return { stdout, stderr: "", exitCode: 0 };
+}
+
+function healthProbe(
+  curlExit: number,
+  status: number,
+  body = "",
+): { stdout: string; stderr: string; exitCode: number } {
+  return ok(
+    `EZ_DEVBOX_OPENCODE_CURL_EXIT:${curlExit}\n${body ? `${body}\n` : ""}EZ_DEVBOX_OPENCODE_HTTP_STATUS:${status}`,
+  );
 }
 
 function createHandle(overrides: Partial<SandboxHandle> = {}): SandboxHandle {
