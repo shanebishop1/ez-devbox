@@ -1,7 +1,22 @@
-import { describe, expect, it, vi } from "vitest";
+import { execFile } from "node:child_process";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { promisify } from "node:util";
+import { CommandExitError } from "e2b";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ResolvedLauncherConfig, ResolvedProjectRepoConfig } from "../src/config/schema.js";
-import type { SandboxHandle } from "../src/e2b/lifecycle.js";
+import { LauncherE2BLifecycleError, type SandboxHandle } from "../src/e2b/lifecycle.js";
 import { bootstrapProjectWorkspace } from "../src/project/bootstrap.js";
+import { provisionSelectedRepos } from "../src/project/bootstrap.repo-ops.js";
+
+const execFileAsync = promisify(execFile);
+const tempRoots: string[] = [];
+
+afterEach(async () => {
+  await Promise.all(tempRoots.map((path) => rm(path, { recursive: true, force: true })));
+  tempRoots.length = 0;
+});
 
 function createRepo(name: string): ResolvedProjectRepoConfig {
   return {
@@ -783,7 +798,7 @@ describe("project bootstrap", () => {
     );
   });
 
-  it("falls back to origin tracking checkout when local branch checkout fails", async () => {
+  it("creates an origin tracking checkout when the local branch is absent", async () => {
     const repo: ResolvedProjectRepoConfig = {
       ...createRepo("alpha"),
       branch: "dev",
@@ -807,13 +822,13 @@ describe("project bootstrap", () => {
       if (command.includes("rev-parse --abbrev-ref HEAD")) {
         return { stdout: "main\n", stderr: "", exitCode: 0 };
       }
-      if (command === "git -C '/workspace/alpha' checkout 'dev'") {
-        return { stdout: "", stderr: "pathspec 'dev' did not match", exitCode: 1 };
+      if (command === "git -C '/workspace/alpha' show-ref --verify --quiet 'refs/heads/dev'") {
+        return { stdout: "", stderr: "", exitCode: 1 };
       }
-      if (command === "git -C '/workspace/alpha' fetch origin 'dev'") {
+      if (command === "git -C '/workspace/alpha' fetch origin 'refs/heads/dev:refs/remotes/origin/dev'") {
         return { stdout: "", stderr: "", exitCode: 0 };
       }
-      if (command === "git -C '/workspace/alpha' checkout -B 'dev' --track 'origin/dev'") {
+      if (command === "git -C '/workspace/alpha' switch --track -- 'refs/remotes/origin/dev'") {
         return { stdout: "Switched to a new branch", stderr: "", exitCode: 0 };
       }
 
@@ -828,15 +843,15 @@ describe("project bootstrap", () => {
     await bootstrapProjectWorkspace(handle, config);
 
     expect(run).toHaveBeenCalledWith(
-      "git -C '/workspace/alpha' checkout 'dev'",
+      "git -C '/workspace/alpha' show-ref --verify --quiet 'refs/heads/dev'",
       expect.objectContaining({ timeoutMs: 1000 }),
     );
     expect(run).toHaveBeenCalledWith(
-      "git -C '/workspace/alpha' fetch origin 'dev'",
+      "git -C '/workspace/alpha' fetch origin 'refs/heads/dev:refs/remotes/origin/dev'",
       expect.objectContaining({ timeoutMs: 1000 }),
     );
     expect(run).toHaveBeenCalledWith(
-      "git -C '/workspace/alpha' checkout -B 'dev' --track 'origin/dev'",
+      "git -C '/workspace/alpha' switch --track -- 'refs/remotes/origin/dev'",
       expect.objectContaining({ timeoutMs: 1000 }),
     );
   });
@@ -865,10 +880,10 @@ describe("project bootstrap", () => {
       if (command.includes("rev-parse --abbrev-ref HEAD")) {
         return { stdout: "main\n", stderr: "", exitCode: 0 };
       }
-      if (command === "git -C '/workspace/alpha' checkout 'dev'") {
-        return { stdout: "", stderr: "pathspec 'dev' did not match", exitCode: 1 };
+      if (command === "git -C '/workspace/alpha' show-ref --verify --quiet 'refs/heads/dev'") {
+        return { stdout: "", stderr: "", exitCode: 1 };
       }
-      if (command === "git -C '/workspace/alpha' fetch origin 'dev'") {
+      if (command === "git -C '/workspace/alpha' fetch origin 'refs/heads/dev:refs/remotes/origin/dev'") {
         return { stdout: "", stderr: "remote branch not found", exitCode: 1 };
       }
 
@@ -884,4 +899,272 @@ describe("project bootstrap", () => {
       "Failed to checkout branch 'dev' in repo '/workspace/alpha'. Try updating project.repos[].branch.",
     );
   });
+
+  it("redacts credential-bearing fetch output from lifecycle-wrapped command failures", async () => {
+    const repo = { ...createRepo("alpha"), branch: "dev", setup_command: "" };
+    const config = createConfig({ repos: [repo] });
+    const fetchFailure = new LauncherE2BLifecycleError(
+      "fetch failed",
+      new CommandExitError({
+        stdout: "",
+        stderr: "fatal: unable to access https://x-access-token:ghp_secret@github.com/acme/alpha.git/",
+        exitCode: 1,
+      }),
+    );
+    const run = vi.fn().mockImplementation(async (command: string) => {
+      if (command.startsWith("mkdir -p")) {
+        return { stdout: "", stderr: "", exitCode: 0 };
+      }
+      if (command.includes("if [ -e '/workspace/alpha' ]")) {
+        return { stdout: "EZBOX_TRUE", stderr: "", exitCode: 0 };
+      }
+      if (command.includes("if [ -d '/workspace/alpha/.git' ]")) {
+        return { stdout: "EZBOX_TRUE", stderr: "", exitCode: 0 };
+      }
+      if (command === "git -C '/workspace/alpha' remote get-url origin") {
+        return { stdout: "https://example.com/alpha.git\n", stderr: "", exitCode: 0 };
+      }
+      if (command.includes("rev-parse --abbrev-ref HEAD")) {
+        return { stdout: "main\n", stderr: "", exitCode: 0 };
+      }
+      if (command === "git -C '/workspace/alpha' show-ref --verify --quiet 'refs/heads/dev'") {
+        return { stdout: "", stderr: "", exitCode: 1 };
+      }
+      if (command === "git -C '/workspace/alpha' fetch origin 'refs/heads/dev:refs/remotes/origin/dev'") {
+        throw fetchFailure;
+      }
+
+      return { stdout: "", stderr: "", exitCode: 0 };
+    });
+    const handle = { ...createHandle(), run };
+
+    const error = await bootstrapProjectWorkspace(handle, config).catch((caught: unknown) => caught as Error);
+    if (!(error instanceof Error)) {
+      throw new Error("Expected bootstrap to reject when fetch fails.");
+    }
+
+    expect(error.message).toContain("x-access-token:[REDACTED]@github.com");
+    expect(error.message).not.toContain("ghp_secret");
+  });
+
+  it("uses completed SDK command failures for branch detection and preserves transport failures", async () => {
+    const repo = { ...createRepo("alpha"), branch: "dev", setup_command: "" };
+    const config = createConfig({ repos: [repo] });
+    const completedFailure = new LauncherE2BLifecycleError(
+      "Failed to run command",
+      new CommandExitError({ stdout: "", stderr: "missing local branch", exitCode: 1 }),
+    );
+    const run = vi.fn().mockImplementation(async (command: string) => {
+      if (command.startsWith("mkdir -p")) {
+        return { stdout: "", stderr: "", exitCode: 0 };
+      }
+      if (command.includes("if [ -e '/workspace/alpha' ]")) {
+        return { stdout: "EZBOX_TRUE", stderr: "", exitCode: 0 };
+      }
+      if (command.includes("if [ -d '/workspace/alpha/.git' ]")) {
+        return { stdout: "EZBOX_TRUE", stderr: "", exitCode: 0 };
+      }
+      if (command === "git -C '/workspace/alpha' remote get-url origin") {
+        return { stdout: "https://example.com/alpha.git\n", stderr: "", exitCode: 0 };
+      }
+      if (command.includes("rev-parse --abbrev-ref HEAD")) {
+        return { stdout: "main\n", stderr: "", exitCode: 0 };
+      }
+      if (command === "git -C '/workspace/alpha' show-ref --verify --quiet 'refs/heads/dev'") {
+        throw completedFailure;
+      }
+      if (command === "git -C '/workspace/alpha' fetch origin 'refs/heads/dev:refs/remotes/origin/dev'") {
+        throw new LauncherE2BLifecycleError("transport failed", new Error("connection reset"));
+      }
+
+      return { stdout: "", stderr: "", exitCode: 0 };
+    });
+    const handle = { ...createHandle(), run };
+
+    await expect(bootstrapProjectWorkspace(handle, config)).rejects.toThrow(/transport failed/);
+    expect(run).not.toHaveBeenCalledWith(
+      "git -C '/workspace/alpha' switch --track -- 'refs/remotes/origin/dev'",
+      expect.anything(),
+    );
+  });
+
+  it("does not fetch or replace an existing local branch when checkout fails", async () => {
+    const repo = { ...createRepo("alpha"), branch: "dev", setup_command: "" };
+    const config = createConfig({ repos: [repo] });
+    const run = vi.fn().mockImplementation(async (command: string) => {
+      if (command.startsWith("mkdir -p")) {
+        return { stdout: "", stderr: "", exitCode: 0 };
+      }
+      if (command.includes("if [ -e '/workspace/alpha' ]")) {
+        return { stdout: "EZBOX_TRUE", stderr: "", exitCode: 0 };
+      }
+      if (command.includes("if [ -d '/workspace/alpha/.git' ]")) {
+        return { stdout: "EZBOX_TRUE", stderr: "", exitCode: 0 };
+      }
+      if (command === "git -C '/workspace/alpha' remote get-url origin") {
+        return { stdout: "https://example.com/alpha.git\n", stderr: "", exitCode: 0 };
+      }
+      if (command.includes("rev-parse --abbrev-ref HEAD")) {
+        return { stdout: "main\n", stderr: "", exitCode: 0 };
+      }
+      if (command === "git -C '/workspace/alpha' show-ref --verify --quiet 'refs/heads/dev'") {
+        return { stdout: "", stderr: "", exitCode: 0 };
+      }
+      if (command === "git -C '/workspace/alpha' switch --no-guess -- 'dev'") {
+        throw new LauncherE2BLifecycleError(
+          "checkout failed",
+          new CommandExitError({ stdout: "", stderr: "would overwrite local changes", exitCode: 1 }),
+        );
+      }
+
+      return { stdout: "", stderr: "", exitCode: 0 };
+    });
+    const handle = { ...createHandle(), run };
+
+    await expect(bootstrapProjectWorkspace(handle, config)).rejects.toThrow(/would overwrite local changes/);
+    expect(run).not.toHaveBeenCalledWith(expect.stringContaining(" fetch origin "), expect.anything());
+    expect(run).not.toHaveBeenCalledWith(expect.stringContaining("switch --track"), expect.anything());
+  });
+
+  it("checks out an existing local branch without fetching using real Git", async () => {
+    const fixture = await createGitFixture();
+    await git(fixture.repoPath, "branch", "existing");
+    const commands: string[] = [];
+    const handle = createLocalGitHandle(commands);
+
+    const summaries = await provisionSelectedRepos(
+      handle,
+      fixture.workspacePath,
+      [{ ...createRepo("alpha"), url: fixture.remotePath, branch: "existing", setup_command: "" }],
+      { timeoutMs: 5_000 },
+    );
+
+    expect(summaries[0]).toMatchObject({ branchSwitched: true, reused: true, cloned: false });
+    await expect(git(fixture.repoPath, "branch", "--show-current")).resolves.toMatchObject({ stdout: "existing\n" });
+    expect(commands).toContain(`git -C '${fixture.repoPath}' switch --no-guess -- 'existing'`);
+    expect(commands.some((command) => command.includes(" fetch origin "))).toBe(false);
+  });
+
+  it("preserves a dirty worktree and both branch commits when existing checkout fails", async () => {
+    const fixture = await createGitFixture();
+    await git(fixture.repoPath, "switch", "-c", "existing");
+    await writeFile(join(fixture.repoPath, "README.md"), "existing branch\n");
+    await git(fixture.repoPath, "add", "README.md");
+    await git(fixture.repoPath, "commit", "-m", "existing branch");
+    await git(fixture.repoPath, "switch", "main");
+    await writeFile(join(fixture.repoPath, "README.md"), "dirty worktree\n");
+    const currentHead = (await git(fixture.repoPath, "rev-parse", "HEAD")).stdout;
+    const existingHead = (await git(fixture.repoPath, "rev-parse", "refs/heads/existing")).stdout;
+    const commands: string[] = [];
+
+    await expect(
+      provisionSelectedRepos(
+        createLocalGitHandle(commands),
+        fixture.workspacePath,
+        [{ ...createRepo("alpha"), url: fixture.remotePath, branch: "existing", setup_command: "" }],
+        { timeoutMs: 5_000 },
+      ),
+    ).rejects.toThrow(/would be overwritten by checkout/);
+
+    await expect(git(fixture.repoPath, "branch", "--show-current")).resolves.toMatchObject({ stdout: "main\n" });
+    await expect(git(fixture.repoPath, "rev-parse", "HEAD")).resolves.toMatchObject({ stdout: currentHead });
+    await expect(git(fixture.repoPath, "rev-parse", "refs/heads/existing")).resolves.toMatchObject({
+      stdout: existingHead,
+    });
+    await expect(readFile(join(fixture.repoPath, "README.md"), "utf8")).resolves.toBe("dirty worktree\n");
+    expect(commands.some((command) => command.includes(" fetch origin "))).toBe(false);
+  });
+
+  it("fetches and tracks a new remote branch using exact refs with real Git", async () => {
+    const fixture = await createGitFixture();
+    const commands: string[] = [];
+    const handle = createLocalGitHandle(commands);
+
+    await expect(git(fixture.repoPath, "show-ref", "--verify", "--quiet", "refs/remotes/origin/dev")).rejects.toThrow();
+
+    const summaries = await provisionSelectedRepos(
+      handle,
+      fixture.workspacePath,
+      [{ ...createRepo("alpha"), url: fixture.remotePath, branch: "dev", setup_command: "" }],
+      { timeoutMs: 5_000 },
+    );
+
+    expect(summaries[0]).toMatchObject({ branchSwitched: true, reused: true, cloned: false });
+    await expect(git(fixture.repoPath, "branch", "--show-current")).resolves.toMatchObject({ stdout: "dev\n" });
+    await expect(
+      git(fixture.repoPath, "for-each-ref", "--format=%(upstream:short)", "refs/heads/dev"),
+    ).resolves.toMatchObject({ stdout: "origin/dev\n" });
+    expect(commands).toContain(`git -C '${fixture.repoPath}' fetch origin 'refs/heads/dev:refs/remotes/origin/dev'`);
+    expect(commands).toContain(`git -C '${fixture.repoPath}' switch --track -- 'refs/remotes/origin/dev'`);
+  });
 });
+
+interface GitFixture {
+  remotePath: string;
+  repoPath: string;
+  workspacePath: string;
+}
+
+async function createGitFixture(): Promise<GitFixture> {
+  const root = await mkdtemp(join(tmpdir(), "ez-devbox-bootstrap-git-"));
+  tempRoots.push(root);
+  const remotePath = join(root, "remote.git");
+  const seedPath = join(root, "seed");
+  const repoPath = join(root, "workspace", "alpha");
+  await mkdir(join(root, "workspace"));
+  await git(root, "init", "--bare", remotePath);
+  await git(root, "init", "-b", "main", seedPath);
+  await writeFile(join(seedPath, "README.md"), "main\n");
+  await git(seedPath, "add", "README.md");
+  await git(seedPath, "commit", "-m", "initial");
+  await git(seedPath, "remote", "add", "origin", remotePath);
+  await git(seedPath, "push", "-u", "origin", "main");
+  await git(join(root, "workspace"), "clone", "--branch", "main", remotePath, repoPath);
+  await git(seedPath, "switch", "-c", "dev");
+  await writeFile(join(seedPath, "DEV.md"), "dev\n");
+  await git(seedPath, "add", "DEV.md");
+  await git(seedPath, "commit", "-m", "dev");
+  await git(seedPath, "push", "-u", "origin", "dev");
+  return { remotePath, repoPath, workspacePath: join(root, "workspace") };
+}
+
+async function git(cwd: string, ...args: string[]): Promise<{ stdout: string; stderr: string }> {
+  const result = await execFileAsync("git", args, {
+    cwd,
+    env: {
+      ...process.env,
+      GIT_AUTHOR_EMAIL: "ez-devbox-test@example.com",
+      GIT_AUTHOR_NAME: "EZ Devbox Test",
+      GIT_COMMITTER_EMAIL: "ez-devbox-test@example.com",
+      GIT_COMMITTER_NAME: "EZ Devbox Test",
+    },
+  });
+  return { stdout: result.stdout.toString(), stderr: result.stderr.toString() };
+}
+
+function createLocalGitHandle(commands: string[]): SandboxHandle {
+  return {
+    ...createHandle(),
+    run: vi.fn(async (command, options) => {
+      commands.push(command);
+      try {
+        const result = await execFileAsync("bash", ["-lc", command], {
+          cwd: options?.cwd,
+          env: { ...process.env, ...(options?.envs ?? {}) },
+        });
+        return { stdout: result.stdout.toString(), stderr: result.stderr.toString(), exitCode: 0 };
+      } catch (error) {
+        const commandError = error as { code?: number | string; stderr?: string; stdout?: string };
+        const exitCode = typeof commandError.code === "number" ? commandError.code : 1;
+        throw new LauncherE2BLifecycleError(
+          `Failed to run command '${command}'`,
+          new CommandExitError({
+            stdout: commandError.stdout ?? "",
+            stderr: commandError.stderr ?? "",
+            exitCode,
+          }),
+        );
+      }
+    }),
+  };
+}

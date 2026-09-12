@@ -2,6 +2,7 @@ import { posix } from "node:path";
 import type { ResolvedProjectRepoConfig } from "../config/schema.js";
 import type { SandboxHandle } from "../e2b/lifecycle.js";
 import { type GitAdapter, type ProvisionedRepoSummary, provisionRepos, type RepoExecutor } from "../repo/manager.js";
+import { redactSensitiveText } from "../security/redaction.js";
 import {
   type RunSetupPipelineOptions,
   runSetupPipeline,
@@ -86,22 +87,40 @@ export async function provisionSelectedRepos(
     },
     async checkoutBranch(repoPath, branch) {
       options.onProgress?.(`Repo branch switch: ${repoPath} -> ${branch}`);
-      const localCheckout = await runCommand(
+      const localRef = `refs/heads/${branch}`;
+      const remoteRef = `refs/remotes/origin/${branch}`;
+      const localBranch = await runCommand(
         handle,
-        `git -C ${quoteShellArg(repoPath)} checkout ${quoteShellArg(branch)}`,
+        `git -C ${quoteShellArg(repoPath)} show-ref --verify --quiet ${quoteShellArg(localRef)}`,
         {
           timeoutMs: options.timeoutMs,
-          commandLabel: `checkout branch '${branch}' in '${repoPath}'`,
+          commandLabel: `check local branch '${branch}' in '${repoPath}'`,
         },
       );
-      if (localCheckout.exitCode === 0) {
-        return;
+
+      if (localBranch.exitCode === 0) {
+        const localCheckout = await runCommand(
+          handle,
+          `git -C ${quoteShellArg(repoPath)} switch --no-guess -- ${quoteShellArg(branch)}`,
+          {
+            timeoutMs: options.timeoutMs,
+            commandLabel: `checkout branch '${branch}' in '${repoPath}'`,
+          },
+        );
+        if (localCheckout.exitCode === 0) {
+          return;
+        }
+
+        throw checkoutError(repoPath, branch, localCheckout, "Local checkout error");
+      }
+      if (localBranch.exitCode !== 1) {
+        throw checkoutError(repoPath, branch, localBranch, "Local branch lookup error");
       }
 
-      options.onProgress?.(`Repo branch switch fallback: ${repoPath} -> origin/${branch}`);
+      options.onProgress?.(`Repo branch switch: ${repoPath} -> origin/${branch}`);
       const fetchResult = await runCommand(
         handle,
-        `git -C ${quoteShellArg(repoPath)} fetch origin ${quoteShellArg(branch)}`,
+        `git -C ${quoteShellArg(repoPath)} fetch origin ${quoteShellArg(`${localRef}:${remoteRef}`)}`,
         {
           timeoutMs: options.timeoutMs,
           commandLabel: `fetch branch '${branch}' from origin in '${repoPath}'`,
@@ -110,7 +129,7 @@ export async function provisionSelectedRepos(
       if (fetchResult.exitCode === 0) {
         const remoteCheckout = await runCommand(
           handle,
-          `git -C ${quoteShellArg(repoPath)} checkout -B ${quoteShellArg(branch)} --track ${quoteShellArg(`origin/${branch}`)}`,
+          `git -C ${quoteShellArg(repoPath)} switch --track -- ${quoteShellArg(remoteRef)}`,
           {
             timeoutMs: options.timeoutMs,
             commandLabel: `checkout tracking branch '${branch}' in '${repoPath}'`,
@@ -120,20 +139,10 @@ export async function provisionSelectedRepos(
           return;
         }
 
-        throw new Error(
-          `Failed to checkout branch '${branch}' in repo '${repoPath}'. ` +
-            `Try updating project.repos[].branch. ` +
-            `Local checkout error: ${localCheckout.stderr || localCheckout.stdout || "unknown error"}. ` +
-            `Remote-tracking checkout error: ${remoteCheckout.stderr || remoteCheckout.stdout || "unknown error"}`,
-        );
+        throw checkoutError(repoPath, branch, remoteCheckout, "Remote-tracking checkout error");
       }
 
-      throw new Error(
-        `Failed to checkout branch '${branch}' in repo '${repoPath}'. ` +
-          `Try updating project.repos[].branch. ` +
-          `Local checkout error: ${localCheckout.stderr || localCheckout.stdout || "unknown error"}. ` +
-          `Fetch error: ${fetchResult.stderr || fetchResult.stdout || "unknown error"}`,
-      );
+      throw checkoutError(repoPath, branch, fetchResult, "Fetch error");
     },
   };
 
@@ -151,6 +160,24 @@ export async function provisionSelectedRepos(
   }
 
   return summaries;
+}
+
+function checkoutError(
+  repoPath: string,
+  branch: string,
+  result: { stdout: string; stderr: string },
+  operationLabel: string,
+): Error {
+  return new Error(
+    redactSensitiveText(
+      `Failed to checkout branch '${branch}' in repo '${repoPath}'. ` +
+        `Try updating project.repos[].branch. ${operationLabel}: ${commandOutput(result)}`,
+    ),
+  );
+}
+
+function commandOutput(result: { stdout: string; stderr: string }): string {
+  return result.stderr || result.stdout || "unknown error";
 }
 
 export async function runSetupForRepos(

@@ -1,4 +1,6 @@
+import { CommandExitError } from "e2b";
 import type { SandboxHandle } from "../e2b/lifecycle.js";
+import { LauncherE2BLifecycleError } from "../e2b/lifecycle.js";
 import { redactSensitiveText } from "../security/redaction.js";
 
 export interface BootstrapCommandOptions {
@@ -26,6 +28,11 @@ export async function runCommand(
       envs: options.envs,
     });
   } catch (error) {
+    const completedResult = getCompletedCommandResult(error);
+    if (completedResult) {
+      return completedResult;
+    }
+
     throw new Error(
       redactSensitiveText(`Bootstrap command failed (${options.commandLabel}): ${toErrorMessage(error)}`),
     );
@@ -106,4 +113,17 @@ function toErrorMessage(error: unknown): string {
     return error.message;
   }
   return "unknown error";
+}
+
+function getCompletedCommandResult(error: unknown): BootstrapCommandResult | undefined {
+  const cause = error instanceof LauncherE2BLifecycleError ? error.cause : error;
+  if (!(cause instanceof CommandExitError)) {
+    return undefined;
+  }
+
+  return {
+    stdout: cause.stdout,
+    stderr: cause.stderr,
+    exitCode: cause.exitCode,
+  };
 }
