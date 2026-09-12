@@ -4,6 +4,16 @@ Notable changes are recorded here. This project follows semantic versioning when
 
 ## Unreleased
 
+### Fixed
+
+- Fetch newly published remote branches when reconnecting to an existing checkout, without resetting local branches or discarding working changes.
+- Preserve multiline tmux prompts with bracketed paste and a separate submission keystroke.
+- Match OpenCode versions before starting a new backend, and warn about existing backend/client mismatches without upgrading or restarting active sessions.
+
+### Documentation
+
+- Shortened the README and aligned the configuration and automation guides with current commands, version matching, and prompt delivery.
+
 ## 0.7.1 - 2026-09-09
 
 First published release of configurable custom agents; includes the 0.7.0 changes below.

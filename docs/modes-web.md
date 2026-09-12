@@ -46,6 +46,8 @@ npx ez-devbox create --mode web
 npx ez-devbox resume
 ```
 
+The returned web URL is externally reachable, not a private sandbox-only address. Web mode requires the OpenCode listener to return `401`, and `OPENCODE_SERVER_PASSWORD` protects it. If you configure quick tunnels for other services, their URLs are also public bearer links: protect the upstream service with its own authentication and treat each URL as a secret.
+
 ## Auth for web mode
 
 - For a new listener, ez-devbox checks the effective sandbox environment before starting `opencode serve` and verifies that the endpoint returns `401`.

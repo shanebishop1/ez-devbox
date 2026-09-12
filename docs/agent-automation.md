@@ -10,6 +10,14 @@ ez-devbox create --mode ssh-opencode --detach --json
 
 `--detach` controls attachment; `--json` controls formatting. JSON `lifecycle` separately reports sandbox creation, agent readiness, and attachment. SSH modes return tmux connection details; web mode returns its endpoint. No credentials are included.
 
+JSON result shapes:
+
+- `list`: `{ "sandboxes": [...] }`
+- `command`: a result object with `sandboxId`, `command`, `cwd`, `stdout`, `stderr`, and `exitCode`.
+- `create` and `connect`: launch details including mode, command or URL when present, working directory, and setup summary.
+
+Undefined optional fields are omitted; for example, SSH results do not include a web URL. Errors contain an `error` object with `code`, `stage`, `message`, and an optional `sandboxId`.
+
 ## Initial prompts and follow-ups
 
 On `create`, prompt input is an initial prompt:
@@ -31,7 +39,7 @@ On `connect`, prompt input is a follow-up:
 ez-devbox connect --sandbox-id "$SANDBOX_ID" --mode ssh-codex --detach --prompt-file ./follow-up.md --json
 ```
 
-Files and stdin preserve multiline text and shell metacharacters as data. `web` and `ssh-shell` reject prompt options explicitly. Custom initial prompts require `agent.initial_prompt_command`; custom follow-ups require `agent.follow_up = "tmux"`.
+Files and stdin preserve multiline text and shell metacharacters as data. OpenCode initial prompts and supported terminal-agent follow-ups use a tmux buffer with `tmux paste-buffer -p -r`, followed by an explicit `Enter`; LF is preserved, and `-p` uses bracketed paste when the receiver enables it. Codex and Claude initial prompts are passed as argv; custom initial prompts use the configured `agent.initial_prompt_command`. Custom follow-ups require `agent.follow_up = "tmux"` and a receiver that supports this input method and enables bracketed paste. `web` and `ssh-shell` reject prompt options explicitly.
 
 ## Inspect and respond without a PTY
 
@@ -71,7 +79,7 @@ ez-devbox command --sandbox-id "$SANDBOX_ID" --shell 'npm test && git status --s
 ez-devbox command --sandbox-id "$SANDBOX_ID" --shell-file ./remote-check.sh --json
 ```
 
-Completed commands preserve stdout, stderr, and exit status. Transport/startup errors use `{ "error": { "code", "stage", "message", "sandboxId"? } }`.
+Completed commands preserve stdout, stderr, and exit status.
 
 ## Cleanup and concurrency
 

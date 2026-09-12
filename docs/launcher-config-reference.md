@@ -147,6 +147,7 @@ When `project.working_dir = "auto"`, working directory behavior after repo selec
 
 - `config_dir` (string): host OpenCode config directory to sync into `/home/user/.config/opencode` in sandbox.
 - `auth_path` (string): host OpenCode auth file to sync into `/home/user/.local/share/opencode/auth.json` in sandbox.
+- `match_local_version` (boolean, optional; default `true`): controls version matching for `ssh-opencode`, including detached and non-interactive launches. Before starting a new backend, ez-devbox compares the host `opencode --version` with the sandbox executable and attempts `opencode upgrade <host-version> -m npm` when they differ. For an existing backend, it compares the health-reported version with both the host and sandbox executable versions, warning about mismatches without upgrading or restarting the active backend. Matching is best-effort: failures warn and unavailable versions or inconclusive health probes skip the upgrade. Set this to `false` to skip version checks and matching.
 
 ## `[codex]`
 
@@ -169,7 +170,7 @@ When `project.working_dir = "auto"`, working directory behavior after repo selec
 
 - `ports` (number array): local TCP ports to expose with temporary cloudflared tunnels.
 - `[]` disables tunnel management.
-- Each value `1-65535` starts one tunnel to `http://127.0.0.1:<port>` for `create/connect/start/command`.
+- Each value `1-65535` starts one tunnel to `http://127.0.0.1:<port>` for `create`, `connect`, and `command`.
 - `targets` (table, optional): per-port upstream URL override.
 - Keys are stringified port numbers (for example `"3002"`), values are `http://` or `https://` URLs.
 - When `targets` is set, its keys are authoritative for which tunnel ports are started.

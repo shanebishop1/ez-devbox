@@ -25,6 +25,7 @@ Initial prompts use `agent.initial_prompt_command` and its one whole-argument `{
 - The OpenCode backend process is decoupled from your SSH attach session.
 - If your SSH session disconnects or you exit attach, the backend keeps running while the sandbox is alive.
 - Re-running `connect --mode ssh-opencode` re-attaches a new TUI client to that running backend.
+- Before a new backend starts, ez-devbox normally compares the host and sandbox OpenCode versions and attempts to match the sandbox to the host version. This also applies to detached and non-interactive launches. An already-running backend is kept as-is; a mismatch is reported as a warning rather than upgraded or restarted. Set `opencode.match_local_version = false` to disable this check; see the [configuration reference](launcher-config-reference.md#opencode).
 
 ### `ssh-codex` persistence behavior
 
@@ -72,6 +73,10 @@ state_path = "~/.claude.json"
 
 ez-devbox syncs those host files into sandbox during `create`.
 If they are missing/invalid locally, the corresponding CLI mode can start but not be authenticated.
+
+## Prompt delivery
+
+OpenCode initial prompts and supported terminal-agent follow-ups use a tmux buffer with `tmux paste-buffer -p -r`, followed by an explicit `Enter`; LF is preserved, and `-p` uses bracketed paste when the receiver enables it. Codex and Claude initial prompts are passed as argv; custom initial prompts use the configured `agent.initial_prompt_command`. Custom follow-ups require a receiver that supports this input method and enables bracketed paste.
 
 ## Step-by-step
 
