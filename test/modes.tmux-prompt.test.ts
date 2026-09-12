@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { access, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { access, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
@@ -26,7 +26,8 @@ describe("tmux prompt delivery", () => {
   tmuxIt("preserves multiline bytes in one bracketed paste and submits once", async () => {
     const root = await mkdtemp(join(tmpdir(), "ez-devbox-tmux-prompt-"));
     tempRoots.push(root);
-    const cacheRoot = join(root, "cache", "ez-devbox");
+    const fixtureRoot = await realpath(root);
+    const cacheRoot = join(fixtureRoot, "cache", "ez-devbox");
     const readyPath = join(root, "receiver-ready");
     const capturePath = join(root, "receiver-input");
     const socketName = uniqueName("prompt");
@@ -46,12 +47,16 @@ describe("tmux prompt delivery", () => {
     await execFileAsync("tmux", ["-L", socketName, "new-session", "-d", "-s", "agent", receiverCommand]);
     await waitForFile(readyPath);
 
-    const handle = createLocalHandle(cacheRoot);
+    const translatedCommands: string[] = [];
+    const handle = createLocalHandle(cacheRoot, translatedCommands);
     const connection = createConnection(socketName);
     const ordinaryPrompt = "ordinary first\nordinary second\nordinary final";
     const generationPrompt = "generation first\ngeneration second\ngeneration final";
 
     await sendPromptToTmux(handle, connection, ordinaryPrompt);
+    const symlinkCheckCommand = translatedCommands.find((command) => command.includes("remaining="));
+    expect(symlinkCheckCommand).toBeDefined();
+    expect(symlinkCheckCommand).toContain(cacheRoot.slice(1));
     const paneId = await getPaneId(socketName);
     await setRegistration(socketName, paneId, "generation-a", "identity-a");
     await sendPromptToTmux(handle, connection, generationPrompt, {
@@ -94,16 +99,20 @@ function createConnection(socketName: string): TmuxConnectionInfo {
   };
 }
 
-function createLocalHandle(cacheRoot: string): SandboxHandle {
+function createLocalHandle(cacheRoot: string, translatedCommands: string[]): SandboxHandle {
   const sandboxCachePath = "/home/user/.cache/ez-devbox";
+  const sandboxCacheRemainder = sandboxCachePath.slice(1);
+  const fixtureCacheRemainder = cacheRoot.slice(1);
   return {
     sandboxId: "local-test",
-    run: async (command, options) =>
-      runShell(
-        command.replaceAll(sandboxCachePath, cacheRoot).replaceAll("chown user:user", "chown $(id -u):$(id -g)"),
-        options?.cwd,
-        options?.envs,
-      ),
+    run: async (command, options) => {
+      const translatedCommand = command
+        .replaceAll(sandboxCachePath, cacheRoot)
+        .replaceAll(sandboxCacheRemainder, fixtureCacheRemainder)
+        .replaceAll("chown user:user", "chown $(id -u):$(id -g)");
+      translatedCommands.push(translatedCommand);
+      return runShell(translatedCommand, options?.cwd, options?.envs);
+    },
     writeFile: async (path, data) =>
       writeFile(path.replace(sandboxCachePath, cacheRoot), Buffer.from(data as ArrayBuffer)),
     getHost: async () => "localhost",
