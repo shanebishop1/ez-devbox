@@ -4,6 +4,8 @@ Notable changes are recorded here. This project follows semantic versioning when
 
 ## Unreleased
 
+## 0.7.2 - 2026-09-13
+
 ### Fixed
 
 - Fetch newly published remote branches when reconnecting to an existing checkout, without resetting local branches or discarding working changes.
