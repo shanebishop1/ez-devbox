@@ -11,7 +11,7 @@
 Add the bundled skill to your project so supported coding agents can help configure and use `ez-devbox`:
 
 ```bash
-npx skills add shanebishop1/ez-devbox --skill ez-devbox --agent '*' -y
+npx skills add shanebishop1/ez-devbox --skill ez-devbox
 ```
 
 Then paste this into your agent:
