@@ -17,7 +17,7 @@ npx skills add shanebishop1/ez-devbox --skill ez-devbox
 Then paste this into your agent:
 
 ```text
-Use the ez-devbox skill to set up ez-devbox with me for this project. Inspect the repo first, then ask me only for required choices or credentials.
+Use the ez-devbox skill to help me set up the ez-devbox CLI (https://github.com/shanebishop1/ez-devbox) for this project.
 ```
 
 ![ez-devbox: create a sandbox, use OpenCode, and resume the session](docs/assets/ez-devbox-demo.gif)
