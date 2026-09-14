@@ -6,6 +6,14 @@
 
 `ez-devbox` runs coding agents in disposable [E2B](https://e2b.dev) sandboxes. It clones your repos, syncs selected tool config and credentials, and lets you reconnect to persistent sessions.
 
+## Agent skill
+
+Add the bundled skill to your project so supported coding agents can help configure and use `ez-devbox`:
+
+```bash
+npx skills add shanebishop1/ez-devbox --skill ez-devbox --agent '*' -y
+```
+
 ![ez-devbox: create a sandbox, use OpenCode, and resume the session](docs/assets/ez-devbox-demo.gif)
 
 ## Features
