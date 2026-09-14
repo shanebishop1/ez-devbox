@@ -14,6 +14,12 @@ Add the bundled skill to your project so supported coding agents can help config
 npx skills add shanebishop1/ez-devbox --skill ez-devbox --agent '*' -y
 ```
 
+Then paste this into your agent:
+
+```text
+Use the ez-devbox skill to set up ez-devbox with me for this project. Inspect the repo first, then ask me only for required choices or credentials.
+```
+
 ![ez-devbox: create a sandbox, use OpenCode, and resume the session](docs/assets/ez-devbox-demo.gif)
 
 ## Features
